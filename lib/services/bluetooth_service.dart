@@ -5,7 +5,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:get/get.dart';
 
 // Windows蓝牙支持
-import 'package:win_ble/win_ble.dart' if (dart.library.js) 'dart:html';
+// import 'package:win_ble/win_ble.dart' if (dart.library.js) 'dart:html';
 
 /// 跨平台蓝牙服务
 /// 为不同平台提供统一的蓝牙接口
@@ -32,7 +32,7 @@ class BluetoothService extends GetxController {
   StreamSubscription? _adapterSubscription;
 
   // Windows特定的WinBle实例
-  dynamic _winBle;
+  // dynamic _winBle; // 目前未使用
 
   @override
   void onInit() {
@@ -124,8 +124,11 @@ class BluetoothService extends GetxController {
 
       // 尝试使用FlutterBluePlus进行扫描（某些Windows环境可能支持）
       try {
-        await FlutterBluePlus.startScan(
-            timeout: timeout ?? const Duration(seconds: 30));
+        if (timeout != null) {
+          await FlutterBluePlus.startScan(timeout: timeout);
+        } else {
+          await FlutterBluePlus.startScan();
+        }
 
         // 监听扫描结果
         _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
@@ -168,16 +171,14 @@ class BluetoothService extends GetxController {
   }
 
   /// 创建模拟设备用于Windows测试
-  Future<void> _createSimulatedDevices() async {
-    await Future.delayed(const Duration(seconds: 2));
-
-    try {
-      debugPrint('Windows平台暂时不创建模拟设备，建议使用真实设备测试');
-      // 由于flutter_blue_plus的API限制，暂时不创建模拟设备
-    } catch (e) {
-      debugPrint('Windows蓝牙初始化失败: $e');
-    }
-  }
+  // Future<void> _createSimulatedDevices() async {
+  //   await Future.delayed(const Duration(seconds: 2));
+  //   try {
+  //     debugPrint('Windows平台暂时不创建模拟设备，建议使用真实设备测试');
+  //   } catch (e) {
+  //     debugPrint('Windows蓝牙初始化失败: $e');
+  //   }
+  // }
 
   /// 移动端蓝牙扫描
   Future<void> _startMobileScan(Duration? timeout) async {
@@ -189,17 +190,20 @@ class BluetoothService extends GetxController {
     discoveredDevices.clear();
     scanResults.clear();
 
-    // 启动扫描
-    await FlutterBluePlus.startScan(
-        timeout: timeout ?? const Duration(seconds: 10));
+    // 启动扫描（保持持续扫描，不设置超时）
+    await FlutterBluePlus.startScan();
 
     // 监听扫描结果
     _scanSubscription = FlutterBluePlus.onScanResults.listen((results) {
       scanResults.value = results;
 
-      // 更新设备列表
-      final devices = results.map((r) => r.device).toSet().toList();
-      discoveredDevices.value = devices;
+      // 更新设备列表 - 仅保留名称+地址完全相同的唯一项
+      final Map<String, BluetoothDevice> deviceMap = {};
+      for (final r in results) {
+        final key = '${r.device.platformName}_${r.device.remoteId}';
+        deviceMap.putIfAbsent(key, () => r.device);
+      }
+      discoveredDevices.value = deviceMap.values.toList();
     });
   }
 

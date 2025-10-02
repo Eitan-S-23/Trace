@@ -80,6 +80,13 @@ class AlertService extends GetxController {
     try {
       final settings = await getDeviceSettings(data.deviceId);
 
+      debugPrint('阈值设置 - 设备: ${data.deviceName}(${data.deviceId}) | \n'
+          ' current: ${settings.currentThreshold}${settings.currentUnit},'
+          ' voltage: ${settings.voltageThreshold}${settings.voltageUnit},'
+          ' power: ${settings.powerThreshold}${settings.powerUnit},'
+          ' consumption: ${settings.powerConsumptionThreshold}${settings.powerConsumptionUnit},'
+          ' alertEnabled: ${settings.alertEnabled}, type: ${settings.alertType}');
+
       if (!settings.alertEnabled) return;
 
       // 检查冷却时间
@@ -98,13 +105,16 @@ class AlertService extends GetxController {
       final currentInTargetUnit =
           _convertCurrent(data.current, data.currentUnit, settings.currentUnit);
 
+      debugPrint(
+          '阈值检查 - 设备: ${data.deviceName}, 电流: ${data.current}${data.currentUnit} = ${currentInTargetUnit.toStringAsFixed(6)}${settings.currentUnit}, 阈值: ${settings.currentThreshold}${settings.currentUnit}');
+
       // 检查电流阈值 - 确保阈值大于0才检查
       if (settings.currentThreshold > 0 &&
           currentInTargetUnit > settings.currentThreshold) {
         exceededThresholds.add(
             '电流: ${currentInTargetUnit.toStringAsFixed(2)}${settings.currentUnit} > ${settings.currentThreshold}${settings.currentUnit}');
         debugPrint(
-            '电流超出阈值: ${currentInTargetUnit.toStringAsFixed(2)} > ${settings.currentThreshold}');
+            '🚨 电流超出阈值: ${currentInTargetUnit.toStringAsFixed(2)} > ${settings.currentThreshold}');
       }
 
       // 转换电压到统一单位进行比较
@@ -334,11 +344,11 @@ class AlertService extends GetxController {
     // 转换为目标单位
     switch (toUnit) {
       case 'nA':
-        return valueInAmps / 1e-9;
+        return valueInAmps * 1e9; // 使用乘法更清晰
       case 'uA':
-        return valueInAmps / 1e-6;
+        return valueInAmps * 1e6;
       case 'mA':
-        return valueInAmps / 1e-3;
+        return valueInAmps * 1e3;
       case 'A':
         return valueInAmps;
       default:

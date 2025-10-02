@@ -38,7 +38,6 @@ class MonitorController extends GetxController {
   // 定时器
   Timer? _monitorTimer;
   Timer? _activeScanTimer;
-  Timer? _healthCheckTimer;
 
   // 监控订阅
   StreamSubscription<List<ScanResult>>? _scanSubscription;
@@ -55,8 +54,6 @@ class MonitorController extends GetxController {
     stopMonitoring();
     _monitorTimer?.cancel();
     _activeScanTimer?.cancel();
-    _healthCheckTimer?.cancel();
-    _scanIntervalWorker?.dispose();
     _scanSubscription?.cancel();
     super.onClose();
   }
@@ -71,19 +68,16 @@ class MonitorController extends GetxController {
       for (var device in devices) {
         // 获取数据总数
         final totalCount = await _dbService.getDeviceDataCount(device.deviceId);
-        debugPrint('设备 ${device.deviceName} 数据库中共有 $totalCount 条数据');
-
         final List<DeviceData> historyData;
 
         if (totalCount <= MAX_DATA_RECORDS) {
-          // 如果数据量小于等于最大记录数，获取全部数据（不指定limit）
-          historyData = await _dbService.getDeviceData(device.deviceId);
-          debugPrint('加载了 ${historyData.length} 条历史数据');
+          // 如果数据量小于等于最大记录数，获取全部数据（明确指定limit为总数量）
+          historyData = await _dbService.getDeviceData(device.deviceId,
+              limit: totalCount > 0 ? totalCount : null);
         } else {
           // 如果数据量大于最大记录数，获取最新的MAX_DATA_RECORDS条数据
           historyData = await _dbService.getLatestDeviceData(
               device.deviceId, MAX_DATA_RECORDS);
-          debugPrint('加载了最新的 ${historyData.length} 条历史数据（总计 $totalCount 条）');
         }
 
         device.dataHistory.clear();
@@ -103,66 +97,19 @@ class MonitorController extends GetxController {
 
   /// 开始自动监控已保存的设备
   void _startAutoMonitoring() {
-    // 取消旧的订阅
-    _scanSubscription?.cancel();
-
-    // 监听扫描结果，确保订阅不会丢失
-    _scanSubscription = FlutterBluePlus.scanResults.listen(
-      (results) {
-        _processScenResults(results);
-      },
-      onError: (error) {
-        debugPrint('扫描结果监听错误: $error');
-        // 错误后重新订阅
-        Future.delayed(const Duration(seconds: 1), () {
-          _startAutoMonitoring();
-        });
-      },
-      cancelOnError: false, // 出错时不取消订阅
-    );
-
-    _scanIntervalWorker ??= ever(
-        _scanSettings.scanInterval, (interval) => _restartActiveScanTimer());
+    // 监听扫描结果
+    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+      _processScenResults(results);
+    });
 
     // 启动动态间隔的主动扫描定时器
-    _restartActiveScanTimer();
-
-    // 启动健康检查定时器
-    _startHealthCheckTimer();
-  }
-
-  /// 启动健康检查定时器
-  void _startHealthCheckTimer() {
-    _healthCheckTimer?.cancel();
-
-    // 每5秒检查一次扫描状态
-    _healthCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      _checkScanHealth();
-    });
-  }
-
-  /// 检查扫描健康状态
-  void _checkScanHealth() {
-    // 如果正在监控但扫描已停止，尝试重新启动
-    if (isMonitoring.value && !_bleController.isScanning.value) {
-      debugPrint('检测到扫描已停止，尝试重新启动...');
-      _bleController.startScan();
-    }
-
-    // 如果订阅丢失，重新订阅
-    if (_scanSubscription == null || _scanSubscription!.isPaused) {
-      debugPrint('检测到扫描订阅丢失，重新订阅...');
-      _startAutoMonitoring();
-    }
+    _startActiveScanTimer();
   }
 
   /// 处理扫描结果
   void _processScenResults(List<ScanResult> results) {
-    final Set<String> uniqueIds = {};
     for (var result in results) {
       final deviceId = result.device.remoteId.toString();
-      // 去重：相同地址只处理一次
-      if (!uniqueIds.add(deviceId)) continue;
 
       // 检查是否是已保存或选中的设备
       bool isTargetDevice = savedDevices.any((d) => d.deviceId == deviceId) ||
@@ -235,17 +182,12 @@ class MonitorController extends GetxController {
 
         // 只统计扫描响应包的数据
         if (dataType == BleDataType.scanResponse) {
-          // 强制触发UI更新
           realtimeData[deviceId] = data;
-          realtimeData.refresh(); // 确保 Obx 监听器能检测到变化
 
           // 更新选中设备的数据（只保存扫描响应数据）
           final selectedDevice =
               selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
-          if (selectedDevice != null) {
-            selectedDevice.addData(data);
-            selectedDevices.refresh(); // 强制刷新列表
-          }
+          selectedDevice?.addData(data);
 
           // 更新已保存设备的数据（只保存扫描响应数据）
           final savedDevice =
@@ -254,20 +196,18 @@ class MonitorController extends GetxController {
             final originalLength = savedDevice.dataHistory.length;
             savedDevice.addData(data);
 
-            // 只有当数据实际被添加时才保存到数据库
+            // 只有当数据实际被添加时才保存到数据库并检查阈值
             if (savedDevice.dataHistory.length > originalLength) {
               _dbService.saveDeviceData(data);
+
+              // 检查阈值并触发报警
+              final powerConsumption = savedDevice.powerConsumption;
+              _alertService.checkThresholds(data, powerConsumption);
             }
-
-            // 无论是否保存到数据库，都进行阈值检查（内部有冷却与开关控制）
-            final powerConsumption = savedDevice.powerConsumption;
-            _alertService.checkThresholds(data, powerConsumption);
-
-            savedDevices.refresh(); // 强制刷新列表
           }
 
           debugPrint(
-              '保存扫描响应数据: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV, 功率: ${data.power}mW');
+              '保存扫描响应数据: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV');
         } else {
           debugPrint(
               '接收到广播数据（不统计）: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV');
@@ -283,28 +223,25 @@ class MonitorController extends GetxController {
     }
   }
 
-  /// 外部刷新扫描定时器
-  void refreshScanInterval() {
+  /// 启动主动扫描定时器
+  void _startActiveScanTimer() {
+    _activeScanTimer?.cancel();
+
+    // 监听扫描间隔变化并重新启动定时器
+    ever(_scanSettings.scanInterval, (interval) {
+      _restartActiveScanTimer();
+    });
+
     _restartActiveScanTimer();
   }
-
-  Worker? _scanIntervalWorker;
 
   /// 重启主动扫描定时器
   void _restartActiveScanTimer() {
     _activeScanTimer?.cancel();
-
-    if (!isMonitoring.value) {
-      return;
-    }
-
     _activeScanTimer = Timer.periodic(
-      Duration(milliseconds: _scanSettings.scanInterval.value),
-      (timer) {
-        // 定期检查扫描状态并确保持续扫描
-        _performActiveScan();
-      },
-    );
+        Duration(milliseconds: _scanSettings.scanInterval.value), (timer) {
+      _performActiveScan();
+    });
   }
 
   /// 执行主动扫描
@@ -312,28 +249,24 @@ class MonitorController extends GetxController {
     if (!isMonitoring.value) return;
 
     // 获取所有需要监控的设备
-    final monitoringDevices = this.monitoringDevices;
+    final monitoringDevices = [
+      ...selectedDevices,
+      ...savedDevices.where((d) => d.isMonitoring.value)
+    ];
     if (monitoringDevices.isEmpty) return;
 
     try {
-      // 保持扫描持续进行，不频繁开始/停止
+      // 检查当前扫描状态，避免重复启动扫描
       if (!_bleController.isScanning.value) {
+        // 只有在没有扫描时才启动扫描
         await _bleController.startScan();
-        debugPrint('执行主动扫描监控 - 监控设备数: ${monitoringDevices.length}');
+        debugPrint('启动主动扫描监控');
       } else {
-        debugPrint('扫描已在进行中，保持持续扫描');
+        // 如果已经在扫描，就不需要重复启动
+        debugPrint('扫描已在进行中，跳过本次主动扫描');
       }
     } catch (e) {
       debugPrint('主动扫描失败: $e');
-      // 扫描失败后，尝试恢复
-      try {
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (!_bleController.isScanning.value) {
-          await _bleController.startScan();
-        }
-      } catch (retryError) {
-        debugPrint('重试扫描失败: $retryError');
-      }
     }
   }
 
@@ -351,20 +284,11 @@ class MonitorController extends GetxController {
       selectedDevices.removeWhere((d) => d.deviceId == deviceId);
     } else {
       // 添加选择
-      // 去重：若已存在同名同地址的保存设备，则复用该对象
-      final existingSaved =
-          savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
-      if (existingSaved != null) {
-        if (!selectedDevices.any((d) => d.deviceId == deviceId)) {
-          selectedDevices.add(existingSaved);
-        }
-      } else {
-        final selectedDevice = SelectedDevice(
-          deviceId: deviceId,
-          deviceName: deviceName,
-        );
-        selectedDevices.add(selectedDevice);
-      }
+      final selectedDevice = SelectedDevice(
+        deviceId: deviceId,
+        deviceName: deviceName,
+      );
+      selectedDevices.add(selectedDevice);
     }
   }
 
@@ -391,30 +315,11 @@ class MonitorController extends GetxController {
   void startMonitoring() {
     isMonitoring.value = true;
 
-    // 设置所有选中设备的监控状态
-    for (var device in selectedDevices) {
-      device.isMonitoring.value = true;
-      debugPrint('设置设备监控状态: ${device.deviceName} - ${device.deviceId}');
-    }
-
-    // 确保选中的设备都在监控设备列表中
-    for (var device in selectedDevices) {
-      if (!savedDevices.any((d) => d.deviceId == device.deviceId)) {
-        // 如果设备不在已保存列表中，添加到已保存列表
-        savedDevices.add(device);
-        debugPrint('添加设备到已保存列表: ${device.deviceName}');
-      }
-    }
-
-    // 重启扫描订阅和定时器，确保能持续接收数据
-    _startAutoMonitoring();
-
     // 确保蓝牙正在扫描
     if (!_bleController.isScanning.value) {
       _bleController.startScan();
     }
 
-    debugPrint('开始监控 ${selectedDevices.length} 个设备');
     Get.snackbar('提示', '开始监控 ${selectedDevices.length} 个设备',
         snackPosition: SnackPosition.BOTTOM);
   }
@@ -423,7 +328,6 @@ class MonitorController extends GetxController {
   void stopMonitoring() {
     isMonitoring.value = false;
     _activeScanTimer?.cancel();
-    _activeScanTimer = null;
     Get.snackbar('提示', '已停止监控', snackPosition: SnackPosition.BOTTOM);
   }
 
@@ -434,7 +338,7 @@ class MonitorController extends GetxController {
         device.isMonitoring.value = true;
         await _dbService.saveDevice(device);
 
-        // 保存设备的历史数据（仅追加新增的数据）
+        // 保存设备的历史数据
         if (device.dataHistory.isNotEmpty) {
           await _dbService.saveDeviceDataBatch(device.dataHistory);
         }
@@ -498,24 +402,11 @@ class MonitorController extends GetxController {
 
   /// 获取所有监控中的设备
   List<SelectedDevice> get monitoringDevices {
-    final Map<String, SelectedDevice> byId = {};
-
-    // 添加选中的设备
-    for (final d in selectedDevices) {
-      byId[d.deviceId] = d;
-    }
-
-    // 添加已保存且正在监控的设备
-    for (final d in savedDevices.where((d) => d.isMonitoring.value)) {
-      // 只保留一个相同deviceId的设备，避免重复
-      byId.putIfAbsent(d.deviceId, () => d);
-    }
-
-    return byId.values.toList();
+    return [
+      ...selectedDevices,
+      ...savedDevices.where((d) => d.isMonitoring.value)
+    ];
   }
-
-  /// 获取监控设备数量（用于响应式更新）
-  int get monitoringDeviceCount => monitoringDevices.length;
 
   /// 切换设备监控状态
   Future<void> toggleDeviceMonitoring(String deviceId) async {

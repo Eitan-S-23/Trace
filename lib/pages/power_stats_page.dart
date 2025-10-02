@@ -428,16 +428,26 @@ class _PowerStatsPageState extends State<PowerStatsPage>
       return FlSpot(index.toDouble(), (data['consumption'] as num).toDouble());
     }).toList();
 
-    // 计算最大值用于设置Y轴范围
+    // 计算最大值和最小值用于设置Y轴范围
     final maxValue = spots.isEmpty
         ? 1.0
         : spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    final yAxisMax = maxValue * 1.1; // 添加10%的空间
+
+    // 动态计算Y轴最大值，确保图表能完整显示数据
+    // 如果最大值很小（< 0.01），使用更小的范围
+    double yAxisMax;
+    if (maxValue < 0.01) {
+      yAxisMax = 0.01; // 最小显示范围
+    } else if (maxValue < 0.1) {
+      yAxisMax = (maxValue * 1.2).ceilToDouble() / 10; // 向上取整到0.1
+    } else {
+      yAxisMax = maxValue * 1.1; // 添加10%的空间
+    }
 
     return LineChart(
       LineChartData(
         minY: 0.0,
-        maxY: yAxisMax > 0 ? yAxisMax : 1.0,
+        maxY: yAxisMax,
         gridData: FlGridData(show: true),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
@@ -525,16 +535,26 @@ class _PowerStatsPageState extends State<PowerStatsPage>
       return FlSpot(index.toDouble(), (data['consumption'] as num).toDouble());
     }).toList();
 
-    // 计算最大值用于设置Y轴范围
+    // 计算最大值和最小值用于设置Y轴范围
     final maxValue = spots.isEmpty
         ? 1.0
         : spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
-    final yAxisMax = maxValue * 1.1; // 添加10%的空间
+
+    // 动态计算Y轴最大值，确保图表能完整显示数据
+    // 如果最大值很小（< 0.01），使用更小的范围
+    double yAxisMax;
+    if (maxValue < 0.01) {
+      yAxisMax = 0.01; // 最小显示范围
+    } else if (maxValue < 0.1) {
+      yAxisMax = (maxValue * 1.2).ceilToDouble() / 10; // 向上取整到0.1
+    } else {
+      yAxisMax = maxValue * 1.1; // 添加10%的空间
+    }
 
     return LineChart(
       LineChartData(
         minY: 0.0,
-        maxY: yAxisMax > 0 ? yAxisMax : 1.0,
+        maxY: yAxisMax,
         gridData: FlGridData(show: true),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(

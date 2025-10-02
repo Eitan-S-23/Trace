@@ -3,10 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
 import '../controllers/monitor_controller.dart';
 import '../services/scan_settings_service.dart';
+import '../models/device_data.dart';
 import '../pages/device_chart_page.dart';
 import '../pages/scan_settings_page.dart';
 import '../widgets/device_monitor_card.dart';
-import 'power_stats_page.dart';
+// import 'power_stats_page.dart';
 
 class MonitorPage extends StatelessWidget {
   const MonitorPage({Key? key}) : super(key: key);
@@ -69,42 +70,38 @@ class MonitorPage extends StatelessWidget {
         ],
       ),
       body: Obx(() {
+        // 使用与状态栏一致的逻辑，直接使用monitoringDevices计算属性
         final monitoringDevices = monitorController.monitoringDevices;
-
-        if (monitoringDevices.isEmpty) {
-          return _buildEmptyState();
-        }
 
         return Column(
           children: [
-            // 监控状态栏
+            // 状态栏
             _buildMonitorStatusBar(monitorController),
 
             // 设备列表
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: monitoringDevices.length,
-                itemBuilder: (context, index) {
-                  final device = monitoringDevices[index];
-                  final latestData =
-                      monitorController.getLatestData(device.deviceId);
-                  final powerConsumption = monitorController
-                      .getDevicePowerConsumption(device.deviceId);
+              child: monitoringDevices.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: monitoringDevices.length,
+                      itemBuilder: (context, index) {
+                        final device = monitoringDevices[index];
 
-                  return DeviceMonitorCard(
-                    device: device,
-                    latestData: latestData,
-                    powerConsumption: powerConsumption,
-                    onTap: () {
-                      Get.to(() => DeviceChartPage(deviceId: device.deviceId));
-                    },
-                  )
-                      .animate(delay: (index * 100).ms)
-                      .fadeIn(duration: 400.ms)
-                      .slideX(begin: 0.3, end: 0);
-                },
-              ),
+                        return DeviceMonitorCard(
+                          device: device,
+                          latestData: null,
+                          powerConsumption: 0.0,
+                          onTap: () {
+                            Get.to(() =>
+                                DeviceChartPage(deviceId: device.deviceId));
+                          },
+                        )
+                            .animate(delay: (index * 100).ms)
+                            .fadeIn(duration: 400.ms)
+                            .slideX(begin: 0.3, end: 0);
+                      },
+                    ),
             ),
           ],
         );
@@ -207,32 +204,18 @@ class MonitorPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           // 扫描间隔信息和快速设置
-          Obx(() => Container(
+          Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.timer,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '扫描间隔: ${scanSettings.scanIntervalSeconds}秒',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const Spacer(),
-                    // 快速设置按钮
-                    Row(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 320;
+                    final buttons = Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildQuickIntervalButton(scanSettings, '0.5s', 0.5),
                         const SizedBox(width: 4),
@@ -259,10 +242,54 @@ class MonitorPage extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ],
+                    );
+
+                    final title = Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.timer,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            '扫描间隔: ${scanSettings.scanIntervalSeconds}秒',
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+
+                    if (isNarrow) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          title,
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: buttons,
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        Expanded(child: title),
+                        buttons,
+                      ],
+                    );
+                  },
                 ),
-              )),
+              ),
         ],
       ),
     ).animate().fadeIn(duration: 500.ms).slideY(begin: -0.2, end: 0);

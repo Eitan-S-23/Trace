@@ -113,8 +113,8 @@ class BleController extends GetxController {
         return;
       }
 
-      // 使用跨平台蓝牙服务扫描
-      await _bluetoothService.startScan(timeout: const Duration(seconds: 30));
+      // 使用跨平台蓝牙服务扫描（持续扫描）
+      await _bluetoothService.startScan();
 
       Get.snackbar('提示', '开始扫描蓝牙设备...', snackPosition: SnackPosition.BOTTOM);
     } catch (e) {

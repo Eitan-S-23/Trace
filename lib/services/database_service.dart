@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
@@ -193,11 +194,14 @@ class DatabaseService {
     );
   }
 
-  /// 批量保存设备数据
+  /// 批量保存设备数据（不删除历史，直接写入）
   Future<void> saveDeviceDataBatch(List<DeviceData> dataList) async {
-    final db = await database;
-    final batch = db.batch();
+    if (dataList.isEmpty) return;
 
+    final db = await database;
+    final deviceId = dataList.first.deviceId;
+
+    final batch = db.batch();
     for (var data in dataList) {
       batch.insert(
         'device_data',
@@ -207,6 +211,7 @@ class DatabaseService {
     }
 
     await batch.commit(noResult: true);
+    debugPrint('批量保存 ${dataList.length} 条数据到设备 $deviceId');
   }
 
   /// 获取设备数据总数
@@ -581,7 +586,7 @@ class DatabaseService {
       monthlyStats.add({
         'date': monthStart,
         'consumption': consumption,
-        'dateString': '${date.year}-${date.month.toString().padLeft(2, '0')}',
+        'dateString': '${date.month}月',
       });
     }
 

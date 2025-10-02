@@ -12,8 +12,8 @@ class DeviceMonitorCard extends StatelessWidget {
   const DeviceMonitorCard({
     Key? key,
     required this.device,
-    required this.latestData,
-    required this.powerConsumption,
+    this.latestData,
+    this.powerConsumption = 0.0,
     required this.onTap,
   }) : super(key: key);
 
@@ -23,9 +23,11 @@ class DeviceMonitorCard extends StatelessWidget {
 
     return Obx(() {
       // Get real-time data from the controller
-      final realtimeData = monitorController.getLatestData(device.deviceId);
-      final currentPowerConsumption =
-          monitorController.getDevicePowerConsumption(device.deviceId);
+      final realtimeData =
+          latestData ?? monitorController.getLatestData(device.deviceId);
+      final currentPowerConsumption = powerConsumption > 0
+          ? powerConsumption
+          : monitorController.getDevicePowerConsumption(device.deviceId);
       final hasFormatError =
           !monitorController.isDeviceFormatValid(device.deviceId);
       final formatError =
@@ -181,7 +183,8 @@ class DeviceMonitorCard extends StatelessWidget {
             ],
           ),
         ),
-        Obx(() {
+        // 计算监控状态，无需嵌套Obx
+        (() {
           final controller = Get.find<MonitorController>();
           final currentRealtimeData = controller.getLatestData(device.deviceId);
           // Check if device is actively receiving data (regardless of saved status)
@@ -219,7 +222,7 @@ class DeviceMonitorCard extends StatelessWidget {
               ],
             ),
           );
-        }),
+        })(),
       ],
     );
   }
