@@ -38,6 +38,7 @@ class MonitorController extends GetxController {
   // 定时器
   Timer? _monitorTimer;
   Timer? _activeScanTimer;
+  Timer? _healthCheckTimer;
 
   // 监控订阅
   StreamSubscription<List<ScanResult>>? _scanSubscription;
@@ -54,6 +55,7 @@ class MonitorController extends GetxController {
     stopMonitoring();
     _monitorTimer?.cancel();
     _activeScanTimer?.cancel();
+    _healthCheckTimer?.cancel();
     _scanSubscription?.cancel();
     super.onClose();
   }
@@ -97,13 +99,54 @@ class MonitorController extends GetxController {
 
   /// 开始自动监控已保存的设备
   void _startAutoMonitoring() {
-    // 监听扫描结果
-    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
-      _processScenResults(results);
-    });
+    // 取消旧的订阅
+    _scanSubscription?.cancel();
+
+    // 监听扫描结果，确保订阅不会丢失
+    _scanSubscription = FlutterBluePlus.scanResults.listen(
+      (results) {
+        _processScenResults(results);
+      },
+      onError: (error) {
+        debugPrint('扫描结果监听错误: $error');
+        // 错误后重新订阅
+        Future.delayed(const Duration(seconds: 1), () {
+          _startAutoMonitoring();
+        });
+      },
+      cancelOnError: false, // 出错时不取消订阅
+    );
 
     // 启动动态间隔的主动扫描定时器
     _startActiveScanTimer();
+
+    // 启动健康检查定时器
+    _startHealthCheckTimer();
+  }
+
+  /// 启动健康检查定时器
+  void _startHealthCheckTimer() {
+    _healthCheckTimer?.cancel();
+
+    // 每5秒检查一次扫描状态
+    _healthCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _checkScanHealth();
+    });
+  }
+
+  /// 检查扫描健康状态
+  void _checkScanHealth() {
+    // 如果正在监控但扫描已停止，尝试重新启动
+    if (isMonitoring.value && !_bleController.isScanning.value) {
+      debugPrint('检测到扫描已停止，尝试重新启动...');
+      _bleController.startScan();
+    }
+
+    // 如果订阅丢失，重新订阅
+    if (_scanSubscription == null || _scanSubscription!.isPaused) {
+      debugPrint('检测到扫描订阅丢失，重新订阅...');
+      _startAutoMonitoring();
+    }
   }
 
   /// 处理扫描结果
@@ -182,12 +225,17 @@ class MonitorController extends GetxController {
 
         // 只统计扫描响应包的数据
         if (dataType == BleDataType.scanResponse) {
+          // 强制触发UI更新
           realtimeData[deviceId] = data;
+          realtimeData.refresh(); // 确保 Obx 监听器能检测到变化
 
           // 更新选中设备的数据（只保存扫描响应数据）
           final selectedDevice =
               selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
-          selectedDevice?.addData(data);
+          if (selectedDevice != null) {
+            selectedDevice.addData(data);
+            selectedDevices.refresh(); // 强制刷新列表
+          }
 
           // 更新已保存设备的数据（只保存扫描响应数据）
           final savedDevice =
@@ -204,10 +252,12 @@ class MonitorController extends GetxController {
               final powerConsumption = savedDevice.powerConsumption;
               _alertService.checkThresholds(data, powerConsumption);
             }
+
+            savedDevices.refresh(); // 强制刷新列表
           }
 
           debugPrint(
-              '保存扫描响应数据: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV');
+              '保存扫描响应数据: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV, 功率: ${data.power}mW');
         } else {
           debugPrint(
               '接收到广播数据（不统计）: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV');
@@ -256,17 +306,26 @@ class MonitorController extends GetxController {
     if (monitoringDevices.isEmpty) return;
 
     try {
-      // 检查当前扫描状态，避免重复启动扫描
-      if (!_bleController.isScanning.value) {
-        // 只有在没有扫描时才启动扫描
-        await _bleController.startScan();
-        debugPrint('启动主动扫描监控');
-      } else {
-        // 如果已经在扫描，就不需要重复启动
-        debugPrint('扫描已在进行中，跳过本次主动扫描');
+      // 强制重启扫描以确保能持续接收数据
+      if (_bleController.isScanning.value) {
+        await _bleController.stopScan();
+        // 短暂延迟后重新启动
+        await Future.delayed(const Duration(milliseconds: 100));
       }
+
+      await _bleController.startScan();
+      debugPrint('执行主动扫描监控 - 监控设备数: ${monitoringDevices.length}');
     } catch (e) {
       debugPrint('主动扫描失败: $e');
+      // 扫描失败后，尝试恢复
+      try {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!_bleController.isScanning.value) {
+          await _bleController.startScan();
+        }
+      } catch (retryError) {
+        debugPrint('重试扫描失败: $retryError');
+      }
     }
   }
 
@@ -315,11 +374,15 @@ class MonitorController extends GetxController {
   void startMonitoring() {
     isMonitoring.value = true;
 
+    // 重启扫描订阅和定时器，确保能持续接收数据
+    _startAutoMonitoring();
+
     // 确保蓝牙正在扫描
     if (!_bleController.isScanning.value) {
       _bleController.startScan();
     }
 
+    debugPrint('开始监控 ${selectedDevices.length} 个设备');
     Get.snackbar('提示', '开始监控 ${selectedDevices.length} 个设备',
         snackPosition: SnackPosition.BOTTOM);
   }

@@ -421,7 +421,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
     final spots = _dailyStats.asMap().entries.map((entry) {
       final index = entry.key;
       final data = entry.value;
-      return FlSpot(index.toDouble(), data['consumption']);
+      return FlSpot(index.toDouble(), (data['consumption'] as num).toDouble());
     }).toList();
 
     // 计算最大值用于设置Y轴范围
@@ -517,7 +517,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
     final spots = _monthlyStats.asMap().entries.map((entry) {
       final index = entry.key;
       final data = entry.value;
-      return FlSpot(index.toDouble(), data['consumption']);
+      return FlSpot(index.toDouble(), (data['consumption'] as num).toDouble());
     }).toList();
 
     // 计算最大值用于设置Y轴范围
@@ -597,8 +597,9 @@ class _PowerStatsPageState extends State<PowerStatsPage>
 
   List<Widget> _buildDailyRanking() {
     final sortedDaily = List<Map<String, dynamic>>.from(_dailyStats)
-      ..sort((a, b) =>
-          (b['consumption'] as double).compareTo(a['consumption'] as double));
+      ..sort((a, b) => (b['consumption'] as num)
+          .toDouble()
+          .compareTo((a['consumption'] as num).toDouble()));
 
     return sortedDaily.take(10).map((data) {
       final index = sortedDaily.indexOf(data);
@@ -642,7 +643,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
               ),
             ),
             Text(
-              '${(data['consumption'] as double).toStringAsFixed(2)} mAh',
+              '${(data['consumption'] as num).toDouble().toStringAsFixed(2)} mAh',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -657,8 +658,9 @@ class _PowerStatsPageState extends State<PowerStatsPage>
 
   List<Widget> _buildMonthlyRanking() {
     final sortedMonthly = List<Map<String, dynamic>>.from(_monthlyStats)
-      ..sort((a, b) =>
-          (b['consumption'] as double).compareTo(a['consumption'] as double));
+      ..sort((a, b) => (b['consumption'] as num)
+          .toDouble()
+          .compareTo((a['consumption'] as num).toDouble()));
 
     return sortedMonthly.map((data) {
       final index = sortedMonthly.indexOf(data);
@@ -702,7 +704,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
               ),
             ),
             Text(
-              '${(data['consumption'] as double).toStringAsFixed(2)} mAh',
+              '${(data['consumption'] as num).toDouble().toStringAsFixed(2)} mAh',
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -720,14 +722,14 @@ class _PowerStatsPageState extends State<PowerStatsPage>
 
     final recentStats = _dailyStats.take(days);
     return recentStats.fold<double>(
-        0.0, (sum, data) => sum + (data['consumption'] as double));
+        0.0, (sum, data) => sum + (data['consumption'] as num).toDouble());
   }
 
   double _calculateAverageDaily() {
     if (_dailyStats.isEmpty) return 0.0;
 
     final total = _dailyStats.fold<double>(
-        0.0, (sum, data) => sum + (data['consumption'] as double));
+        0.0, (sum, data) => sum + (data['consumption'] as num).toDouble());
     return total / _dailyStats.length;
   }
 
