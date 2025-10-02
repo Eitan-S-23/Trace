@@ -509,6 +509,7 @@ class DatabaseService {
   /// 获取设备每日耗电量统计
   Future<List<Map<String, dynamic>>> getDailyPowerConsumption(String deviceId,
       {int days = 30}) async {
+    final db = await database;
     final endDate = DateTime.now();
     final startDate = endDate.subtract(Duration(days: days));
 
@@ -517,10 +518,24 @@ class DatabaseService {
     for (int i = 0; i < days; i++) {
       final date = startDate.add(Duration(days: i));
       final dayStart = DateTime(date.year, date.month, date.day);
-      final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59);
+      final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59, 999);
 
-      final consumption = await calculateDevicePowerConsumption(deviceId,
-          startTime: dayStart, endTime: dayEnd);
+      // 先检查该天是否有数据
+      final dataCount = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM device_data WHERE deviceId = ? AND timestamp >= ? AND timestamp <= ?',
+          [
+            deviceId,
+            dayStart.millisecondsSinceEpoch,
+            dayEnd.millisecondsSinceEpoch
+          ]);
+      final count = Sqflite.firstIntValue(dataCount) ?? 0;
+
+      double consumption = 0.0;
+      if (count >= 2) {
+        // 只有当数据点大于等于2时才计算耗电量
+        consumption = await calculateDevicePowerConsumption(deviceId,
+            startTime: dayStart, endTime: dayEnd);
+      }
 
       dailyStats.add({
         'date': dayStart,
@@ -536,6 +551,7 @@ class DatabaseService {
   /// 获取设备月度耗电量统计
   Future<List<Map<String, dynamic>>> getMonthlyPowerConsumption(String deviceId,
       {int months = 12}) async {
+    final db = await database;
     final endDate = DateTime.now();
 
     List<Map<String, dynamic>> monthlyStats = [];
@@ -543,10 +559,24 @@ class DatabaseService {
     for (int i = 0; i < months; i++) {
       final date = DateTime(endDate.year, endDate.month - i, 1);
       final monthStart = DateTime(date.year, date.month, 1);
-      final monthEnd = DateTime(date.year, date.month + 1, 0, 23, 59, 59);
+      final monthEnd = DateTime(date.year, date.month + 1, 0, 23, 59, 59, 999);
 
-      final consumption = await calculateDevicePowerConsumption(deviceId,
-          startTime: monthStart, endTime: monthEnd);
+      // 先检查该月是否有数据
+      final dataCount = await db.rawQuery(
+          'SELECT COUNT(*) as count FROM device_data WHERE deviceId = ? AND timestamp >= ? AND timestamp <= ?',
+          [
+            deviceId,
+            monthStart.millisecondsSinceEpoch,
+            monthEnd.millisecondsSinceEpoch
+          ]);
+      final count = Sqflite.firstIntValue(dataCount) ?? 0;
+
+      double consumption = 0.0;
+      if (count >= 2) {
+        // 只有当数据点大于等于2时才计算耗电量
+        consumption = await calculateDevicePowerConsumption(deviceId,
+            startTime: monthStart, endTime: monthEnd);
+      }
 
       monthlyStats.add({
         'date': monthStart,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/scan_settings_service.dart';
+import '../controllers/monitor_controller.dart';
 
 class ScanSettingsPage extends StatelessWidget {
   const ScanSettingsPage({Key? key}) : super(key: key);
@@ -96,8 +97,14 @@ class ScanSettingsPage extends StatelessWidget {
                           preset['milliseconds'];
 
                       return GestureDetector(
-                        onTap: () {
-                          scanSettings.setScanIntervalSeconds(preset['value']);
+                        onTap: () async {
+                          if (!isSelected) {
+                            await scanSettings.setScanIntervalSeconds(
+                              preset['value'],
+                              onChanged: () =>
+                                  MonitorController.to.refreshScanInterval(),
+                            );
+                          }
                         },
                         child: Container(
                           decoration: BoxDecoration(
@@ -206,7 +213,11 @@ class ScanSettingsPage extends StatelessWidget {
                           return;
                         }
 
-                        scanSettings.setScanIntervalSeconds(seconds);
+                        scanSettings.setScanIntervalSeconds(
+                          seconds,
+                          onChanged: () =>
+                              MonitorController.to.refreshScanInterval(),
+                        );
                         customController.clear();
                       },
                       style: ElevatedButton.styleFrom(

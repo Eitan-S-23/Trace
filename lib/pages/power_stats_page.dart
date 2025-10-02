@@ -53,9 +53,13 @@ class _PowerStatsPageState extends State<PowerStatsPage>
       ]);
 
       setState(() {
-        _totalConsumption = results[0] as double;
-        _dailyStats = results[1] as List<Map<String, dynamic>>;
-        _monthlyStats = results[2] as List<Map<String, dynamic>>;
+        _totalConsumption = (results[0] as num).toDouble();
+        _dailyStats = (results[1] as List)
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        _monthlyStats = (results[2] as List)
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -432,7 +436,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
 
     return LineChart(
       LineChartData(
-        minY: 0,
+        minY: 0.0,
         maxY: yAxisMax > 0 ? yAxisMax : 1.0,
         gridData: FlGridData(show: true),
         titlesData: FlTitlesData(
@@ -444,8 +448,9 @@ class _PowerStatsPageState extends State<PowerStatsPage>
               getTitlesWidget: (value, meta) {
                 if (value == 0) return const SizedBox.shrink();
                 final unit = _getBestConsumptionUnit(value);
+                final convertedValue = (unit['value'] as num).toDouble();
                 return Text(
-                  '${_formatConsumptionValue(value, unit['value'])}${unit['unit']}',
+                  '${_formatConsumptionValue(value, convertedValue)}${unit['unit']}',
                   style: const TextStyle(fontSize: 9),
                 );
               },
@@ -462,7 +467,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 30,
-              interval: 5,
+              interval: 5.0,
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
                 if (index >= 0 && index < _dailyStats.length) {
@@ -528,7 +533,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
 
     return LineChart(
       LineChartData(
-        minY: 0,
+        minY: 0.0,
         maxY: yAxisMax > 0 ? yAxisMax : 1.0,
         gridData: FlGridData(show: true),
         titlesData: FlTitlesData(
@@ -540,8 +545,9 @@ class _PowerStatsPageState extends State<PowerStatsPage>
               getTitlesWidget: (value, meta) {
                 if (value == 0) return const SizedBox.shrink();
                 final unit = _getBestConsumptionUnit(value);
+                final convertedValue = (unit['value'] as num).toDouble();
                 return Text(
-                  '${_formatConsumptionValue(value, unit['value'])}${unit['unit']}',
+                  '${_formatConsumptionValue(value, convertedValue)}${unit['unit']}',
                   style: const TextStyle(fontSize: 9),
                 );
               },
@@ -558,7 +564,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 30,
-              interval: 2,
+              interval: 2.0,
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
                 if (index >= 0 && index < _monthlyStats.length) {
@@ -737,7 +743,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
   double _calculateYAxisInterval(double maxValue) {
     if (maxValue <= 0) return 1.0;
 
-    // 根据最大值确定合适的间隔
+    // 根据最大值确定合适的间隔，确保返回的都是 double 类型
     if (maxValue <= 1) return 0.2;
     if (maxValue <= 5) return 1.0;
     if (maxValue <= 10) return 2.0;
@@ -747,7 +753,8 @@ class _PowerStatsPageState extends State<PowerStatsPage>
     if (maxValue <= 1000) return 100.0;
 
     // 对于很大的值，使用动态计算
-    return (maxValue / 5).ceilToDouble();
+    final interval = (maxValue / 5).ceilToDouble();
+    return interval > 0 ? interval : 1.0;
   }
 
   /// 获取最佳耗电量单位

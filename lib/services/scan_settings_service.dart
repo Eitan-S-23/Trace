@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 class ScanSettingsService extends GetxController {
   static ScanSettingsService get to => Get.find();
@@ -37,27 +38,42 @@ class ScanSettingsService extends GetxController {
   }
 
   /// 设置扫描间隔（秒）
-  Future<void> setScanIntervalSeconds(double seconds) async {
+  Future<void> setScanIntervalSeconds(double seconds,
+      {VoidCallback? onChanged}) async {
     if (seconds < 0.1 || seconds > 60.0) {
       Get.snackbar('错误', '扫描间隔必须在0.1-60秒之间');
       return;
     }
 
-    scanInterval.value = (seconds * 1000).round();
+    final newValue = (seconds * 1000).round();
+    if (scanInterval.value == newValue) {
+      onChanged?.call();
+      return;
+    }
+
+    scanInterval.value = newValue;
     await _saveSettings();
+    onChanged?.call();
 
     Get.snackbar('成功', '扫描间隔已设置为 ${seconds}秒');
   }
 
   /// 设置扫描间隔（毫秒）
-  Future<void> setScanIntervalMilliseconds(int milliseconds) async {
+  Future<void> setScanIntervalMilliseconds(int milliseconds,
+      {VoidCallback? onChanged}) async {
     if (milliseconds < 100 || milliseconds > 60000) {
       Get.snackbar('错误', '扫描间隔必须在100-60000毫秒之间');
       return;
     }
 
+    if (scanInterval.value == milliseconds) {
+      onChanged?.call();
+      return;
+    }
+
     scanInterval.value = milliseconds;
     await _saveSettings();
+    onChanged?.call();
 
     Get.snackbar('成功', '扫描间隔已设置为 ${milliseconds}毫秒');
   }

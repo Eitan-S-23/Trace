@@ -56,6 +56,7 @@ class MonitorController extends GetxController {
     _monitorTimer?.cancel();
     _activeScanTimer?.cancel();
     _healthCheckTimer?.cancel();
+    _scanIntervalWorker?.dispose();
     _scanSubscription?.cancel();
     super.onClose();
   }
@@ -70,16 +71,19 @@ class MonitorController extends GetxController {
       for (var device in devices) {
         // 获取数据总数
         final totalCount = await _dbService.getDeviceDataCount(device.deviceId);
+        debugPrint('设备 ${device.deviceName} 数据库中共有 $totalCount 条数据');
+
         final List<DeviceData> historyData;
 
         if (totalCount <= MAX_DATA_RECORDS) {
-          // 如果数据量小于等于最大记录数，获取全部数据（明确指定limit为总数量）
-          historyData = await _dbService.getDeviceData(device.deviceId,
-              limit: totalCount > 0 ? totalCount : null);
+          // 如果数据量小于等于最大记录数，获取全部数据（不指定limit）
+          historyData = await _dbService.getDeviceData(device.deviceId);
+          debugPrint('加载了 ${historyData.length} 条历史数据');
         } else {
           // 如果数据量大于最大记录数，获取最新的MAX_DATA_RECORDS条数据
           historyData = await _dbService.getLatestDeviceData(
               device.deviceId, MAX_DATA_RECORDS);
+          debugPrint('加载了最新的 ${historyData.length} 条历史数据（总计 $totalCount 条）');
         }
 
         device.dataHistory.clear();
@@ -117,8 +121,11 @@ class MonitorController extends GetxController {
       cancelOnError: false, // 出错时不取消订阅
     );
 
+    _scanIntervalWorker ??= ever(
+        _scanSettings.scanInterval, (interval) => _restartActiveScanTimer());
+
     // 启动动态间隔的主动扫描定时器
-    _startActiveScanTimer();
+    _restartActiveScanTimer();
 
     // 启动健康检查定时器
     _startHealthCheckTimer();
@@ -273,21 +280,35 @@ class MonitorController extends GetxController {
     }
   }
 
+  /// 外部刷新扫描定时器
+  void refreshScanInterval() {
+    _restartActiveScanTimer();
+  }
+
   /// 启动主动扫描定时器
-  void _startActiveScanTimer() {
+  void _startActiveScanTimer({bool resetStream = false}) {
     _activeScanTimer?.cancel();
 
-    // 监听扫描间隔变化并重新启动定时器
-    ever(_scanSettings.scanInterval, (interval) {
-      _restartActiveScanTimer();
-    });
+    if (resetStream) {
+      _scanIntervalWorker?.dispose();
+      _scanIntervalWorker = ever(_scanSettings.scanInterval, (interval) {
+        _restartActiveScanTimer();
+      });
+    }
 
     _restartActiveScanTimer();
   }
 
+  Worker? _scanIntervalWorker;
+
   /// 重启主动扫描定时器
   void _restartActiveScanTimer() {
     _activeScanTimer?.cancel();
+
+    if (!isMonitoring.value) {
+      return;
+    }
+
     _activeScanTimer = Timer.periodic(
         Duration(milliseconds: _scanSettings.scanInterval.value), (timer) {
       _performActiveScan();
@@ -391,6 +412,7 @@ class MonitorController extends GetxController {
   void stopMonitoring() {
     isMonitoring.value = false;
     _activeScanTimer?.cancel();
+    _activeScanTimer = null;
     Get.snackbar('提示', '已停止监控', snackPosition: SnackPosition.BOTTOM);
   }
 

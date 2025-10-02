@@ -6,13 +6,14 @@ import '../services/scan_settings_service.dart';
 import '../pages/device_chart_page.dart';
 import '../pages/scan_settings_page.dart';
 import '../widgets/device_monitor_card.dart';
+import 'power_stats_page.dart';
 
 class MonitorPage extends StatelessWidget {
   const MonitorPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final monitorController = Get.find<MonitorController>();
+    final monitorController = MonitorController.to;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -273,8 +274,13 @@ class MonitorPage extends StatelessWidget {
         (scanSettings.scanIntervalSeconds - seconds).abs() < 0.01;
 
     return GestureDetector(
-      onTap: () {
-        scanSettings.setScanIntervalSeconds(seconds);
+      onTap: () async {
+        if (!isSelected) {
+          await scanSettings.setScanIntervalSeconds(
+            seconds,
+            onChanged: () => MonitorController.to.refreshScanInterval(),
+          );
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
