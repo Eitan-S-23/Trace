@@ -254,10 +254,8 @@ class MonitorController extends GetxController {
             final originalLength = savedDevice.dataHistory.length;
             savedDevice.addData(data);
 
-            // 只有当数据实际被添加时才保存到数据库
-            if (savedDevice.dataHistory.length > originalLength) {
-              _dbService.saveDeviceData(data);
-            }
+            // 注意：不再实时保存到数据库，只在批量保存时保存
+            // 这样可以避免数据重复保存的问题
 
             // 无论是否保存到数据库，都进行阈值检查（内部有冷却与开关控制）
             final powerConsumption = savedDevice.powerConsumption;

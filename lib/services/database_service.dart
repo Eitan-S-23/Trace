@@ -194,7 +194,7 @@ class DatabaseService {
     );
   }
 
-  /// 批量保存设备数据（不删除历史，直接写入）
+  /// 批量保存设备数据（替换该设备的所有历史数据）
   Future<void> saveDeviceDataBatch(List<DeviceData> dataList) async {
     if (dataList.isEmpty) return;
 
@@ -202,6 +202,15 @@ class DatabaseService {
     final deviceId = dataList.first.deviceId;
 
     final batch = db.batch();
+
+    // 先删除该设备的所有历史数据，确保数据一致性
+    batch.delete(
+      'device_data',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+    );
+
+    // 然后批量插入新数据
     for (var data in dataList) {
       batch.insert(
         'device_data',
@@ -211,7 +220,7 @@ class DatabaseService {
     }
 
     await batch.commit(noResult: true);
-    debugPrint('批量保存 ${dataList.length} 条数据到设备 $deviceId');
+    debugPrint('批量保存 ${dataList.length} 条数据到设备 $deviceId（已替换该设备的历史数据）');
   }
 
   /// 获取设备数据总数
