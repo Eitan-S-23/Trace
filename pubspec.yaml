@@ -49,6 +49,7 @@ dependencies:
   path_provider: ^2.1.2
   win_ble: ^1.1.1 # Windows蓝牙支持
   device_info_plus: ^10.1.0
+  flutter_local_notifications: ^17.2.2
 
 dev_dependencies:
   flutter_test:

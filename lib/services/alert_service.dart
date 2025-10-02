@@ -7,12 +7,14 @@ import 'package:audioplayers/audioplayers.dart';
 import '../models/device_settings.dart';
 import '../models/device_data.dart';
 import 'database_service.dart';
+import 'notification_service.dart';
 
 class AlertService extends GetxController {
   static AlertService get to => Get.find();
 
   final DatabaseService _dbService = DatabaseService();
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final NotificationService _notificationService = NotificationService();
 
   // 存储设备设置的缓存
   final Map<String, DeviceSettings> _deviceSettingsCache = {};
@@ -172,25 +174,33 @@ class AlertService extends GetxController {
       AlertType alertType) async {
     final message = '设备 $deviceName 异常:\n${exceededItems.join('\n')}';
 
-    // 显示应用内通知
-    Get.snackbar(
-      '⚠️ 异常用电量报警',
-      message,
-      snackPosition: SnackPosition.TOP,
-      backgroundColor: const Color(0xFFFF6B6B),
-      colorText: Colors.white,
-      duration: const Duration(seconds: 8), // 延长显示时间
-      isDismissible: true,
-      margin: const EdgeInsets.all(16),
-      borderRadius: 8,
-      showProgressIndicator: true,
-      progressIndicatorBackgroundColor: Colors.white24,
-      progressIndicatorValueColor:
-          const AlwaysStoppedAnimation<Color>(Colors.white),
-    );
+    // 显示应用内通知（仅当前台运行时显示）
+    if (Get.context != null) {
+      Get.snackbar(
+        '⚠️ 异常用电量报警',
+        message,
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: const Color(0xFFFF6B6B),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 8), // 延长显示时间
+        isDismissible: true,
+        margin: const EdgeInsets.all(16),
+        borderRadius: 8,
+        showProgressIndicator: true,
+        progressIndicatorBackgroundColor: Colors.white24,
+        progressIndicatorValueColor:
+            const AlwaysStoppedAnimation<Color>(Colors.white),
+      );
 
-    // 显示系统对话框（更醒目）
-    _showAlertDialog(deviceName, exceededItems);
+      // 显示系统对话框（仅当前台运行时显示）
+      _showAlertDialog(deviceName, exceededItems);
+    }
+
+    // 始终显示后台通知（无论前台后台）
+    await _notificationService.showDeviceAlertNotification(
+      deviceName: deviceName,
+      exceededItems: exceededItems,
+    );
 
     debugPrint('报警已触发: $message');
 

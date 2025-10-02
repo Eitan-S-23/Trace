@@ -8,6 +8,7 @@ import 'pages/main_app_page.dart';
 import 'pages/home_page.dart';
 import 'pages/monitor_page.dart';
 import 'pages/saved_devices_page.dart';
+import 'pages/test_notification_page.dart';
 import 'services/database_service.dart';
 import 'services/scan_settings_service.dart';
 import 'services/alert_service.dart';
@@ -15,6 +16,8 @@ import 'services/background_optimization_service.dart';
 import 'services/ota_service.dart';
 import 'services/bluetooth_service.dart' as bt_service;
 import 'services/responsive_service.dart';
+import 'services/notification_service.dart';
+import 'services/background_task_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -95,12 +98,23 @@ class MyApp extends StatelessWidget {
             Get.put(BleController(), permanent: true);
             Get.put(MonitorController(), permanent: true);
             Get.put(BackgroundOptimizationService(), permanent: true);
+
+            // 初始化通知服务
+            Get.put(NotificationService(), permanent: true);
+            Get.put(BackgroundTaskService(), permanent: true);
+
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Get.find<NotificationService>().initialize();
+            });
           }),
           getPages: [
             GetPage(name: '/', page: () => const HomePage()),
             GetPage(name: '/monitor', page: () => const MonitorPage()),
             GetPage(
                 name: '/saved-devices', page: () => const SavedDevicesPage()),
+            GetPage(
+                name: '/test-notification',
+                page: () => const TestNotificationPage()),
           ],
           debugShowCheckedModeBanner: false,
         );
