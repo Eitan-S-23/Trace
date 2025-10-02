@@ -1,0 +1,568 @@
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:path/path.dart';
+import '../models/device_data.dart';
+import '../models/device_settings.dart';
+
+class DatabaseService {
+  static final DatabaseService _instance = DatabaseService._internal();
+  factory DatabaseService() => _instance;
+  DatabaseService._internal();
+
+  static Database? _database;
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDatabase();
+    return _database!;
+  }
+
+  Future<Database> _initDatabase() async {
+    // FFI已在main.dart中初始化，这里不需要重复初始化
+    String path = join(await getDatabasesPath(), 'ble_monitor.db');
+
+    return await openDatabase(
+      path,
+      version: 2, // 升级版本号以支持新功能
+      onCreate: _createTables,
+      onUpgrade: _upgradeDatabase,
+    );
+  }
+
+  Future<void> _upgradeDatabase(
+      Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // 添加新的字段和表
+      await db.execute('''
+        ALTER TABLE device_data ADD COLUMN powerConsumption REAL DEFAULT 0.0
+      ''');
+
+      // 添加设备配置表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS device_settings (
+          deviceId TEXT PRIMARY KEY,
+          currentThreshold REAL DEFAULT 1000.0,
+          voltageThreshold REAL DEFAULT 24.0,
+          powerThreshold REAL DEFAULT 100.0,
+          powerConsumptionThreshold REAL DEFAULT 1000.0,
+          currentUnit TEXT DEFAULT 'mA',
+          voltageUnit TEXT DEFAULT 'V',
+          powerUnit TEXT DEFAULT 'W',
+          powerConsumptionUnit TEXT DEFAULT 'mAh',
+          alertEnabled INTEGER DEFAULT 1,
+          alertType INTEGER DEFAULT 0,
+          FOREIGN KEY (deviceId) REFERENCES devices (deviceId)
+        )
+      ''');
+
+      // 添加扫描设置表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS scan_settings (
+          id INTEGER PRIMARY KEY,
+          scanInterval INTEGER DEFAULT 1000
+        )
+      ''');
+
+      // 插入默认扫描设置
+      await db.insert('scan_settings', {'id': 1, 'scanInterval': 1000});
+    }
+  }
+
+  Future<void> _createTables(Database db, int version) async {
+    // 创建设备表
+    await db.execute('''
+      CREATE TABLE devices (
+        deviceId TEXT PRIMARY KEY,
+        deviceName TEXT NOT NULL,
+        isMonitoring INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      )
+    ''');
+
+    // 创建设备数据表
+    await db.execute('''
+      CREATE TABLE device_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deviceId TEXT NOT NULL,
+        deviceName TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        current REAL NOT NULL,
+        currentUnit TEXT NOT NULL,
+        voltage REAL NOT NULL,
+        power REAL NOT NULL,
+        powerConsumption REAL DEFAULT 0.0,
+        dataType INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (deviceId) REFERENCES devices (deviceId)
+      )
+    ''');
+
+    // 创建索引
+    await db.execute('''
+      CREATE INDEX idx_device_data_device_id ON device_data (deviceId)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_device_data_timestamp ON device_data (timestamp)
+    ''');
+
+    // 创建设备配置表
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS device_settings (
+        deviceId TEXT PRIMARY KEY,
+        currentThreshold REAL DEFAULT 1000.0,
+        voltageThreshold REAL DEFAULT 24.0,
+        powerThreshold REAL DEFAULT 100.0,
+        powerConsumptionThreshold REAL DEFAULT 1000.0,
+        currentUnit TEXT DEFAULT 'mA',
+        voltageUnit TEXT DEFAULT 'V',
+        powerUnit TEXT DEFAULT 'W',
+        powerConsumptionUnit TEXT DEFAULT 'mAh',
+        alertEnabled INTEGER DEFAULT 1,
+        alertType INTEGER DEFAULT 0,
+        FOREIGN KEY (deviceId) REFERENCES devices (deviceId)
+      )
+    ''');
+
+    // 创建扫描设置表
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS scan_settings (
+        id INTEGER PRIMARY KEY,
+        scanInterval INTEGER DEFAULT 1000
+      )
+    ''');
+
+    // 插入默认扫描设置
+    await db.insert('scan_settings', {'id': 1, 'scanInterval': 1000});
+  }
+
+  /// 保存或更新设备
+  Future<void> saveDevice(SelectedDevice device) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.insert(
+      'devices',
+      {
+        'deviceId': device.deviceId,
+        'deviceName': device.deviceName,
+        'isMonitoring': device.isMonitoring.value ? 1 : 0,
+        'createdAt': now,
+        'updatedAt': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 获取所有保存的设备
+  Future<List<SelectedDevice>> getSavedDevices() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('devices');
+
+    return List.generate(maps.length, (i) {
+      return SelectedDevice.fromMap(maps[i]);
+    });
+  }
+
+  /// 删除设备
+  Future<void> deleteDevice(String deviceId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      // 删除设备数据
+      await txn.delete(
+        'device_data',
+        where: 'deviceId = ?',
+        whereArgs: [deviceId],
+      );
+      // 删除设备
+      await txn.delete(
+        'devices',
+        where: 'deviceId = ?',
+        whereArgs: [deviceId],
+      );
+    });
+  }
+
+  /// 保存设备数据
+  Future<void> saveDeviceData(DeviceData data) async {
+    final db = await database;
+    await db.insert(
+      'device_data',
+      data.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 批量保存设备数据
+  Future<void> saveDeviceDataBatch(List<DeviceData> dataList) async {
+    final db = await database;
+    final batch = db.batch();
+
+    for (var data in dataList) {
+      batch.insert(
+        'device_data',
+        data.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    await batch.commit(noResult: true);
+  }
+
+  /// 获取设备数据总数
+  Future<int> getDeviceDataCount(String deviceId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM device_data WHERE deviceId = ?',
+        [deviceId]);
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  /// 带偏移量的获取设备数据
+  Future<List<DeviceData>> getDeviceDataWithOffset(String deviceId,
+      {required int skip, required int limit}) async {
+    final db = await database;
+
+    final String sql = '''
+      SELECT * FROM device_data 
+      WHERE deviceId = ? 
+      ORDER BY timestamp ASC 
+      LIMIT ? OFFSET ?
+    ''';
+
+    final List<Map<String, dynamic>> maps =
+        await db.rawQuery(sql, [deviceId, limit, skip]);
+
+    return List.generate(maps.length, (i) {
+      return DeviceData.fromMap(maps[i]);
+    });
+  }
+
+  /// 获取设备数据的最新N条记录
+  Future<List<DeviceData>> getLatestDeviceData(
+      String deviceId, int limit) async {
+    final db = await database;
+
+    final String sql = '''
+      SELECT * FROM device_data 
+      WHERE deviceId = ? 
+      ORDER BY timestamp DESC 
+      LIMIT ?
+    ''';
+
+    final List<Map<String, dynamic>> maps =
+        await db.rawQuery(sql, [deviceId, limit]);
+
+    // 将结果按时间顺序重新排列
+    final result = List.generate(maps.length, (i) {
+      return DeviceData.fromMap(maps[i]);
+    });
+
+    return result.reversed.toList();
+  }
+
+  /// 获取设备的历史数据
+  Future<List<DeviceData>> getDeviceData(String deviceId,
+      {int? limit, DateTime? startTime, DateTime? endTime}) async {
+    final db = await database;
+
+    // 使用原生SQL查询以避免SQLite的默认限制
+    String sql = 'SELECT * FROM device_data WHERE deviceId = ?';
+    List<dynamic> args = [deviceId];
+
+    if (startTime != null) {
+      sql += ' AND timestamp >= ?';
+      args.add(startTime.millisecondsSinceEpoch);
+    }
+
+    if (endTime != null) {
+      sql += ' AND timestamp <= ?';
+      args.add(endTime.millisecondsSinceEpoch);
+    }
+
+    sql += ' ORDER BY timestamp ASC';
+
+    if (limit != null) {
+      sql += ' LIMIT $limit';
+    }
+
+    final List<Map<String, dynamic>> maps = await db.rawQuery(sql, args);
+
+    return List.generate(maps.length, (i) {
+      return DeviceData.fromMap(maps[i]);
+    });
+  }
+
+  /// 获取设备最新数据（单条记录）
+  Future<DeviceData?> getLatestSingleDeviceData(String deviceId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'device_data',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+      orderBy: 'timestamp DESC',
+      limit: 1,
+    );
+
+    if (maps.isNotEmpty) {
+      return DeviceData.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  /// 获取指定时间范围内的数据统计
+  Future<Map<String, dynamic>> getDataStatistics(
+      String deviceId, DateTime startTime, DateTime endTime) async {
+    final db = await database;
+
+    final List<Map<String, dynamic>> result = await db.rawQuery('''
+      SELECT 
+        COUNT(*) as dataCount,
+        AVG(current) as avgCurrent,
+        AVG(voltage) as avgVoltage,
+        AVG(power) as avgPower,
+        MAX(current) as maxCurrent,
+        MAX(voltage) as maxVoltage,
+        MAX(power) as maxPower,
+        MIN(current) as minCurrent,
+        MIN(voltage) as minVoltage,
+        MIN(power) as minPower
+      FROM device_data 
+      WHERE deviceId = ? AND timestamp >= ? AND timestamp <= ?
+    ''', [
+      deviceId,
+      startTime.millisecondsSinceEpoch,
+      endTime.millisecondsSinceEpoch
+    ]);
+
+    return result.first;
+  }
+
+  /// 清理旧数据（保留指定天数的数据）
+  Future<void> cleanOldData(int daysToKeep) async {
+    final db = await database;
+    final cutoffTime = DateTime.now().subtract(Duration(days: daysToKeep));
+
+    await db.delete(
+      'device_data',
+      where: 'timestamp < ?',
+      whereArgs: [cutoffTime.millisecondsSinceEpoch],
+    );
+  }
+
+  /// 获取数据库大小信息
+  Future<Map<String, int>> getDatabaseInfo() async {
+    final db = await database;
+
+    final deviceCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM devices')) ??
+        0;
+
+    final dataCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM device_data')) ??
+        0;
+
+    return {
+      'deviceCount': deviceCount,
+      'dataCount': dataCount,
+    };
+  }
+
+  /// 保存设备设置
+  Future<void> saveDeviceSettings(DeviceSettings settings) async {
+    final db = await database;
+    await db.insert(
+      'device_settings',
+      settings.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 获取设备设置
+  Future<DeviceSettings?> getDeviceSettings(String deviceId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'device_settings',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+    );
+
+    if (maps.isNotEmpty) {
+      return DeviceSettings.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  /// 获取所有设备设置
+  Future<List<DeviceSettings>> getAllDeviceSettings() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('device_settings');
+
+    return List.generate(maps.length, (i) {
+      return DeviceSettings.fromMap(maps[i]);
+    });
+  }
+
+  /// 删除设备设置
+  Future<void> deleteDeviceSettings(String deviceId) async {
+    final db = await database;
+    await db.delete(
+      'device_settings',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+    );
+  }
+
+  /// 更新扫描间隔设置
+  Future<void> updateScanInterval(int interval) async {
+    final db = await database;
+    await db.update(
+      'scan_settings',
+      {'scanInterval': interval},
+      where: 'id = ?',
+      whereArgs: [1],
+    );
+  }
+
+  /// 获取扫描间隔设置
+  Future<int> getScanInterval() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'scan_settings',
+      where: 'id = ?',
+      whereArgs: [1],
+    );
+
+    if (maps.isNotEmpty) {
+      return maps.first['scanInterval'] ?? 1000;
+    }
+    return 1000;
+  }
+
+  /// 计算设备的历史耗电量（基于数据库中的所有数据）
+  Future<double> calculateDevicePowerConsumption(String deviceId,
+      {DateTime? startTime, DateTime? endTime}) async {
+    final db = await database;
+
+    String sql = 'SELECT * FROM device_data WHERE deviceId = ?';
+    List<dynamic> args = [deviceId];
+
+    if (startTime != null) {
+      sql += ' AND timestamp >= ?';
+      args.add(startTime.millisecondsSinceEpoch);
+    }
+
+    if (endTime != null) {
+      sql += ' AND timestamp <= ?';
+      args.add(endTime.millisecondsSinceEpoch);
+    }
+
+    sql += ' ORDER BY timestamp ASC';
+
+    final List<Map<String, dynamic>> maps = await db.rawQuery(sql, args);
+
+    if (maps.length < 2) return 0.0;
+
+    double totalConsumption = 0.0;
+
+    for (int i = 1; i < maps.length; i++) {
+      final current = DeviceData.fromMap(maps[i]);
+      final previous = DeviceData.fromMap(maps[i - 1]);
+
+      // 计算时间差(小时)
+      double timeDiffHours =
+          current.timestamp.difference(previous.timestamp).inMilliseconds /
+              (1000.0 * 60.0 * 60.0);
+
+      // 转换电流为mA
+      double currentInMA =
+          _convertToMilliAmps(current.current, current.currentUnit);
+      double previousInMA =
+          _convertToMilliAmps(previous.current, previous.currentUnit);
+
+      // 使用梯形积分法计算平均电流
+      double avgCurrentMA = (currentInMA + previousInMA) / 2.0;
+
+      // 计算消耗量 (mAh)
+      totalConsumption += avgCurrentMA * timeDiffHours;
+    }
+
+    return totalConsumption;
+  }
+
+  /// 转换电流为mA
+  double _convertToMilliAmps(double current, String unit) {
+    switch (unit) {
+      case 'nA':
+        return current / 1000000.0;
+      case 'uA':
+        return current / 1000.0;
+      case 'mA':
+        return current;
+      case 'A':
+        return current * 1000.0;
+      default:
+        return 0.0;
+    }
+  }
+
+  /// 获取设备每日耗电量统计
+  Future<List<Map<String, dynamic>>> getDailyPowerConsumption(String deviceId,
+      {int days = 30}) async {
+    final endDate = DateTime.now();
+    final startDate = endDate.subtract(Duration(days: days));
+
+    List<Map<String, dynamic>> dailyStats = [];
+
+    for (int i = 0; i < days; i++) {
+      final date = startDate.add(Duration(days: i));
+      final dayStart = DateTime(date.year, date.month, date.day);
+      final dayEnd = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+      final consumption = await calculateDevicePowerConsumption(deviceId,
+          startTime: dayStart, endTime: dayEnd);
+
+      dailyStats.add({
+        'date': dayStart,
+        'consumption': consumption,
+        'dateString':
+            '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+      });
+    }
+
+    return dailyStats;
+  }
+
+  /// 获取设备月度耗电量统计
+  Future<List<Map<String, dynamic>>> getMonthlyPowerConsumption(String deviceId,
+      {int months = 12}) async {
+    final endDate = DateTime.now();
+
+    List<Map<String, dynamic>> monthlyStats = [];
+
+    for (int i = 0; i < months; i++) {
+      final date = DateTime(endDate.year, endDate.month - i, 1);
+      final monthStart = DateTime(date.year, date.month, 1);
+      final monthEnd = DateTime(date.year, date.month + 1, 0, 23, 59, 59);
+
+      final consumption = await calculateDevicePowerConsumption(deviceId,
+          startTime: monthStart, endTime: monthEnd);
+
+      monthlyStats.add({
+        'date': monthStart,
+        'consumption': consumption,
+        'dateString': '${date.year}-${date.month.toString().padLeft(2, '0')}',
+      });
+    }
+
+    return monthlyStats.reversed.toList();
+  }
+
+  /// 关闭数据库
+  Future<void> close() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+  }
+}
