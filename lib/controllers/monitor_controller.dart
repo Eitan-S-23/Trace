@@ -67,6 +67,10 @@ class MonitorController extends GetxController {
   Future<void> _loadSavedDevices() async {
     try {
       final devices = await _dbService.getSavedDevices();
+      debugPrint('从数据库加载设备数量: ${devices.length}');
+      for (var device in devices) {
+        debugPrint('加载设备: ${device.deviceId} - ${device.deviceName}');
+      }
       savedDevices.value = devices;
 
       // 为已保存的设备加载历史数据
@@ -115,8 +119,10 @@ class MonitorController extends GetxController {
     _scanSubscription?.cancel();
 
     // 监听扫描结果，确保订阅不会丢失
-    _scanSubscription = FlutterBluePlus.scanResults.listen(
+    // 使用BleController的scanResults，它在所有平台上都能正常工作
+    _scanSubscription = _bleController.scanResults.listen(
       (results) {
+        debugPrint('MonitorController接收到扫描结果: ${results.length} 个设备');
         _processScenResults(results);
       },
       onError: (error) {
@@ -153,30 +159,35 @@ class MonitorController extends GetxController {
   void _checkScanHealth() {
     // 如果正在监控但扫描已停止，尝试重新启动
     if (isMonitoring.value && !_bleController.isScanning.value) {
-      debugPrint('检测到扫描已停止，尝试重新启动...');
       _bleController.startScan();
     }
 
     // 如果订阅丢失，重新订阅
     if (_scanSubscription == null || _scanSubscription!.isPaused) {
-      debugPrint('检测到扫描订阅丢失，重新订阅...');
       _startAutoMonitoring();
     }
   }
 
   /// 处理扫描结果
   void _processScenResults(List<ScanResult> results) {
+    debugPrint('处理扫描结果: ${results.length} 个设备');
     final Set<String> uniqueIds = {};
+
     for (var result in results) {
       final deviceId = result.device.remoteId.toString();
       // 去重：相同地址只处理一次
       if (!uniqueIds.add(deviceId)) continue;
 
+      debugPrint('检查设备: $deviceId');
+
       // 检查是否是已保存或选中的设备
       bool isTargetDevice = savedDevices.any((d) => d.deviceId == deviceId) ||
           selectedDevices.any((d) => d.deviceId == deviceId);
 
+      debugPrint('是否为目标设备: $isTargetDevice');
+
       if (isTargetDevice) {
+        debugPrint('处理目标设备数据: $deviceId');
         _parseDeviceData(result);
       }
     }
@@ -185,9 +196,43 @@ class MonitorController extends GetxController {
   /// 解析设备数据
   void _parseDeviceData(ScanResult result) {
     final deviceId = result.device.remoteId.toString();
-    final deviceName = result.device.platformName.isNotEmpty
-        ? result.device.platformName
-        : '未知设备';
+    // 使用BleController的设备名称获取方法，确保获取正确的设备名称
+    final deviceName = _bleController.getDeviceName(result.device);
+
+    // 输出广播包内容的详细日志
+    debugPrint('=== 设备广播包内容 ===');
+    debugPrint('设备ID: $deviceId');
+    debugPrint('设备名称: $deviceName');
+    debugPrint('信号强度: ${result.rssi} dBm');
+    debugPrint('广播数据长度: ${result.advertisementData.manufacturerData.length}');
+
+    // 打印制造商数据内容
+    for (var entry in result.advertisementData.manufacturerData.entries) {
+      debugPrint('制造商ID: 0x${entry.key.toRadixString(16).padLeft(4, '0')}');
+      debugPrint(
+          '数据内容 (16进制): ${entry.value.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+      debugPrint('数据内容 (10进制): ${entry.value.join(', ')}');
+      debugPrint('数据长度: ${entry.value.length} 字节');
+    }
+
+    // 打印服务数据内容
+    if (result.advertisementData.serviceData.isNotEmpty) {
+      debugPrint('服务数据:');
+      for (var entry in result.advertisementData.serviceData.entries) {
+        debugPrint('服务UUID: ${entry.key}');
+        debugPrint(
+            '数据内容 (16进制): ${entry.value.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+        debugPrint('数据长度: ${entry.value.length} 字节');
+      }
+    }
+
+    // 打印服务UUID列表
+    if (result.advertisementData.serviceUuids.isNotEmpty) {
+      debugPrint('服务UUID: ${result.advertisementData.serviceUuids.join(', ')}');
+    }
+
+    debugPrint('可连接: ${result.advertisementData.connectable}');
+    debugPrint('========================');
 
     // 根据用户说明：BLE设备数据通过扫描响应包发送
     // flutter_blue_plus会将扫描响应包数据合并到advertisementData.manufacturerData中
@@ -223,7 +268,6 @@ class MonitorController extends GetxController {
         formatError = formatCheck['error'];
         deviceFormatStatus[deviceId] = false;
         deviceFormatErrors[deviceId] = formatError;
-        debugPrint('设备$deviceName数据格式错误: $formatError');
         continue;
       }
 
@@ -263,7 +307,6 @@ class MonitorController extends GetxController {
           final savedDevice =
               savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
           if (savedDevice != null) {
-            final originalLength = savedDevice.dataHistory.length;
             savedDevice.addData(data);
 
             // 注意：不再实时保存到数据库，只在批量保存时保存
@@ -276,11 +319,9 @@ class MonitorController extends GetxController {
             savedDevices.refresh(); // 强制刷新列表
           }
 
-          debugPrint(
-              '保存扫描响应数据: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV, 功率: ${data.power}mW');
+          // 保存扫描响应数据
         } else {
-          debugPrint(
-              '接收到广播数据（不统计）: $deviceName - ${data.current}${data.currentUnit}, ${data.voltage}mV');
+          // 接收到广播数据（不统计）
         }
 
         break; // 只处理第一个有效的厂商数据
@@ -329,20 +370,16 @@ class MonitorController extends GetxController {
       // 保持扫描持续进行，不频繁开始/停止
       if (!_bleController.isScanning.value) {
         await _bleController.startScan();
-        debugPrint('执行主动扫描监控 - 监控设备数: ${monitoringDevices.length}');
-      } else {
-        debugPrint('扫描已在进行中，保持持续扫描');
       }
     } catch (e) {
-      debugPrint('主动扫描失败: $e');
-      // 扫描失败后，尝试恢复
+      // 主动扫描失败，尝试恢复
       try {
         await Future.delayed(const Duration(milliseconds: 500));
         if (!_bleController.isScanning.value) {
           await _bleController.startScan();
         }
       } catch (retryError) {
-        debugPrint('重试扫描失败: $retryError');
+        // 重试扫描失败
       }
     }
   }
@@ -350,8 +387,8 @@ class MonitorController extends GetxController {
   /// 选择设备
   void selectDevice(BluetoothDevice device) {
     final deviceId = device.remoteId.toString();
-    final deviceName =
-        device.platformName.isNotEmpty ? device.platformName : '未知设备';
+    // 使用BleController的设备名称获取方法，确保获取正确的设备名称
+    final deviceName = _bleController.getDeviceName(device);
 
     // 检查是否已选中
     bool alreadySelected = selectedDevices.any((d) => d.deviceId == deviceId);
@@ -404,7 +441,6 @@ class MonitorController extends GetxController {
     // 设置所有选中设备的监控状态
     for (var device in selectedDevices) {
       device.isMonitoring.value = true;
-      debugPrint('设置设备监控状态: ${device.deviceName} - ${device.deviceId}');
     }
 
     // 确保选中的设备都在监控设备列表中
@@ -412,7 +448,6 @@ class MonitorController extends GetxController {
       if (!savedDevices.any((d) => d.deviceId == device.deviceId)) {
         // 如果设备不在已保存列表中，添加到已保存列表
         savedDevices.add(device);
-        debugPrint('添加设备到已保存列表: ${device.deviceName}');
       }
     }
 
@@ -423,8 +458,6 @@ class MonitorController extends GetxController {
     if (!_bleController.isScanning.value) {
       _bleController.startScan();
     }
-
-    debugPrint('开始监控 ${selectedDevices.length} 个设备');
     Get.snackbar('提示', '开始监控 ${selectedDevices.length} 个设备',
         snackPosition: SnackPosition.BOTTOM);
   }
@@ -448,6 +481,7 @@ class MonitorController extends GetxController {
     try {
       for (var device in selectedDevices) {
         device.isMonitoring.value = true;
+        debugPrint('保存设备: ${device.deviceId} - ${device.deviceName}');
         await _dbService.saveDevice(device);
 
         // 保存设备的历史数据（仅追加新增的数据）
@@ -684,8 +718,7 @@ class MonitorController extends GetxController {
         // 将数组数据设置到设备对象中
         _setDeviceDailyArray(device, dailyArray);
 
-        debugPrint(
-            '加载设备 ${device.deviceName} 的每日耗电量统计数组: ${dailyStats.length} 条记录');
+        // 加载设备每日耗电量统计数组完成
       }
 
       // 加载月度耗电量统计数据
@@ -709,9 +742,7 @@ class MonitorController extends GetxController {
 
         // 将数组数据设置到设备对象中
         _setDeviceMonthlyArray(device, monthlyArray);
-
-        debugPrint(
-            '加载设备 ${device.deviceName} 的月度耗电量统计数组: ${monthlyStats.length} 条记录');
+        // 加载设备月度耗电量统计数组完成
       }
     } catch (e) {
       debugPrint('加载设备耗电量统计数组失败: $e');
@@ -753,7 +784,7 @@ class MonitorController extends GetxController {
         await _dbService.saveMonthlyConsumptionArray(
             device.deviceId, device.monthlyConsumptionArray);
 
-        debugPrint('保存设备 ${device.deviceName} 的耗电量统计数组到数据库');
+        // 保存设备耗电量统计数组到数据库完成
       }
     } catch (e) {
       debugPrint('保存耗电量统计数组失败: $e');

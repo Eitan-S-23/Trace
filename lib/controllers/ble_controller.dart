@@ -72,6 +72,7 @@ class BleController extends GetxController {
       });
 
       ever(_bluetoothService.scanResults, (results) {
+        debugPrint('BleController接收到扫描结果: ${results.length} 个设备');
         scanResults.assignAll(results);
       });
 
@@ -178,7 +179,28 @@ class BleController extends GetxController {
 
   /// 格式化设备名称
   String getDeviceName(BluetoothDevice device) {
-    return device.platformName.isNotEmpty ? device.platformName : '未知设备';
+    debugPrint('获取设备名称，设备ID: ${device.remoteId}');
+
+    // 通过扫描结果获取设备名称
+    final scanResult = getScanResult(device);
+    if (scanResult != null) {
+      final advName = scanResult.advertisementData.advName;
+      debugPrint('扫描结果中设备名称: $advName');
+      if (advName != null && advName.isNotEmpty) {
+        return advName;
+      }
+    }
+
+    // 如果扫描结果中没有名称，回退到设备本身的名称属性
+    String deviceName = '';
+    if (device.name?.isNotEmpty == true) {
+      deviceName = device.name!;
+    } else if (device.platformName.isNotEmpty) {
+      deviceName = device.platformName;
+    }
+
+    debugPrint('最终设备名称: $deviceName');
+    return deviceName.isNotEmpty ? deviceName : '未知设备';
   }
 
   /// 格式化设备ID

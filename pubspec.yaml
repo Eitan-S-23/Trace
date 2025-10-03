@@ -35,6 +35,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   get: ^4.6.6
   flutter_blue_plus: ^1.32.11
+  win_ble: ^1.1.1
   permission_handler: ^12.0.1
   flutter_animate: ^4.5.0
   fl_chart: ^1.0.0
@@ -47,7 +48,6 @@ dependencies:
   mqtt_client: ^10.2.0
   dio: ^5.4.0
   path_provider: ^2.1.2
-  win_ble: ^1.1.1 # Windows蓝牙支持
   device_info_plus: ^10.1.0
   flutter_local_notifications: ^17.2.2
 

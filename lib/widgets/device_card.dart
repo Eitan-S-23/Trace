@@ -227,27 +227,31 @@ class DeviceCard extends StatelessWidget {
   }
 
   IconData _getDeviceIcon() {
-    final deviceName = device.platformName.toLowerCase();
+    // 通过扫描结果获取设备名称用于图标判断
+    final scanResult = controller.getScanResult(device);
+    final deviceName = scanResult?.advertisementData.advName ??
+        (device.name?.isNotEmpty == true ? device.name! : device.platformName);
+    final name = deviceName.toLowerCase();
 
-    if (deviceName.contains('phone') || deviceName.contains('iphone')) {
+    if (name.contains('phone') || name.contains('iphone')) {
       return Icons.phone_android;
-    } else if (deviceName.contains('watch') || deviceName.contains('band')) {
+    } else if (name.contains('watch') || name.contains('band')) {
       return Icons.watch;
-    } else if (deviceName.contains('headphone') ||
-        deviceName.contains('earphone') ||
-        deviceName.contains('airpods')) {
+    } else if (name.contains('headphone') ||
+        name.contains('earphone') ||
+        name.contains('airpods')) {
       return Icons.headphones;
-    } else if (deviceName.contains('speaker')) {
+    } else if (name.contains('speaker')) {
       return Icons.speaker;
-    } else if (deviceName.contains('keyboard')) {
+    } else if (name.contains('keyboard')) {
       return Icons.keyboard;
-    } else if (deviceName.contains('mouse')) {
+    } else if (name.contains('mouse')) {
       return Icons.mouse;
-    } else if (deviceName.contains('tv')) {
+    } else if (name.contains('tv')) {
       return Icons.tv;
-    } else if (deviceName.contains('car')) {
+    } else if (name.contains('car')) {
       return Icons.directions_car;
-    } else if (deviceName.contains('beacon')) {
+    } else if (name.contains('beacon')) {
       return Icons.location_on;
     } else {
       return Icons.bluetooth;
