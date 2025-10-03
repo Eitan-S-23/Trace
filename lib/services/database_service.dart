@@ -24,7 +24,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2, // 升级版本号以支持新功能
+      version: 3, // 升级版本号以支持每日耗电量统计
       onCreate: _createTables,
       onUpgrade: _upgradeDatabase,
     );
@@ -66,6 +66,32 @@ class DatabaseService {
 
       // 插入默认扫描设置
       await db.insert('scan_settings', {'id': 1, 'scanInterval': 1000});
+    }
+
+    if (oldVersion < 3) {
+      // 添加每日耗电量统计表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS daily_power_consumption (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          deviceId TEXT NOT NULL,
+          date INTEGER NOT NULL, -- 日期的毫秒时间戳（只包含年月日，时分秒为0）
+          consumption REAL NOT NULL DEFAULT 0.0,
+          dataPoints INTEGER NOT NULL DEFAULT 0,
+          createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL,
+          FOREIGN KEY (deviceId) REFERENCES devices (deviceId),
+          UNIQUE(deviceId, date)
+        )
+      ''');
+
+      // 创建索引
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_daily_consumption_device_date ON daily_power_consumption (deviceId, date)
+      ''');
+
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_daily_consumption_date ON daily_power_consumption (date)
+      ''');
     }
   }
 
@@ -135,6 +161,30 @@ class DatabaseService {
 
     // 插入默认扫描设置
     await db.insert('scan_settings', {'id': 1, 'scanInterval': 1000});
+
+    // 创建设备每日耗电量统计表
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS daily_power_consumption (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deviceId TEXT NOT NULL,
+        date INTEGER NOT NULL, -- 日期的毫秒时间戳（只包含年月日，时分秒为0）
+        consumption REAL NOT NULL DEFAULT 0.0,
+        dataPoints INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        FOREIGN KEY (deviceId) REFERENCES devices (deviceId),
+        UNIQUE(deviceId, date)
+      )
+    ''');
+
+    // 创建索引
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_daily_consumption_device_date ON daily_power_consumption (deviceId, date)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_daily_consumption_date ON daily_power_consumption (date)
+    ''');
   }
 
   /// 保存或更新设备
@@ -600,6 +650,127 @@ class DatabaseService {
     }
 
     return monthlyStats.reversed.toList();
+  }
+
+  /// 保存每日耗电量统计
+  Future<void> saveDailyPowerConsumption(
+      DailyPowerConsumption consumption) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.insert(
+      'daily_power_consumption',
+      {
+        'deviceId': consumption.deviceId,
+        'date': consumption.date.millisecondsSinceEpoch,
+        'consumption': consumption.consumption,
+        'dataPoints': consumption.dataPoints,
+        'createdAt': now,
+        'updatedAt': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// 获取设备的每日耗电量统计（返回DailyPowerConsumption对象）
+  Future<List<DailyPowerConsumption>> getDailyPowerConsumptionObjects(
+      String deviceId) async {
+    final db = await database;
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'daily_power_consumption',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+      orderBy: 'date DESC',
+    );
+
+    debugPrint('从数据库加载设备 $deviceId 的每日耗电量统计: ${maps.length} 条记录');
+
+    if (maps.isNotEmpty) {
+      for (var map in maps.take(3)) {
+        // 只显示前3条
+        debugPrint(
+            '  - 日期: ${DateTime.fromMillisecondsSinceEpoch(map['date'])}, 耗电量: ${map['consumption']} mAh');
+      }
+    }
+
+    return List.generate(maps.length, (i) {
+      return DailyPowerConsumption.fromMap(maps[i]);
+    });
+  }
+
+  /// 获取指定日期范围内的每日耗电量统计
+  Future<List<DailyPowerConsumption>> getDailyPowerConsumptionInRange(
+      String deviceId, DateTime startDate, DateTime endDate) async {
+    final db = await database;
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'daily_power_consumption',
+      where: 'deviceId = ? AND date >= ? AND date <= ?',
+      whereArgs: [
+        deviceId,
+        startDate.millisecondsSinceEpoch,
+        endDate.millisecondsSinceEpoch,
+      ],
+      orderBy: 'date ASC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return DailyPowerConsumption.fromMap(maps[i]);
+    });
+  }
+
+  /// 删除指定日期之前的每日耗电量统计（用于清理旧数据）
+  Future<void> deleteOldDailyPowerConsumption(int daysToKeep) async {
+    final db = await database;
+    final cutoffDate = DateTime.now().subtract(Duration(days: daysToKeep));
+
+    await db.delete(
+      'daily_power_consumption',
+      where: 'date < ?',
+      whereArgs: [cutoffDate.millisecondsSinceEpoch],
+    );
+  }
+
+  /// 清空指定设备的所有每日耗电量统计
+  Future<void> clearDailyPowerConsumption(String deviceId) async {
+    final db = await database;
+
+    await db.delete(
+      'daily_power_consumption',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+    );
+  }
+
+  /// 批量保存每日耗电量统计
+  Future<void> saveDailyPowerConsumptionBatch(
+      List<DailyPowerConsumption> consumptions) async {
+    if (consumptions.isEmpty) return;
+
+    final db = await database;
+    final batch = db.batch();
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    debugPrint('准备保存 ${consumptions.length} 条每日耗电量统计数据到数据库');
+
+    for (var consumption in consumptions) {
+      batch.insert(
+        'daily_power_consumption',
+        {
+          'deviceId': consumption.deviceId,
+          'date': consumption.date.millisecondsSinceEpoch,
+          'consumption': consumption.consumption,
+          'dataPoints': consumption.dataPoints,
+          'createdAt': now,
+          'updatedAt': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+
+    final results = await batch.commit();
+    debugPrint('成功保存每日耗电量统计数据，结果: $results');
   }
 
   /// 关闭数据库

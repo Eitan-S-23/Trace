@@ -205,91 +205,90 @@ class MonitorPage extends StatelessWidget {
           const SizedBox(height: 12),
           // 扫描间隔信息和快速设置
           Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isNarrow = constraints.maxWidth < 320;
-                    final buttons = Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildQuickIntervalButton(scanSettings, '0.5s', 0.5),
-                        const SizedBox(width: 4),
-                        _buildQuickIntervalButton(scanSettings, '1s', 1.0),
-                        const SizedBox(width: 4),
-                        _buildQuickIntervalButton(scanSettings, '2s', 2.0),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () {
-                            Get.to(() => const ScanSettingsPage());
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Icon(
-                              Icons.settings,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                          ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 320;
+                final buttons = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildQuickIntervalButton(scanSettings, '0.5s', 0.5),
+                    const SizedBox(width: 4),
+                    _buildQuickIntervalButton(scanSettings, '1s', 1.0),
+                    const SizedBox(width: 4),
+                    _buildQuickIntervalButton(scanSettings, '2s', 2.0),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        Get.to(() => const ScanSettingsPage());
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                      ],
-                    );
-
-                    final title = Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.timer,
+                        child: const Icon(
+                          Icons.settings,
                           color: Colors.white,
                           size: 16,
                         ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            '扫描间隔: ${scanSettings.scanIntervalSeconds}秒',
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                      ),
+                    ),
+                  ],
+                );
+
+                final title = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.timer,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        '扫描间隔: ${scanSettings.scanIntervalSeconds}秒',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
-                    );
+                      ),
+                    ),
+                  ],
+                );
 
-                    if (isNarrow) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          title,
-                          const SizedBox(height: 8),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: buttons,
-                          ),
-                        ],
-                      );
-                    }
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      title,
+                      const SizedBox(height: 8),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: buttons,
+                      ),
+                    ],
+                  );
+                }
 
-                    return Row(
-                      children: [
-                        Expanded(child: title),
-                        buttons,
-                      ],
-                    );
-                  },
-                ),
-              ),
+                return Row(
+                  children: [
+                    Expanded(child: title),
+                    buttons,
+                  ],
+                );
+              },
+            ),
+          ),
         ],
       ),
     ).animate().fadeIn(duration: 500.ms).slideY(begin: -0.2, end: 0);

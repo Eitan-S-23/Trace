@@ -185,6 +185,18 @@ class SelectedDevice {
   final List<DeviceData> dataHistory;
   var isMonitoring = false.obs;
 
+  // 每日耗电量统计数组（最近365天）
+  final List<double?> _dailyConsumptionArray = List.filled(365, null);
+
+  // 月度耗电量统计数组（最近12个月）
+  final List<double?> _monthlyConsumptionArray = List.filled(12, null);
+
+  // 当前统计的日期索引（用于每日数组）
+  int _currentDayIndex = 0;
+
+  // 当前统计的月份索引（用于月度数组）
+  int _currentMonthIndex = 0;
+
   SelectedDevice({
     required this.deviceId,
     required this.deviceName,
@@ -192,10 +204,12 @@ class SelectedDevice {
     bool monitoring = false,
   }) : dataHistory = dataHistory ?? [] {
     isMonitoring.value = monitoring;
+    // 每次创建设备对象时，清空累计耗电量（重启后重置）
+    clearAllConsumptionStats();
   }
 
   /// 添加新数据（带去重功能）
-  void addData(DeviceData data) {
+  void addData(DeviceData data, {bool updateConsumption = true}) {
     // 检查是否是重复数据
     if (dataHistory.isNotEmpty) {
       final latestData = dataHistory.last;
@@ -221,6 +235,12 @@ class SelectedDevice {
     if (dataHistory.length > 86400) {
       dataHistory.removeAt(0);
     }
+
+    // 更新每日和月度耗电量统计（仅在需要时更新）
+    if (updateConsumption) {
+      _updateDailyConsumptionArray(data);
+      _updateMonthlyConsumptionArray(data);
+    }
   }
 
   /// 检查两个数据是否完全相同
@@ -239,6 +259,211 @@ class SelectedDevice {
   double get powerConsumption =>
       ManufacturerDataParser.calculatePowerConsumption(dataHistory);
 
+  /// 更新每日耗电量统计数组
+  void _updateDailyConsumptionArray(DeviceData newData) {
+    // 获取当前日期（只考虑年月日）
+    final today = DateTime(
+        newData.timestamp.year, newData.timestamp.month, newData.timestamp.day);
+
+    // 计算今天在数组中的索引（相对于今天，向后365天）
+    final daysSinceEpoch = today.difference(DateTime(2020, 1, 1)).inDays;
+    final arrayIndex = daysSinceEpoch % 365;
+
+    // 如果有前一个数据点，计算耗电量增量
+    if (dataHistory.length >= 2) {
+      final previousData = dataHistory[dataHistory.length - 2];
+
+      // 计算时间差（小时）
+      final timeDiffHours =
+          newData.timestamp.difference(previousData.timestamp).inMilliseconds /
+              (1000.0 * 60.0 * 60.0);
+
+      // 如果时间差合理（避免异常数据）
+      if (timeDiffHours > 0 && timeDiffHours < 24) {
+        // 转换电流为mA
+        final currentInMA =
+            _convertCurrentToMA(newData.current, newData.currentUnit);
+        final previousInMA =
+            _convertCurrentToMA(previousData.current, previousData.currentUnit);
+
+        // 使用梯形积分法计算平均电流
+        final avgCurrentMA = (currentInMA + previousInMA) / 2.0;
+
+        // 计算耗电量增量（mAh）
+        final consumptionIncrement = avgCurrentMA * timeDiffHours;
+
+        // 更新或累加当天的耗电量
+        final currentValue = _dailyConsumptionArray[arrayIndex] ?? 0.0;
+        _dailyConsumptionArray[arrayIndex] =
+            currentValue + consumptionIncrement;
+      }
+    }
+  }
+
+  /// 更新月度耗电量统计数组
+  void _updateMonthlyConsumptionArray(DeviceData newData) {
+    // 获取当前月份
+    final currentMonth =
+        DateTime(newData.timestamp.year, newData.timestamp.month);
+
+    // 计算月份在数组中的索引（相对于当前月份，向后12个月）
+    final monthsSinceEpoch =
+        (currentMonth.year - 2020) * 12 + (currentMonth.month - 1);
+    final arrayIndex = monthsSinceEpoch % 12;
+
+    // 如果有前一个数据点，计算耗电量增量
+    if (dataHistory.length >= 2) {
+      final previousData = dataHistory[dataHistory.length - 2];
+
+      // 计算时间差（小时）
+      final timeDiffHours =
+          newData.timestamp.difference(previousData.timestamp).inMilliseconds /
+              (1000.0 * 60.0 * 60.0);
+
+      // 如果时间差合理（避免异常数据）
+      if (timeDiffHours > 0 && timeDiffHours < 24 * 31) {
+        // 一个月内
+        // 转换电流为mA
+        final currentInMA =
+            _convertCurrentToMA(newData.current, newData.currentUnit);
+        final previousInMA =
+            _convertCurrentToMA(previousData.current, previousData.currentUnit);
+
+        // 使用梯形积分法计算平均电流
+        final avgCurrentMA = (currentInMA + previousInMA) / 2.0;
+
+        // 计算耗电量增量（mAh）
+        final consumptionIncrement = avgCurrentMA * timeDiffHours;
+
+        // 更新或累加当月的耗电量
+        final currentValue = _monthlyConsumptionArray[arrayIndex] ?? 0.0;
+        _monthlyConsumptionArray[arrayIndex] =
+            currentValue + consumptionIncrement;
+      }
+    }
+  }
+
+  /// 转换电流为mA
+  double _convertCurrentToMA(double current, String unit) {
+    switch (unit) {
+      case 'nA':
+        return current / 1000000.0;
+      case 'uA':
+        return current / 1000.0;
+      case 'mA':
+        return current;
+      case 'A':
+        return current * 1000.0;
+      default:
+        return 0.0;
+    }
+  }
+
+  /// 获取每日耗电量统计数组
+  List<double?> get dailyConsumptionArray =>
+      List.unmodifiable(_dailyConsumptionArray);
+
+  /// 获取月度耗电量统计数组
+  List<double?> get monthlyConsumptionArray =>
+      List.unmodifiable(_monthlyConsumptionArray);
+
+  /// 获取指定日期的每日耗电量
+  double? getDailyConsumption(DateTime date) {
+    final daysSinceEpoch = date.difference(DateTime(2020, 1, 1)).inDays;
+    final arrayIndex = daysSinceEpoch % 365;
+    return _dailyConsumptionArray[arrayIndex];
+  }
+
+  /// 获取最近N天的每日耗电量统计（用于图表显示）
+  List<Map<String, dynamic>> getDailyConsumptionStats({int days = 30}) {
+    final List<Map<String, dynamic>> stats = [];
+    final now = DateTime.now();
+
+    for (int i = 0; i < days && i < 365; i++) {
+      final date = now.subtract(Duration(days: i));
+      final daysSinceEpoch = date.difference(DateTime(2020, 1, 1)).inDays;
+      final arrayIndex = daysSinceEpoch % 365;
+      final consumption = _dailyConsumptionArray[arrayIndex];
+
+      if (consumption != null && consumption > 0) {
+        stats.add({
+          'date': date,
+          'consumption': consumption,
+          'dateString':
+              '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+        });
+      }
+    }
+
+    return stats.reversed.toList(); // 按时间顺序排列
+  }
+
+  /// 获取月度耗电量统计（用于图表显示）
+  List<Map<String, dynamic>> getMonthlyConsumptionStats({int months = 12}) {
+    final List<Map<String, dynamic>> stats = [];
+    final now = DateTime.now();
+
+    for (int i = 0; i < months && i < 12; i++) {
+      final month = DateTime(now.year, now.month - i, 1);
+      final monthsSinceEpoch = (month.year - 2020) * 12 + (month.month - 1);
+      final arrayIndex = monthsSinceEpoch % 12;
+      final consumption = _monthlyConsumptionArray[arrayIndex];
+
+      if (consumption != null && consumption > 0) {
+        stats.add({
+          'date': month,
+          'consumption': consumption,
+          'dateString': '${month.month}月',
+        });
+      }
+    }
+
+    return stats.reversed.toList(); // 按时间顺序排列
+  }
+
+  /// 获取近一年总耗电量（月度数组累加）
+  double get totalConsumptionOneYear {
+    return _monthlyConsumptionArray.fold(
+        0.0, (sum, value) => sum + (value ?? 0.0));
+  }
+
+  /// 获取有数据的天数
+  int get daysWithData {
+    return _dailyConsumptionArray
+        .where((value) => value != null && value! > 0)
+        .length;
+  }
+
+  /// 获取日均耗电量（基于有数据的天数）
+  double get averageDailyConsumption {
+    final days = daysWithData;
+    if (days == 0) return 0.0;
+
+    final totalConsumption =
+        _dailyConsumptionArray.fold(0.0, (sum, value) => sum + (value ?? 0.0));
+    return totalConsumption / days;
+  }
+
+  /// 清空每日耗电量统计数组
+  void clearDailyConsumptionStats() {
+    for (int i = 0; i < _dailyConsumptionArray.length; i++) {
+      _dailyConsumptionArray[i] = null;
+    }
+  }
+
+  /// 清空月度耗电量统计数组
+  void clearMonthlyConsumptionStats() {
+    for (int i = 0; i < _monthlyConsumptionArray.length; i++) {
+      _monthlyConsumptionArray[i] = null;
+    }
+  }
+
+  /// 清空所有统计数组
+  void clearAllConsumptionStats() {
+    clearDailyConsumptionStats();
+    clearMonthlyConsumptionStats();
+  }
+
   /// 转换为Map
   Map<String, dynamic> toMap() {
     return {
@@ -255,5 +480,49 @@ class SelectedDevice {
       deviceName: map['deviceName'],
       monitoring: map['isMonitoring'] == 1,
     );
+  }
+}
+
+/// 每日耗电量统计数据模型
+class DailyPowerConsumption {
+  final String deviceId;
+  final DateTime date; // 统计日期（只包含年月日，时分秒为0）
+  final double consumption; // 当日耗电量 (mAh)
+  final int dataPoints; // 当日数据点数量
+
+  DailyPowerConsumption({
+    required this.deviceId,
+    required this.date,
+    required this.consumption,
+    required this.dataPoints,
+  });
+
+  /// 获取日期的唯一键（用于比较）
+  String get dateKey =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  /// 转换为Map用于数据库存储
+  Map<String, dynamic> toMap() {
+    return {
+      'deviceId': deviceId,
+      'date': date.millisecondsSinceEpoch,
+      'consumption': consumption,
+      'dataPoints': dataPoints,
+    };
+  }
+
+  /// 从Map创建对象
+  factory DailyPowerConsumption.fromMap(Map<String, dynamic> map) {
+    return DailyPowerConsumption(
+      deviceId: map['deviceId'],
+      date: DateTime.fromMillisecondsSinceEpoch(map['date']),
+      consumption: map['consumption'].toDouble(),
+      dataPoints: map['dataPoints'],
+    );
+  }
+
+  @override
+  String toString() {
+    return 'DailyPowerConsumption{deviceId: $deviceId, date: $dateKey, consumption: ${consumption.toStringAsFixed(2)} mAh, dataPoints: $dataPoints}';
   }
 }

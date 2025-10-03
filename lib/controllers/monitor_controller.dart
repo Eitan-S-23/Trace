@@ -87,7 +87,12 @@ class MonitorController extends GetxController {
         }
 
         device.dataHistory.clear();
-        device.dataHistory.addAll(historyData);
+        // 批量添加历史数据，不更新每日耗电量统计（因为我们稍后会从数据库加载）
+        for (var data in historyData) {
+          device.addData(data, updateConsumption: false);
+        }
+
+        // 新系统不需要从数据库加载每日耗电量统计数据
 
         // 如果设备正在监控，添加到选中列表
         if (device.isMonitoring.value) {
@@ -422,6 +427,7 @@ class MonitorController extends GetxController {
     isMonitoring.value = false;
     _activeScanTimer?.cancel();
     _activeScanTimer = null;
+
     Get.snackbar('提示', '已停止监控', snackPosition: SnackPosition.BOTTOM);
   }
 
@@ -481,12 +487,60 @@ class MonitorController extends GetxController {
     return device?.dataHistory ?? [];
   }
 
-  /// 获取设备功耗
+  /// 获取设备功耗（基于历史数据）
   double getDevicePowerConsumption(String deviceId) {
     final device =
         selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId) ??
             savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
     return device?.powerConsumption ?? 0.0;
+  }
+
+  /// 获取设备每日耗电量统计（基于新的统计算法）
+  List<Map<String, dynamic>> getDeviceDailyConsumptionStats(String deviceId,
+      {int days = 30}) {
+    final device =
+        selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId) ??
+            savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+
+    if (device == null) return [];
+
+    return device.getDailyConsumptionStats(days: days);
+  }
+
+  /// 获取设备月度耗电量统计（基于新的统计算法）
+  List<Map<String, dynamic>> getDeviceMonthlyConsumptionStats(String deviceId,
+      {int months = 12}) {
+    final device =
+        selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId) ??
+            savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+
+    if (device == null) return [];
+
+    return device.getMonthlyConsumptionStats(months: months);
+  }
+
+  /// 获取设备近一年总耗电量（基于新的统计算法）
+  double getDeviceTotalConsumption(String deviceId) {
+    final device =
+        selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId) ??
+            savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+    return device?.totalConsumptionOneYear ?? 0.0;
+  }
+
+  /// 获取设备有数据的天数
+  int getDeviceDaysWithData(String deviceId) {
+    final device =
+        selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId) ??
+            savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+    return device?.daysWithData ?? 0;
+  }
+
+  /// 获取设备日均耗电量（基于新的统计算法）
+  double getDeviceAverageDailyConsumption(String deviceId) {
+    final device =
+        selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId) ??
+            savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+    return device?.averageDailyConsumption ?? 0.0;
   }
 
   /// 清除选择

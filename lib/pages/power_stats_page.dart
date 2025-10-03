@@ -40,26 +40,21 @@ class _PowerStatsPageState extends State<PowerStatsPage>
     super.dispose();
   }
 
-  Future<void> _loadPowerStats() async {
+  void _loadPowerStats() {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final results = await Future.wait([
-        monitorController.getOfflinePowerConsumption(widget.deviceId),
-        monitorController.getDailyPowerStats(widget.deviceId, days: 30),
-        monitorController.getMonthlyPowerStats(widget.deviceId, months: 12),
-      ]);
+      // 这些方法现在是同步的，直接调用即可
+      _totalConsumption =
+          monitorController.getDeviceTotalConsumption(widget.deviceId);
+      _dailyStats = monitorController
+          .getDeviceDailyConsumptionStats(widget.deviceId, days: 30);
+      _monthlyStats = monitorController
+          .getDeviceMonthlyConsumptionStats(widget.deviceId, months: 12);
 
       setState(() {
-        _totalConsumption = (results[0] as num).toDouble();
-        _dailyStats = (results[1] as List)
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList();
-        _monthlyStats = (results[2] as List)
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -173,7 +168,7 @@ class _PowerStatsPageState extends State<PowerStatsPage>
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  '总耗电量',
+                  '近一年总耗电量',
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.white70,
@@ -752,11 +747,8 @@ class _PowerStatsPageState extends State<PowerStatsPage>
   }
 
   double _calculateAverageDaily() {
-    if (_dailyStats.isEmpty) return 0.0;
-
-    final total = _dailyStats.fold<double>(
-        0.0, (sum, data) => sum + (data['consumption'] as num).toDouble());
-    return total / _dailyStats.length;
+    // 使用新的日均耗电量计算方法（基于有数据的天数）
+    return monitorController.getDeviceAverageDailyConsumption(widget.deviceId);
   }
 
   /// 计算Y轴间隔
