@@ -663,18 +663,25 @@ class MonitorController extends GetxController {
 
   /// 验证数据格式
   Map<String, dynamic> _validateDataFormat(List<int> data) {
-    if (data.length < 5) {
-      return {'isValid': false, 'error': '数据长度不足：需要至少5字节，当前${data.length}字节'};
+    // 数据格式：
+    // - 前2字节：设备ID
+    // - 第3-4字节：电流大小（第4字节为高位）
+    // - 第5字节：电流单位（1=nA, 10=uA, 50=mA, 100=A）
+    // - 第6-7字节：电压大小（第7字节为高位），单位恒定为mV
+
+    if (data.length < 7) {
+      return {'isValid': false, 'error': '数据长度不足：需要至少7字节，当前${data.length}字节'};
     }
 
-    final currentUnit = data[2];
+    // 验证电流单位（第5字节）
+    final currentUnit = data[4];
     if (currentUnit != 1 &&
         currentUnit != 10 &&
         currentUnit != 50 &&
         currentUnit != 100) {
       return {
         'isValid': false,
-        'error': '电流单位无效：第3字节应为1(nA)、10(uA)、50(mA)或100(A)，当前为$currentUnit'
+        'error': '电流单位无效：第5字节应为1(nA)、10(uA)、50(mA)或100(A)，当前为$currentUnit'
       };
     }
 

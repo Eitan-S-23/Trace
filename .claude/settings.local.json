@@ -5,7 +5,8 @@
       "Bash(if exist \"windows\\flutter\\ephemeral\\.plugin_symlinks\" rd /s /q \"windows\\flutter\\ephemeral\\.plugin_symlinks\")",
       "Bash(flutter clean)",
       "Bash(flutter pub get)",
-      "Bash(flutter run -d windows)"
+      "Bash(flutter run -d windows)",
+      "Bash(flutter test test/manufacturer_data_test.dart)"
     ],
     "deny": [],
     "ask": []
