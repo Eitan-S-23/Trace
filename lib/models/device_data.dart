@@ -202,10 +202,14 @@ class SelectedDevice {
     required this.deviceName,
     List<DeviceData>? dataHistory,
     bool monitoring = false,
+    bool loadFromDatabase = false, // 新增参数，表示是否从数据库加载
   }) : dataHistory = dataHistory ?? [] {
     isMonitoring.value = monitoring;
-    // 每次创建设备对象时，清空累计耗电量（重启后重置）
-    clearAllConsumptionStats();
+    // 如果不是从数据库加载，则清空累计耗电量（重启后重置）
+    // 如果是从数据库加载，则保持现有的统计数组数据
+    if (!loadFromDatabase) {
+      clearAllConsumptionStats();
+    }
   }
 
   /// 添加新数据（带去重功能）
@@ -464,6 +468,36 @@ class SelectedDevice {
     clearMonthlyConsumptionStats();
   }
 
+  /// 从数据库加载每日耗电量统计数组
+  void loadDailyConsumptionArray(List<double?> dailyArray) {
+    if (dailyArray.length == 365) {
+      for (int i = 0; i < 365; i++) {
+        _dailyConsumptionArray[i] = dailyArray[i];
+      }
+    }
+  }
+
+  /// 从数据库加载月度耗电量统计数组
+  void loadMonthlyConsumptionArray(List<double?> monthlyArray) {
+    if (monthlyArray.length == 12) {
+      for (int i = 0; i < 12; i++) {
+        _monthlyConsumptionArray[i] = monthlyArray[i];
+      }
+    }
+  }
+
+  /// 保存每日耗电量统计数组到数据库（简化版本，实际应该通过服务层调用）
+  Future<void> saveDailyConsumptionArrayToDb() async {
+    // 这里应该通过DatabaseService来保存，但为了简化，直接返回
+    // 实际实现时应该调用DatabaseService的方法
+  }
+
+  /// 保存月度耗电量统计数组到数据库（简化版本，实际应该通过服务层调用）
+  Future<void> saveMonthlyConsumptionArrayToDb() async {
+    // 这里应该通过DatabaseService来保存，但为了简化，直接返回
+    // 实际实现时应该调用DatabaseService的方法
+  }
+
   /// 转换为Map
   Map<String, dynamic> toMap() {
     return {
@@ -474,11 +508,13 @@ class SelectedDevice {
   }
 
   /// 从Map创建
-  factory SelectedDevice.fromMap(Map<String, dynamic> map) {
+  factory SelectedDevice.fromMap(Map<String, dynamic> map,
+      {bool loadFromDatabase = false}) {
     return SelectedDevice(
       deviceId: map['deviceId'],
       deviceName: map['deviceName'],
       monitoring: map['isMonitoring'] == 1,
+      loadFromDatabase: loadFromDatabase,
     );
   }
 }
@@ -524,5 +560,53 @@ class DailyPowerConsumption {
   @override
   String toString() {
     return 'DailyPowerConsumption{deviceId: $deviceId, date: $dateKey, consumption: ${consumption.toStringAsFixed(2)} mAh, dataPoints: $dataPoints}';
+  }
+}
+
+/// 月度耗电量统计数据模型
+class MonthlyPowerConsumption {
+  final String deviceId;
+  final int year; // 年份
+  final int monthIndex; // 月份索引（0-11，对应1-12月）
+  final double consumption; // 当月耗电量 (mAh)
+  final int dataPoints; // 当月数据点数量
+
+  MonthlyPowerConsumption({
+    required this.deviceId,
+    required this.year,
+    required this.monthIndex,
+    required this.consumption,
+    required this.dataPoints,
+  });
+
+  /// 获取月份的唯一键（用于比较）
+  String get monthKey =>
+      '${year}-${(monthIndex + 1).toString().padLeft(2, '0')}';
+
+  /// 转换为Map用于数据库存储
+  Map<String, dynamic> toMap() {
+    return {
+      'deviceId': deviceId,
+      'year': year,
+      'monthIndex': monthIndex,
+      'consumption': consumption,
+      'dataPoints': dataPoints,
+    };
+  }
+
+  /// 从Map创建对象
+  factory MonthlyPowerConsumption.fromMap(Map<String, dynamic> map) {
+    return MonthlyPowerConsumption(
+      deviceId: map['deviceId'],
+      year: map['year'],
+      monthIndex: map['monthIndex'],
+      consumption: map['consumption'].toDouble(),
+      dataPoints: map['dataPoints'],
+    );
+  }
+
+  @override
+  String toString() {
+    return 'MonthlyPowerConsumption{deviceId: $deviceId, month: $monthKey, consumption: ${consumption.toStringAsFixed(2)} mAh, dataPoints: $dataPoints}';
   }
 }

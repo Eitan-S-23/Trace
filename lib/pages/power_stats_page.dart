@@ -46,13 +46,30 @@ class _PowerStatsPageState extends State<PowerStatsPage>
     });
 
     try {
-      // 这些方法现在是同步的，直接调用即可
-      _totalConsumption =
-          monitorController.getDeviceTotalConsumption(widget.deviceId);
-      _dailyStats = monitorController
-          .getDeviceDailyConsumptionStats(widget.deviceId, days: 30);
-      _monthlyStats = monitorController
-          .getDeviceMonthlyConsumptionStats(widget.deviceId, months: 12);
+      // 使用设备对象中的数组数据来获取统计信息
+      final device = monitorController.selectedDevices.firstWhere(
+          (d) => d.deviceId == widget.deviceId,
+          orElse: () => monitorController.savedDevices
+              .firstWhere((d) => d.deviceId == widget.deviceId));
+
+      if (device != null) {
+        // 近一年总耗电量直接由月度数组累加得到
+        _totalConsumption = device.totalConsumptionOneYear;
+
+        // 获取每日统计（使用数组中的数据）
+        _dailyStats = device.getDailyConsumptionStats(days: 30);
+
+        // 获取月度统计（使用数组中的数据）
+        _monthlyStats = device.getMonthlyConsumptionStats(months: 12);
+      } else {
+        // 如果找不到设备，使用传统方法
+        _totalConsumption =
+            monitorController.getDeviceTotalConsumption(widget.deviceId);
+        _dailyStats = monitorController
+            .getDeviceDailyConsumptionStats(widget.deviceId, days: 30);
+        _monthlyStats = monitorController
+            .getDeviceMonthlyConsumptionStats(widget.deviceId, months: 12);
+      }
 
       setState(() {
         _isLoading = false;
@@ -747,8 +764,13 @@ class _PowerStatsPageState extends State<PowerStatsPage>
   }
 
   double _calculateAverageDaily() {
-    // 使用新的日均耗电量计算方法（基于有数据的天数）
-    return monitorController.getDeviceAverageDailyConsumption(widget.deviceId);
+    // 使用设备对象中的日均耗电量计算方法（基于有数据的天数）
+    final device = monitorController.selectedDevices.firstWhere(
+        (d) => d.deviceId == widget.deviceId,
+        orElse: () => monitorController.savedDevices
+            .firstWhere((d) => d.deviceId == widget.deviceId));
+
+    return device?.averageDailyConsumption ?? 0.0;
   }
 
   /// 计算Y轴间隔

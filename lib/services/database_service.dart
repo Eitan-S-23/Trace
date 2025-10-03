@@ -24,7 +24,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3, // 升级版本号以支持每日耗电量统计
+      version: 4, // 升级版本号以支持每日和月度耗电量统计
       onCreate: _createTables,
       onUpgrade: _upgradeDatabase,
     );
@@ -91,6 +91,33 @@ class DatabaseService {
 
       await db.execute('''
         CREATE INDEX IF NOT EXISTS idx_daily_consumption_date ON daily_power_consumption (date)
+      ''');
+    }
+
+    if (oldVersion < 4) {
+      // 添加月度耗电量统计表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS monthly_power_consumption (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          deviceId TEXT NOT NULL,
+          monthIndex INTEGER NOT NULL, -- 月份索引（0-11，对应1-12月）
+          year INTEGER NOT NULL, -- 年份
+          consumption REAL NOT NULL DEFAULT 0.0,
+          dataPoints INTEGER NOT NULL DEFAULT 0,
+          createdAt INTEGER NOT NULL,
+          updatedAt INTEGER NOT NULL,
+          FOREIGN KEY (deviceId) REFERENCES devices (deviceId),
+          UNIQUE(deviceId, year, monthIndex)
+        )
+      ''');
+
+      // 创建索引
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_monthly_consumption_device_month ON monthly_power_consumption (deviceId, year, monthIndex)
+      ''');
+
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_monthly_consumption_year_month ON monthly_power_consumption (year, monthIndex)
       ''');
     }
   }
@@ -185,6 +212,31 @@ class DatabaseService {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_daily_consumption_date ON daily_power_consumption (date)
     ''');
+
+    // 创建设备月度耗电量统计表
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS monthly_power_consumption (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deviceId TEXT NOT NULL,
+        monthIndex INTEGER NOT NULL, -- 月份索引（0-11，对应1-12月）
+        year INTEGER NOT NULL, -- 年份
+        consumption REAL NOT NULL DEFAULT 0.0,
+        dataPoints INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        FOREIGN KEY (deviceId) REFERENCES devices (deviceId),
+        UNIQUE(deviceId, year, monthIndex)
+      )
+    ''');
+
+    // 创建索引
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_monthly_consumption_device_month ON monthly_power_consumption (deviceId, year, monthIndex)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_monthly_consumption_year_month ON monthly_power_consumption (year, monthIndex)
+    ''');
   }
 
   /// 保存或更新设备
@@ -211,7 +263,7 @@ class DatabaseService {
     final List<Map<String, dynamic>> maps = await db.query('devices');
 
     return List.generate(maps.length, (i) {
-      return SelectedDevice.fromMap(maps[i]);
+      return SelectedDevice.fromMap(maps[i], loadFromDatabase: true);
     });
   }
 
@@ -771,6 +823,144 @@ class DatabaseService {
 
     final results = await batch.commit();
     debugPrint('成功保存每日耗电量统计数据，结果: $results');
+  }
+
+  /// 保存月度耗电量统计
+  Future<void> saveMonthlyPowerConsumption(
+      MonthlyPowerConsumption consumption) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.insert(
+      'monthly_power_consumption',
+      {
+        'deviceId': consumption.deviceId,
+        'year': consumption.year,
+        'monthIndex': consumption.monthIndex,
+        'consumption': consumption.consumption,
+        'dataPoints': consumption.dataPoints,
+        'createdAt': now,
+        'updatedAt': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    debugPrint(
+        '保存月度耗电量统计: ${consumption.deviceId} - ${consumption.monthKey} - ${consumption.consumption} mAh');
+  }
+
+  /// 获取设备的月度耗电量统计（返回MonthlyPowerConsumption对象列表）
+  Future<List<MonthlyPowerConsumption>> getMonthlyPowerConsumptionObjects(
+      String deviceId) async {
+    final db = await database;
+
+    final List<Map<String, dynamic>> maps = await db.query(
+      'monthly_power_consumption',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+      orderBy: 'year DESC, monthIndex DESC',
+    );
+
+    debugPrint('从数据库加载设备 $deviceId 的月度耗电量统计: ${maps.length} 条记录');
+
+    return List.generate(maps.length, (i) {
+      return MonthlyPowerConsumption.fromMap(maps[i]);
+    });
+  }
+
+  /// 清空指定设备的所有月度耗电量统计
+  Future<void> clearMonthlyPowerConsumption(String deviceId) async {
+    final db = await database;
+
+    await db.delete(
+      'monthly_power_consumption',
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+    );
+
+    debugPrint('清空设备 $deviceId 的月度耗电量统计数据');
+  }
+
+  /// 删除指定年份之前的月度耗电量统计（用于清理旧数据）
+  Future<void> deleteOldMonthlyPowerConsumption(int yearsToKeep) async {
+    final db = await database;
+    final cutoffYear = DateTime.now().year - yearsToKeep;
+
+    await db.delete(
+      'monthly_power_consumption',
+      where: 'year < ?',
+      whereArgs: [cutoffYear],
+    );
+
+    debugPrint('删除 $cutoffYear 年之前的月度耗电量统计数据');
+  }
+
+  /// 保存每日耗电量统计数组到数据库
+  Future<void> saveDailyConsumptionArray(
+      String deviceId, List<double?> dailyArray) async {
+    final db = await database;
+    final batch = db.batch();
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // 获取基准日期（2020年1月1日）
+    final baseDate = DateTime(2020, 1, 1);
+
+    for (int i = 0; i < dailyArray.length; i++) {
+      if (dailyArray[i] != null && dailyArray[i]! > 0) {
+        final targetDate = baseDate.add(Duration(days: i));
+        final dateTimestamp =
+            DateTime(targetDate.year, targetDate.month, targetDate.day)
+                .millisecondsSinceEpoch;
+
+        batch.insert(
+          'daily_power_consumption',
+          {
+            'deviceId': deviceId,
+            'date': dateTimestamp,
+            'consumption': dailyArray[i]!,
+            'dataPoints': 1, // 简化处理，实际应该统计数据点数量
+            'createdAt': now,
+            'updatedAt': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+
+    await batch.commit();
+    debugPrint('保存设备 $deviceId 的每日耗电量统计数组到数据库');
+  }
+
+  /// 保存月度耗电量统计数组到数据库
+  Future<void> saveMonthlyConsumptionArray(
+      String deviceId, List<double?> monthlyArray) async {
+    final db = await database;
+    final batch = db.batch();
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // 获取当前年份
+    final currentYear = DateTime.now().year;
+
+    for (int i = 0; i < monthlyArray.length; i++) {
+      if (monthlyArray[i] != null && monthlyArray[i]! > 0) {
+        batch.insert(
+          'monthly_power_consumption',
+          {
+            'deviceId': deviceId,
+            'year': currentYear,
+            'monthIndex': i,
+            'consumption': monthlyArray[i]!,
+            'dataPoints': 1, // 简化处理，实际应该统计数据点数量
+            'createdAt': now,
+            'updatedAt': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    }
+
+    await batch.commit();
+    debugPrint('保存设备 $deviceId 的月度耗电量统计数组到数据库');
   }
 
   /// 关闭数据库

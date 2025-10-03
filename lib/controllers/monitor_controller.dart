@@ -39,6 +39,7 @@ class MonitorController extends GetxController {
   Timer? _monitorTimer;
   Timer? _activeScanTimer;
   Timer? _healthCheckTimer;
+  Timer? _consumptionArraySaveTimer;
 
   // 监控订阅
   StreamSubscription<List<ScanResult>>? _scanSubscription;
@@ -56,6 +57,7 @@ class MonitorController extends GetxController {
     _monitorTimer?.cancel();
     _activeScanTimer?.cancel();
     _healthCheckTimer?.cancel();
+    _consumptionArraySaveTimer?.cancel();
     _scanIntervalWorker?.dispose();
     _scanSubscription?.cancel();
     super.onClose();
@@ -92,7 +94,8 @@ class MonitorController extends GetxController {
           device.addData(data, updateConsumption: false);
         }
 
-        // 新系统不需要从数据库加载每日耗电量统计数据
+        // 从数据库加载每日和月度耗电量统计数据到数组
+        await _loadDeviceConsumptionArrays(device);
 
         // 如果设备正在监控，添加到选中列表
         if (device.isMonitoring.value) {
@@ -249,6 +252,10 @@ class MonitorController extends GetxController {
               selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
           if (selectedDevice != null) {
             selectedDevice.addData(data);
+
+            // 定期保存耗电量统计数组到数据库（避免频繁写入）
+            _scheduleConsumptionArraySave(selectedDevice);
+
             selectedDevices.refresh(); // 强制刷新列表
           }
 
@@ -428,6 +435,11 @@ class MonitorController extends GetxController {
     _activeScanTimer?.cancel();
     _activeScanTimer = null;
 
+    // 停止监控时立即保存所有设备的耗电量统计数组
+    if (selectedDevices.isNotEmpty) {
+      _saveConsumptionArraysToDatabase(selectedDevices);
+    }
+
     Get.snackbar('提示', '已停止监控', snackPosition: SnackPosition.BOTTOM);
   }
 
@@ -442,6 +454,9 @@ class MonitorController extends GetxController {
         if (device.dataHistory.isNotEmpty) {
           await _dbService.saveDeviceDataBatch(device.dataHistory);
         }
+
+        // 保存耗电量统计数组到数据库
+        await _saveConsumptionArraysToDatabase([device]);
 
         // 添加到已保存列表（如果不存在）
         if (!savedDevices.any((d) => d.deviceId == device.deviceId)) {
@@ -642,6 +657,107 @@ class MonitorController extends GetxController {
     _shownErrors.clear();
     deviceFormatStatus.clear();
     deviceFormatErrors.clear();
+  }
+
+  /// 从数据库加载设备的耗电量统计数组
+  Future<void> _loadDeviceConsumptionArrays(SelectedDevice device) async {
+    try {
+      // 加载每日耗电量统计数据
+      final dailyStats =
+          await _dbService.getDailyPowerConsumptionObjects(device.deviceId);
+
+      if (dailyStats.isNotEmpty) {
+        // 将数据库中的每日统计数据转换为数组格式
+        final dailyArray = List<double?>.filled(365, null);
+
+        for (var stat in dailyStats) {
+          // 计算该日期在数组中的索引
+          final daysSinceEpoch =
+              stat.date.difference(DateTime(2020, 1, 1)).inDays;
+          final arrayIndex = daysSinceEpoch % 365;
+
+          if (arrayIndex >= 0 && arrayIndex < 365) {
+            dailyArray[arrayIndex] = stat.consumption;
+          }
+        }
+
+        // 将数组数据设置到设备对象中
+        _setDeviceDailyArray(device, dailyArray);
+
+        debugPrint(
+            '加载设备 ${device.deviceName} 的每日耗电量统计数组: ${dailyStats.length} 条记录');
+      }
+
+      // 加载月度耗电量统计数据
+      final monthlyStats =
+          await _dbService.getMonthlyPowerConsumptionObjects(device.deviceId);
+
+      if (monthlyStats.isNotEmpty) {
+        // 将数据库中的月度统计数据转换为数组格式
+        final monthlyArray = List<double?>.filled(12, null);
+
+        for (var stat in monthlyStats) {
+          // 使用年份和月份索引来确定数组位置
+          // 这里简化处理，使用当前年份的数据
+          final currentYear = DateTime.now().year;
+          if (stat.year == currentYear &&
+              stat.monthIndex >= 0 &&
+              stat.monthIndex < 12) {
+            monthlyArray[stat.monthIndex] = stat.consumption;
+          }
+        }
+
+        // 将数组数据设置到设备对象中
+        _setDeviceMonthlyArray(device, monthlyArray);
+
+        debugPrint(
+            '加载设备 ${device.deviceName} 的月度耗电量统计数组: ${monthlyStats.length} 条记录');
+      }
+    } catch (e) {
+      debugPrint('加载设备耗电量统计数组失败: $e');
+    }
+  }
+
+  /// 设置设备的每日耗电量统计数组
+  void _setDeviceDailyArray(SelectedDevice device, List<double?> dailyArray) {
+    device.loadDailyConsumptionArray(dailyArray);
+  }
+
+  /// 设置设备的月度耗电量统计数组
+  void _setDeviceMonthlyArray(
+      SelectedDevice device, List<double?> monthlyArray) {
+    device.loadMonthlyConsumptionArray(monthlyArray);
+  }
+
+  /// 定期保存耗电量统计数组到数据库
+  void _scheduleConsumptionArraySave(SelectedDevice device) {
+    // 取消之前的定时器
+    _consumptionArraySaveTimer?.cancel();
+
+    // 设置新的定时器，每30秒保存一次（避免频繁写入数据库）
+    _consumptionArraySaveTimer = Timer(const Duration(seconds: 30), () {
+      _saveConsumptionArraysToDatabase([device]);
+    });
+  }
+
+  /// 保存耗电量统计数组到数据库
+  Future<void> _saveConsumptionArraysToDatabase(
+      List<SelectedDevice> devices) async {
+    try {
+      for (var device in devices) {
+        // 保存每日耗电量统计数组
+        await _dbService.saveDailyConsumptionArray(
+            device.deviceId, device.dailyConsumptionArray);
+
+        // 保存月度耗电量统计数组
+        await _dbService.saveMonthlyConsumptionArray(
+            device.deviceId, device.monthlyConsumptionArray);
+
+        debugPrint('保存设备 ${device.deviceName} 的耗电量统计数组到数据库');
+      }
+    } catch (e) {
+      debugPrint('保存耗电量统计数组失败: $e');
+    }
   }
 
   /// 获取设备离线耗电量（从数据库计算）
