@@ -40,9 +40,15 @@ class MonitorController extends GetxController {
   Timer? _activeScanTimer;
   Timer? _healthCheckTimer;
   Timer? _consumptionArraySaveTimer;
+  Timer? _batchSaveTimer;  // 新增：批量保存定时器
 
   // 监控订阅
   StreamSubscription<List<ScanResult>>? _scanSubscription;
+
+  // 数据缓存，用于去重和批量保存
+  final Map<String, DeviceData> _latestDataCache = {};  // 设备ID -> 最新数据
+  final Map<String, DateTime> _lastSaveTime = {};  // 设备ID -> 最后保存时间
+  final List<DeviceData> _pendingSaveData = [];  // 待保存的数据列表
 
   @override
   void onInit() {
@@ -58,8 +64,13 @@ class MonitorController extends GetxController {
     _activeScanTimer?.cancel();
     _healthCheckTimer?.cancel();
     _consumptionArraySaveTimer?.cancel();
+    _batchSaveTimer?.cancel();  // 清理批量保存定时器
     _scanIntervalWorker?.dispose();
     _scanSubscription?.cancel();
+
+    // 保存所有待保存的数据
+    _savePendingData();
+
     super.onClose();
   }
 
@@ -309,34 +320,68 @@ class MonitorController extends GetxController {
 
         // 使用数据类型作为key的一部分来区分不同类型的数据
         final dataKey = '${deviceId}_${dataType.name}';
-        realtimeData[dataKey] = data;
 
         // 只统计扫描响应包的数据
         if (dataType == BleDataType.scanResponse) {
+          // 检查是否是重复数据（增强去重逻辑）
+          final cacheKey = deviceId;
+          final cachedData = _latestDataCache[cacheKey];
+
+          // 如果缓存中有数据，检查是否重复
+          if (cachedData != null) {
+            // 检查数据是否相同
+            bool isIdentical = cachedData.current == data.current &&
+                cachedData.currentUnit == data.currentUnit &&
+                cachedData.voltage == data.voltage &&
+                cachedData.power == data.power;
+
+            // 如果数据相同，检查时间间隔
+            if (isIdentical) {
+              final timeDiff = data.timestamp.difference(cachedData.timestamp).inMilliseconds;
+              if (timeDiff < 1000) {
+                // 1秒内的相同数据，跳过
+                debugPrint('跳过1秒内的重复数据: $deviceId - ${data.current}${data.currentUnit}');
+                break;
+              }
+            } else {
+              // 数据不同，但检查时间间隔是否太短
+              final timeDiff = data.timestamp.difference(cachedData.timestamp).inMilliseconds;
+              if (timeDiff < 200) {
+                // 200毫秒内的数据变化，可能是噪声，跳过
+                debugPrint('跳过200ms内的频繁数据: $deviceId - 间隔${timeDiff}ms');
+                break;
+              }
+            }
+          }
+
+          // 更新缓存
+          _latestDataCache[cacheKey] = data;
+
           // 强制触发UI更新
+          realtimeData[dataKey] = data;
           realtimeData[deviceId] = data;
           realtimeData.refresh(); // 确保 Obx 监听器能检测到变化
 
-          // 更新选中设备的数据（只保存扫描响应数据）
+          // 更新选中设备的数据
           final selectedDevice =
               selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
           if (selectedDevice != null) {
             selectedDevice.addData(data);
 
-            // 定期保存耗电量统计数组到数据库（避免频繁写入）
-            _scheduleConsumptionArraySave(selectedDevice);
+            // 添加到待保存队列（批量保存）
+            _addToPendingSave(data);
 
             selectedDevices.refresh(); // 强制刷新列表
           }
 
-          // 更新已保存设备的数据（只保存扫描响应数据）
+          // 更新已保存设备的数据
           final savedDevice =
               savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
           if (savedDevice != null) {
             savedDevice.addData(data);
 
-            // 注意：不再实时保存到数据库，只在批量保存时保存
-            // 这样可以避免数据重复保存的问题
+            // 添加到待保存队列（批量保存）
+            _addToPendingSave(data);
 
             // 无论是否保存到数据库，都进行阈值检查（内部有冷却与开关控制）
             final powerConsumption = savedDevice.powerConsumption;
@@ -344,10 +389,9 @@ class MonitorController extends GetxController {
 
             savedDevices.refresh(); // 强制刷新列表
           }
-
-          // 保存扫描响应数据
         } else {
           // 接收到广播数据（不统计）
+          realtimeData[dataKey] = data;
         }
 
         break; // 只处理第一个有效的厂商数据
@@ -469,6 +513,9 @@ class MonitorController extends GetxController {
       device.isMonitoring.value = true;
     }
 
+    // 启动批量保存定时器
+    _startBatchSaveTimer();
+
     // 确保选中的设备都在监控设备列表中
     for (var device in selectedDevices) {
       if (!savedDevices.any((d) => d.deviceId == device.deviceId)) {
@@ -493,6 +540,11 @@ class MonitorController extends GetxController {
     isMonitoring.value = false;
     _activeScanTimer?.cancel();
     _activeScanTimer = null;
+    _batchSaveTimer?.cancel();  // 停止批量保存定时器
+    _batchSaveTimer = null;
+
+    // 停止监控时立即保存所有待保存的数据
+    _savePendingData();
 
     // 停止监控时立即保存所有设备的耗电量统计数组
     if (selectedDevices.isNotEmpty) {
@@ -856,4 +908,98 @@ class MonitorController extends GetxController {
       return [];
     }
   }
+
+  /// 添加数据到待保存队列
+  void _addToPendingSave(DeviceData data) {
+    // 检查是否需要去重
+    bool isDuplicate = false;
+    for (int i = _pendingSaveData.length - 1; i >= 0 && i >= _pendingSaveData.length - 10; i--) {
+      final existingData = _pendingSaveData[i];
+      if (existingData.deviceId == data.deviceId) {
+        // 检查是否是重复数据
+        if (existingData.current == data.current &&
+            existingData.voltage == data.voltage &&
+            existingData.timestamp.difference(data.timestamp).abs().inMilliseconds < 1000) {
+          isDuplicate = true;
+          debugPrint('批量保存队列中发现重复数据，跳过: ${data.deviceId}');
+          break;
+        }
+      }
+    }
+
+    if (!isDuplicate) {
+      _pendingSaveData.add(data);
+
+      // 如果没有启动批量保存定时器，启动它
+      if (_batchSaveTimer == null || !_batchSaveTimer!.isActive) {
+        _startBatchSaveTimer();
+      }
+    }
+  }
+
+  /// 启动批量保存定时器
+  void _startBatchSaveTimer() {
+    _batchSaveTimer?.cancel();
+    _batchSaveTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _savePendingData();
+    });
+  }
+
+  /// 保存待保存的数据到数据库
+  Future<void> _savePendingData() async {
+    if (_pendingSaveData.isEmpty) return;
+
+    try {
+      // 复制待保存数据并清空队列
+      final dataToSave = List<DeviceData>.from(_pendingSaveData);
+      _pendingSaveData.clear();
+
+      debugPrint('批量保存 ${dataToSave.length} 条数据到数据库');
+
+      // 按设备分组
+      final groupedData = <String, List<DeviceData>>{};
+      for (var data in dataToSave) {
+        groupedData.putIfAbsent(data.deviceId, () => []).add(data);
+      }
+
+      // 批量保存每个设备的数据
+      for (var entry in groupedData.entries) {
+        final deviceId = entry.key;
+        final deviceDataList = entry.value;
+
+        // 再次去重（按时间戳和数据内容）
+        final uniqueData = <DeviceData>[];
+        final seenData = <String>{};
+
+        for (var data in deviceDataList) {
+          // 创建唯一标识符（时间戳精确到秒 + 数据内容）
+          final timestamp = (data.timestamp.millisecondsSinceEpoch ~/ 1000).toString();
+          final dataHash = '$timestamp-${data.current}-${data.voltage}';
+
+          if (!seenData.contains(dataHash)) {
+            seenData.add(dataHash);
+            uniqueData.add(data);
+          } else {
+            debugPrint('批量保存时去重: ${data.deviceId} - ${data.current}${data.currentUnit}');
+          }
+        }
+
+        if (uniqueData.isNotEmpty) {
+          // 批量保存到数据库
+          await _dbService.saveDeviceDataBatch(uniqueData);
+          debugPrint('成功保存设备 $deviceId 的 ${uniqueData.length} 条唯一数据');
+        }
+      }
+
+      // 同时保存耗电量统计数组
+      await _saveConsumptionArraysToDatabase(
+        [...selectedDevices, ...savedDevices]
+            .where((d) => groupedData.containsKey(d.deviceId))
+            .toList(),
+      );
+    } catch (e) {
+      debugPrint('批量保存数据失败: $e');
+    }
+  }
+
 }
