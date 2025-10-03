@@ -22,8 +22,19 @@ class AlertService extends GetxController {
   // 存储上次报警时间，避免频繁报警
   final Map<String, DateTime> _lastAlertTime = {};
 
+  // 存储上次报警的数据，用于判断是否是相同的异常
+  final Map<String, String> _lastAlertDataHash = {};
+
   // 报警冷却时间（秒）- 减少冷却时间让报警更及时
   static const int alertCooldownSeconds = 5;
+
+  // 跟踪当前是否有报警对话框显示
+  bool _isAlertDialogShowing = false;
+  String? _currentAlertDialogHash;
+
+  // 跟踪上次显示的Snackbar
+  DateTime? _lastSnackbarTime;
+  String? _lastSnackbarMessage;
 
   @override
   void onInit() {
@@ -91,16 +102,6 @@ class AlertService extends GetxController {
 
       if (!settings.alertEnabled) return;
 
-      // 检查冷却时间
-      final lastAlert = _lastAlertTime[data.deviceId];
-      if (lastAlert != null) {
-        final timeSinceLastAlert =
-            DateTime.now().difference(lastAlert).inSeconds;
-        if (timeSinceLastAlert < alertCooldownSeconds) {
-          return; // 还在冷却期内
-        }
-      }
-
       List<String> exceededThresholds = [];
 
       // 转换电流到统一单位进行比较
@@ -160,9 +161,50 @@ class AlertService extends GetxController {
 
       // 如果有超出阈值的项目，触发报警
       if (exceededThresholds.isNotEmpty) {
-        await _triggerAlert(
-            data.deviceName, exceededThresholds, settings.alertType);
+        // 创建当前异常数据的哈希值
+        final currentDataHash = '${data.current}_${data.voltage}_${data.power}_${powerConsumption}';
+
+        // 首先检查基本的冷却时间（所有报警间隔至少5秒）
+        final lastAlert = _lastAlertTime[data.deviceId];
+        if (lastAlert != null) {
+          final timeSinceLastAlert = DateTime.now().difference(lastAlert).inSeconds;
+          if (timeSinceLastAlert < alertCooldownSeconds) {
+            debugPrint('距离上次报警仅${timeSinceLastAlert}秒，需要等待${alertCooldownSeconds - timeSinceLastAlert}秒');
+            return;
+          }
+        }
+
+        // 然后检查是否是相同的连续异常数据
+        final lastDataHash = _lastAlertDataHash[data.deviceId];
+        if (lastDataHash == currentDataHash) {
+          // 相同的异常数据，需要更长的冷却时间
+          if (lastAlert != null) {
+            final timeSinceLastAlert = DateTime.now().difference(lastAlert).inSeconds;
+            if (timeSinceLastAlert < 60) {  // 相同数据60秒内只报警一次
+              debugPrint('相同异常数据${timeSinceLastAlert}秒内已报警，跳过');
+              return;
+            }
+          }
+        }
+
+        // 触发报警并更新记录
+        // 先更新时间戳，防止异步执行期间重复触发
         _lastAlertTime[data.deviceId] = DateTime.now();
+        _lastAlertDataHash[data.deviceId] = currentDataHash;
+
+        // 然后触发报警
+        await _triggerAlert(data.deviceName, exceededThresholds, settings.alertType);
+      } else {
+        // 没有异常，清除上次的异常数据哈希
+        _lastAlertDataHash.remove(data.deviceId);
+
+        // 如果当前对话框是这个设备的，可以考虑清除对话框状态
+        // 这样下次出现新的异常时可以显示对话框
+        if (_currentAlertDialogHash?.startsWith(data.deviceName) == true) {
+          // 如果当前显示的对话框是这个设备的，但设备已恢复正常
+          // 我们不自动关闭对话框（让用户手动关闭），但允许下次显示新的对话框
+          debugPrint('设备 ${data.deviceName} 已恢复正常，清除对话框哈希缓存');
+        }
       }
     } catch (e) {
       debugPrint('检查阈值时出错: $e');
@@ -176,24 +218,51 @@ class AlertService extends GetxController {
 
     // 显示应用内通知（仅当前台运行时显示）
     if (Get.context != null) {
-      Get.snackbar(
-        '⚠️ 异常用电量报警',
-        message,
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: const Color(0xFFFF6B6B),
-        colorText: Colors.white,
-        duration: const Duration(seconds: 8), // 延长显示时间
-        isDismissible: true,
-        margin: const EdgeInsets.all(16),
-        borderRadius: 8,
-        showProgressIndicator: true,
-        progressIndicatorBackgroundColor: Colors.white24,
-        progressIndicatorValueColor:
-            const AlwaysStoppedAnimation<Color>(Colors.white),
-      );
+      // 检查是否需要显示Snackbar（避免短时间内重复显示相同内容）
+      bool shouldShowSnackbar = true;
+      if (_lastSnackbarMessage == message && _lastSnackbarTime != null) {
+        final timeSinceLastSnackbar = DateTime.now().difference(_lastSnackbarTime!).inSeconds;
+        if (timeSinceLastSnackbar < 8) {  // 8秒内不重复显示相同的Snackbar
+          shouldShowSnackbar = false;
+          debugPrint('相同的Snackbar在${timeSinceLastSnackbar}秒前已显示，跳过');
+        }
+      }
 
-      // 显示系统对话框（仅当前台运行时显示）
-      _showAlertDialog(deviceName, exceededItems);
+      if (shouldShowSnackbar) {
+        // 关闭之前的Snackbar（如果存在）
+        if (Get.isSnackbarOpen) {
+          Get.closeCurrentSnackbar();
+        }
+
+        Get.snackbar(
+          '⚠️ 异常用电量报警',
+          message,
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: const Color(0xFFFF6B6B),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 8), // 延长显示时间
+          isDismissible: true,
+          margin: const EdgeInsets.all(16),
+          borderRadius: 8,
+          showProgressIndicator: true,
+          progressIndicatorBackgroundColor: Colors.white24,
+          progressIndicatorValueColor:
+              const AlwaysStoppedAnimation<Color>(Colors.white),
+        );
+
+        _lastSnackbarMessage = message;
+        _lastSnackbarTime = DateTime.now();
+      }
+
+      // 创建对话框内容的哈希值，用于去重
+      final dialogHash = '$deviceName-${exceededItems.join('-')}';
+
+      // 只有当没有对话框显示或者是不同的报警内容时才显示新对话框
+      if (!_isAlertDialogShowing || _currentAlertDialogHash != dialogHash) {
+        _showAlertDialog(deviceName, exceededItems, dialogHash);
+      } else {
+        debugPrint('相同的报警对话框已显示，跳过重复显示');
+      }
     }
 
     // 始终显示后台通知（无论前台后台）
@@ -204,18 +273,25 @@ class AlertService extends GetxController {
 
     debugPrint('报警已触发: $message');
 
+    // 获取设备设置，以获取自定义铃声路径
+    final deviceId = _deviceSettingsCache.keys.firstWhere(
+      (id) => _deviceSettingsCache[id]?.deviceId == deviceName,
+      orElse: () => '',
+    );
+    final settings = deviceId.isNotEmpty ? _deviceSettingsCache[deviceId] : null;
+
     // 根据设置触发震动和/或声音
     switch (alertType) {
       case AlertType.vibration:
         await _triggerVibration();
         break;
       case AlertType.sound:
-        await _playAlertSound();
+        await _playAlertSound(settings?.customSoundPath);
         break;
       case AlertType.both:
         await Future.wait([
           _triggerVibration(),
-          _playAlertSound(),
+          _playAlertSound(settings?.customSoundPath),
         ]);
         break;
     }
@@ -238,28 +314,49 @@ class AlertService extends GetxController {
   }
 
   /// 播放报警声音
-  Future<void> _playAlertSound() async {
+  Future<void> _playAlertSound(String? customSoundPath) async {
     try {
-      // 播放多次系统警告声音以增强警示效果
-      for (int i = 0; i < 3; i++) {
-        await SystemSound.play(SystemSoundType.alert);
-        if (i < 2) await Future.delayed(const Duration(milliseconds: 500));
+      if (customSoundPath != null && customSoundPath.isNotEmpty) {
+        // 播放自定义铃声
+        debugPrint('播放自定义铃声: $customSoundPath');
+        await _audioPlayer.play(DeviceFileSource(customSoundPath));
+        debugPrint('自定义报警声音已播放');
+      } else {
+        // 播放默认系统警告声音
+        debugPrint('播放默认系统警告声音');
+        for (int i = 0; i < 3; i++) {
+          await SystemSound.play(SystemSoundType.alert);
+          if (i < 2) await Future.delayed(const Duration(milliseconds: 500));
+        }
+        debugPrint('默认报警声音已播放');
       }
-      debugPrint('报警声音已播放');
     } catch (e) {
       debugPrint('播放声音失败: $e');
-      // 如果系统声音失败，尝试使用audioplayers
+      // 如果自定义铃声播放失败，回退到系统声音
       try {
-        await _audioPlayer.play(AssetSource('sounds/alert.mp3'));
+        for (int i = 0; i < 3; i++) {
+          await SystemSound.play(SystemSoundType.alert);
+          if (i < 2) await Future.delayed(const Duration(milliseconds: 500));
+        }
       } catch (e2) {
-        debugPrint('使用audioplayers播放失败: $e2');
+        debugPrint('系统声音也播放失败: $e2');
+        // 最后尝试使用assets中的默认声音
+        try {
+          await _audioPlayer.play(AssetSource('sounds/alert.mp3'));
+        } catch (e3) {
+          debugPrint('使用audioplayers播放assets声音也失败: $e3');
+        }
       }
     }
   }
 
   /// 显示报警对话框
-  void _showAlertDialog(String deviceName, List<String> exceededItems) {
+  void _showAlertDialog(String deviceName, List<String> exceededItems, String dialogHash) {
     if (Get.context != null) {
+      // 标记对话框正在显示
+      _isAlertDialogShowing = true;
+      _currentAlertDialogHash = dialogHash;
+
       Get.dialog(
         AlertDialog(
           icon: const Icon(
@@ -306,12 +403,20 @@ class AlertService extends GetxController {
           ),
           actions: [
             TextButton(
-              onPressed: () => Get.back(),
+              onPressed: () {
+                Get.back();
+                // 标记对话框已关闭
+                _isAlertDialogShowing = false;
+                _currentAlertDialogHash = null;
+              },
               child: const Text('确定'),
             ),
             ElevatedButton(
               onPressed: () {
                 Get.back();
+                // 标记对话框已关闭
+                _isAlertDialogShowing = false;
+                _currentAlertDialogHash = null;
                 // 可以跳转到设备详情页面
                 Get.toNamed('/device-detail');
               },
@@ -324,7 +429,11 @@ class AlertService extends GetxController {
           ],
         ),
         barrierDismissible: false, // 不允许点击外部关闭
-      );
+      ).then((_) {
+        // 确保在对话框被意外关闭时也能重置状态
+        _isAlertDialogShowing = false;
+        _currentAlertDialogHash = null;
+      });
     }
   }
 

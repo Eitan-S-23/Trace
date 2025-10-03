@@ -24,7 +24,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4, // 升级版本号以支持每日和月度耗电量统计
+      version: 5, // 升级版本号以支持自定义铃声路径
       onCreate: _createTables,
       onUpgrade: _upgradeDatabase,
     );
@@ -52,6 +52,7 @@ class DatabaseService {
           powerConsumptionUnit TEXT DEFAULT 'mAh',
           alertEnabled INTEGER DEFAULT 1,
           alertType INTEGER DEFAULT 0,
+          customSoundPath TEXT,
           FOREIGN KEY (deviceId) REFERENCES devices (deviceId)
         )
       ''');
@@ -120,6 +121,13 @@ class DatabaseService {
         CREATE INDEX IF NOT EXISTS idx_monthly_consumption_year_month ON monthly_power_consumption (year, monthIndex)
       ''');
     }
+
+    if (oldVersion < 5) {
+      // 添加自定义铃声路径字段
+      await db.execute('''
+        ALTER TABLE device_settings ADD COLUMN customSoundPath TEXT
+      ''');
+    }
   }
 
   Future<void> _createTables(Database db, int version) async {
@@ -174,6 +182,7 @@ class DatabaseService {
         powerConsumptionUnit TEXT DEFAULT 'mAh',
         alertEnabled INTEGER DEFAULT 1,
         alertType INTEGER DEFAULT 0,
+        customSoundPath TEXT,
         FOREIGN KEY (deviceId) REFERENCES devices (deviceId)
       )
     ''');

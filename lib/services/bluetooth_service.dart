@@ -1104,41 +1104,84 @@ class BluetoothService extends GetxController {
         return device.connectable as bool;
       }
 
-      // 检查设备是否有服务UUID（可连接设备通常有服务UUID）
-      if (serviceUuidStrings.isNotEmpty) {
-        return true;
-      }
+      // 对于Windows平台，win_ble不提供connectable属性
+      // 我们需要基于其他特征来判断
 
-      // 检查制造商数据（可连接设备通常有制造商数据）
-      if (manufacturerData.isNotEmpty) {
-        return true;
-      }
-
-      // 检查设备名称（信标通常没有具体名称或名称很短）
+      // 检查设备名称中的关键词
       if (device.name != null && device.name.toString().isNotEmpty) {
         final name = device.name.toString().toLowerCase();
-        // 如果设备名称看起来像是一个具体的设备名称而不是随机字符串，则可能是可连接设备
-        if (!name.contains('beacon') &&
-            !name.contains('ibeacon') &&
-            name.length > 3) {
+        // 信标类设备通常不可连接
+        if (name.contains('beacon') ||
+            name.contains('ibeacon') ||
+            name.contains('eddystone') ||
+            name.contains('tile') ||
+            name.contains('tag')) {
+          return false;
+        }
+
+        // 某些已知的可连接设备类型
+        if (name.contains('sensor') ||
+            name.contains('thermometer') ||
+            name.contains('heart') ||
+            name.contains('watch') ||
+            name.contains('band') ||
+            name.contains('scale') ||
+            name.contains('meter')) {
           return true;
         }
       }
 
-      // 检查设备类型（某些设备类型明确表示不可连接）
-      if (device.deviceType != null) {
-        final deviceType = device.deviceType.toString().toLowerCase();
-        if (deviceType.contains('beacon') ||
-            deviceType.contains('advertiser')) {
+      // 检查服务UUID - 某些服务UUID表示设备是可连接的
+      for (String uuid in serviceUuidStrings) {
+        final lowerUuid = uuid.toLowerCase();
+        // 标准GATT服务通常意味着设备是可连接的
+        if (lowerUuid.contains('1800') || // Generic Access
+            lowerUuid.contains('1801') || // Generic Attribute
+            lowerUuid.contains('180a') || // Device Information
+            lowerUuid.contains('180d') || // Heart Rate
+            lowerUuid.contains('180f') || // Battery Service
+            lowerUuid.contains('1805')) { // Current Time Service
+          return true;
+        }
+        // iBeacon UUID pattern表示不可连接
+        if (lowerUuid.length == 36 && lowerUuid.contains('-')) {
           return false;
         }
       }
 
-      // 对于大多数BLE设备，如果没有明确的不可连接标志，我们假设它是可连接的
-      // 这是因为许多BLE设备在广播时没有明确标识自己是否可连接
-      return true;
+      // 检查制造商数据
+      // 如果只有制造商数据且没有服务UUID，很可能是广播设备（不可连接）
+      if (manufacturerData.isNotEmpty && serviceUuidStrings.isEmpty) {
+        // 检查是否是已知的信标格式
+        for (var entry in manufacturerData.entries) {
+          // Apple iBeacon (0x004C)
+          if (entry.key == 0x004C) {
+            return false;
+          }
+          // Google Eddystone (0x00E0)
+          if (entry.key == 0x00E0) {
+            return false;
+          }
+          // 如果制造商数据看起来像我们的自定义数据格式（用于监控的设备）
+          // 这些设备通常只广播数据，不需要连接
+          if (entry.value.length == 7 || entry.value.length == 5) {
+            // 可能是我们的监控设备格式
+            return false;
+          }
+        }
+      }
+
+      // 如果有服务UUID和制造商数据，可能是可连接设备
+      if (serviceUuidStrings.isNotEmpty && manufacturerData.isNotEmpty) {
+        return true;
+      }
+
+      // 默认情况下，如果我们不确定，假设设备不可连接
+      // 这样更保守，避免误判
+      return false;
     } catch (e) {
-      return true; // 默认认为是可连接的，避免误判
+      debugPrint('判断设备可连接性时出错: $e');
+      return false; // 出错时默认为不可连接
     }
   }
 }

@@ -18,6 +18,7 @@ class DeviceSettings {
   final String powerConsumptionUnit;
   final bool alertEnabled;
   final AlertType alertType;
+  final String? customSoundPath;  // 自定义铃声文件路径
 
   DeviceSettings({
     required this.deviceId,
@@ -31,6 +32,7 @@ class DeviceSettings {
     this.powerConsumptionUnit = 'mAh',
     this.alertEnabled = true,
     this.alertType = AlertType.vibration,
+    this.customSoundPath,
   });
 
   /// 转换为Map用于数据库存储
@@ -47,6 +49,7 @@ class DeviceSettings {
       'powerConsumptionUnit': powerConsumptionUnit,
       'alertEnabled': alertEnabled ? 1 : 0,
       'alertType': alertType.index,
+      'customSoundPath': customSoundPath,
     };
   }
 
@@ -65,6 +68,7 @@ class DeviceSettings {
       powerConsumptionUnit: map['powerConsumptionUnit'] ?? 'mAh',
       alertEnabled: (map['alertEnabled'] ?? 1) == 1,
       alertType: AlertType.values[map['alertType'] ?? 0],
+      customSoundPath: map['customSoundPath'],
     );
   }
 
@@ -81,6 +85,7 @@ class DeviceSettings {
     String? powerConsumptionUnit,
     bool? alertEnabled,
     AlertType? alertType,
+    String? customSoundPath,
   }) {
     return DeviceSettings(
       deviceId: deviceId ?? this.deviceId,
@@ -95,6 +100,7 @@ class DeviceSettings {
       powerConsumptionUnit: powerConsumptionUnit ?? this.powerConsumptionUnit,
       alertEnabled: alertEnabled ?? this.alertEnabled,
       alertType: alertType ?? this.alertType,
+      customSoundPath: customSoundPath ?? this.customSoundPath,
     );
   }
 

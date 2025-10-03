@@ -278,16 +278,25 @@ class MonitorController extends GetxController {
       _parseDataPacket(deviceId, deviceName,
           result.advertisementData.manufacturerData, BleDataType.scanResponse);
     }
-
     // 如果厂商数据为空，检查服务数据中是否有符合格式的数据
     else if (result.advertisementData.serviceData.isNotEmpty) {
       for (var entry in result.advertisementData.serviceData.entries) {
-        if (entry.value.length >= 5) {
+        if (entry.value.length >= 7) {  // 修改为7字节
           final manufDataMap = <int, List<int>>{0xFFFF: entry.value};
           _parseDataPacket(
               deviceId, deviceName, manufDataMap, BleDataType.scanResponse);
           break;
         }
+      }
+    } else {
+      // 如果既没有制造商数据也没有服务数据，不设置错误
+      // 因为这可能只是一个普通的广播包，不包含数据
+      // 只有在已保存的设备中才清除错误状态
+      if (savedDevices.any((d) => d.deviceId == deviceId) ||
+          selectedDevices.any((d) => d.deviceId == deviceId)) {
+        // 不要立即设置错误，保持之前的状态
+        // 只有连续多次没有数据才报错
+        debugPrint('设备 $deviceId 本次扫描无数据，保持之前状态');
       }
     }
   }
@@ -297,14 +306,21 @@ class MonitorController extends GetxController {
       Map<int, List<int>> manufData, BleDataType dataType) {
     bool hasValidData = false;
     String formatError = '';
+    bool hasError = false;
 
     for (var entry in manufData.entries) {
+      // 跳过空数据
+      if (entry.value.isEmpty) {
+        debugPrint('设备 $deviceId 广播包数据为空，跳过');
+        continue;
+      }
+
       // 检查数据格式
       final formatCheck = _validateDataFormat(entry.value);
       if (!formatCheck['isValid']) {
         formatError = formatCheck['error'];
-        deviceFormatStatus[deviceId] = false;
-        deviceFormatErrors[deviceId] = formatError;
+        hasError = true;
+        // 暂时不设置错误状态，继续检查其他数据
         continue;
       }
 
@@ -399,7 +415,10 @@ class MonitorController extends GetxController {
     }
 
     // 如果没有找到有效数据，显示格式错误提示
-    if (!hasValidData && formatError.isNotEmpty) {
+    if (!hasValidData && hasError && formatError.isNotEmpty) {
+      // 只有当确实有错误数据时才设置错误状态
+      deviceFormatStatus[deviceId] = false;
+      deviceFormatErrors[deviceId] = formatError;
       _showFormatErrorNotification(deviceName, formatError);
     }
   }
