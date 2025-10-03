@@ -573,6 +573,11 @@ class BluetoothService extends GetxController {
               List<String> serviceUuidStrings = []; // 服务UUID字符串列表
               Map<int, List<int>> manufacturerData = {}; // 制造商数据
 
+              // 打印原始设备对象信息，便于调试
+              debugPrint('===== Windows BLE设备原始数据 =====');
+              debugPrint('设备对象类型: ${device.runtimeType}');
+              debugPrint('设备对象字符串: $device');
+
               try {
                 // 安全地处理address属性
                 if (device.address != null) {
@@ -580,10 +585,14 @@ class BluetoothService extends GetxController {
                 } else {
                   deviceAddress = device.toString();
                 }
+                debugPrint('设备地址: $deviceAddress');
 
-                // 安全地处理name属性
-                if (device.name != null) {
+                // 安全地处理name属性 - 优先使用name，如果为空或null则保持"未知设备"
+                if (device.name != null && device.name.toString().isNotEmpty) {
                   deviceName = device.name.toString();
+                  debugPrint('从device.name获取到设备名称: $deviceName');
+                } else {
+                  debugPrint('device.name为空或null，设备名称保持默认: $deviceName');
                 }
 
                 // 安全地处理rssi属性，确保是int类型
@@ -617,6 +626,7 @@ class BluetoothService extends GetxController {
 
                 // 安全地处理制造商数据
                 try {
+                  debugPrint('===== 开始获取制造商数据 =====');
                   debugPrint('设备对象类型: ${device.runtimeType}');
 
                   // 打印设备对象的完整结构
@@ -639,9 +649,28 @@ class BluetoothService extends GetxController {
                     for (var prop in commonProps) {
                       try {
                         var value = _getProperty(device, prop);
-                        debugPrint('  $prop: $value (${value?.runtimeType})');
+                        if (value != null) {
+                          debugPrint('  $prop: $value (${value?.runtimeType})');
+                          // 如果是制造商数据，尝试打印具体内容
+                          if (prop.contains('manufacturer') || prop.contains('adv') || prop.contains('data')) {
+                            if (value is Map) {
+                              debugPrint('    Map内容:');
+                              value.forEach((k, v) {
+                                debugPrint('      键: $k, 值: $v');
+                                if (v is List) {
+                                  final hexStr = v.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+                                  debugPrint('      16进制: $hexStr');
+                                }
+                              });
+                            } else if (value is List) {
+                              final hexStr = value.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+                              debugPrint('    List内容(16进制): $hexStr');
+                              debugPrint('    List内容(10进制): $value');
+                            }
+                          }
+                        }
                       } catch (e) {
-                        debugPrint('  $prop: 访问失败 - $e');
+                        // 静默忽略访问失败的属性
                       }
                     }
                   } catch (e) {
@@ -732,13 +761,27 @@ class BluetoothService extends GetxController {
               if (existingResultIndex >= 0) {
                 // 更新现有设备的信号强度和时间戳
                 final updatedResults = List<ScanResult>.from(scanResults);
+
+                // 获取现有设备的名称，如果新扫描到的名称不为空则更新
+                String finalDeviceName = deviceName;
+                if (finalDeviceName == '未知设备' || finalDeviceName.isEmpty) {
+                  // 尝试保持之前的名称
+                  final existingName = updatedResults[existingResultIndex].advertisementData.advName;
+                  if (existingName != null && existingName.isNotEmpty && existingName != '未知设备') {
+                    finalDeviceName = existingName;
+                    debugPrint('保持现有设备名称: $finalDeviceName');
+                  }
+                } else {
+                  debugPrint('更新设备名称为: $finalDeviceName');
+                }
+
                 // 如果设备名称发生了变化，也更新设备名称
                 final updatedDevice = BluetoothDevice(
                   remoteId: updatedResults[existingResultIndex].device.remoteId,
                 );
                 // 创建更新后的advertisementData，保持可连接状态和服务UUID
                 final updatedAdvData = AdvertisementData(
-                  advName: deviceName, // 使用当前扫描到的设备名称
+                  advName: finalDeviceName, // 使用最终的设备名称
                   txPowerLevel: updatedResults[existingResultIndex]
                       .advertisementData
                       .txPowerLevel,
@@ -764,6 +807,8 @@ class BluetoothService extends GetxController {
                   timeStamp: DateTime.now(),
                 );
                 scanResults.value = updatedResults;
+
+                debugPrint('更新设备 $deviceAddress，最终名称: $finalDeviceName');
               } else {
                 // 创建新的ScanResult对象并添加到列表
                 final newResults = List<ScanResult>.from(scanResults);
@@ -788,6 +833,8 @@ class BluetoothService extends GetxController {
 
                 newResults.add(scanResult);
                 scanResults.value = newResults;
+
+                debugPrint('新增设备 $deviceAddress，名称: $deviceName');
               }
             } catch (e) {
               // 转换设备失败
@@ -961,7 +1008,39 @@ class BluetoothService extends GetxController {
   // 辅助方法：安全获取对象属性
   dynamic _getProperty(dynamic object, String propertyName) {
     try {
-      return object.getField(propertyName);
+      // 对于win_ble的BleDevice对象，尝试直接属性访问
+      switch (propertyName) {
+        case 'address':
+          return object.address;
+        case 'name':
+          return object.name;
+        case 'rssi':
+          return object.rssi;
+        case 'manufacturerData':
+          return object.manufacturerData;
+        case 'advertisementData':
+          // win_ble可能将广播数据存储在不同的属性中
+          if (object.advertisementData != null) {
+            return object.advertisementData;
+          } else if (object.manufData != null) {
+            return object.manufData;
+          } else if (object.data != null) {
+            return object.data;
+          }
+          return null;
+        case 'serviceUuids':
+          return object.serviceUuids;
+        case 'connectable':
+          return object.connectable;
+        default:
+          // 尝试动态访问
+          try {
+            return object.getField(propertyName);
+          } catch (e) {
+            // 如果getField失败，尝试其他方法
+            return null;
+          }
+      }
     } catch (e) {
       // 尝试通过点号访问嵌套属性
       if (propertyName.contains('.')) {
@@ -970,7 +1049,7 @@ class BluetoothService extends GetxController {
         for (var part in parts) {
           if (current == null) break;
           try {
-            current = current.getField(part);
+            current = _getProperty(current, part);
           } catch (e) {
             return null;
           }

@@ -181,7 +181,7 @@ class ManufacturerDataParser {
 /// 选中设备信息
 class SelectedDevice {
   final String deviceId;
-  final String deviceName;
+  String deviceName; // 改为可变的，以便在扫描时更新
   final List<DeviceData> dataHistory;
   var isMonitoring = false.obs;
 

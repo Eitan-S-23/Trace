@@ -197,7 +197,33 @@ class MonitorController extends GetxController {
   void _parseDeviceData(ScanResult result) {
     final deviceId = result.device.remoteId.toString();
     // 使用BleController的设备名称获取方法，确保获取正确的设备名称
-    final deviceName = _bleController.getDeviceName(result.device);
+    String deviceName = _bleController.getDeviceName(result.device);
+
+    // 如果从BleController获取的名称为"未知设备"，尝试从扫描结果中获取
+    if (deviceName == '未知设备' || deviceName.isEmpty) {
+      if (result.advertisementData.advName != null &&
+          result.advertisementData.advName!.isNotEmpty) {
+        deviceName = result.advertisementData.advName!;
+      }
+    }
+
+    // 更新已保存设备的名称（如果设备名称有更新）
+    final savedDevice = savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+    if (savedDevice != null && deviceName != '未知设备' &&
+        deviceName.isNotEmpty && savedDevice.deviceName != deviceName) {
+      debugPrint('更新已保存设备名称: ${savedDevice.deviceName} -> $deviceName');
+      savedDevice.deviceName = deviceName;
+      // 更新数据库中的设备名称
+      _dbService.updateDeviceName(deviceId, deviceName);
+    }
+
+    // 更新选中设备的名称（如果设备名称有更新）
+    final selectedDevice = selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+    if (selectedDevice != null && deviceName != '未知设备' &&
+        deviceName.isNotEmpty && selectedDevice.deviceName != deviceName) {
+      debugPrint('更新选中设备名称: ${selectedDevice.deviceName} -> $deviceName');
+      selectedDevice.deviceName = deviceName;
+    }
 
     // 输出广播包内容的详细日志
     debugPrint('=== 设备广播包内容 ===');

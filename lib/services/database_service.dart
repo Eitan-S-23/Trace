@@ -286,6 +286,21 @@ class DatabaseService {
     });
   }
 
+  /// 更新设备名称
+  Future<void> updateDeviceName(String deviceId, String newName) async {
+    final db = await database;
+    await db.update(
+      'devices',
+      {
+        'deviceName': newName,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'deviceId = ?',
+      whereArgs: [deviceId],
+    );
+    debugPrint('数据库更新设备名称: $deviceId -> $newName');
+  }
+
   /// 保存设备数据
   Future<void> saveDeviceData(DeviceData data) async {
     final db = await database;
