@@ -358,7 +358,9 @@ class AlertService extends GetxController {
             pattern: [0, 300, 200, 400, 200, 500, 200, 300]);
         debugPrint('报警震动已触发');
       } else {
-        debugPrint('设备不支持震动');
+        debugPrint('设备不支持震动（如Windows），但仍会显示通知');
+        // Windows不支持震动，但不应该静默失败
+        // 通知和弹窗会在_triggerAlert中处理
       }
     } catch (e) {
       debugPrint('震动失败: $e');
@@ -479,6 +481,16 @@ class AlertService extends GetxController {
     }
   }
 
+  /// 停止播放报警声音
+  Future<void> stopAlertSound() async {
+    try {
+      await _audioPlayer.stop();
+      debugPrint('报警声音已停止');
+    } catch (e) {
+      debugPrint('停止声音失败: $e');
+    }
+  }
+
   /// 显示报警对话框
   void _showAlertDialog(
       String deviceName, List<String> exceededItems, String dialogHash) {
@@ -533,8 +545,10 @@ class AlertService extends GetxController {
           ),
           actions: [
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Get.back();
+                // 停止播放报警声音
+                await stopAlertSound();
                 // 标记对话框已关闭
                 _isAlertDialogShowing = false;
                 _currentAlertDialogHash = null;
@@ -542,8 +556,10 @@ class AlertService extends GetxController {
               child: const Text('确定'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 Get.back();
+                // 停止播放报警声音
+                await stopAlertSound();
                 // 标记对话框已关闭
                 _isAlertDialogShowing = false;
                 _currentAlertDialogHash = null;
@@ -559,8 +575,9 @@ class AlertService extends GetxController {
           ],
         ),
         barrierDismissible: false, // 不允许点击外部关闭
-      ).then((_) {
-        // 确保在对话框被意外关闭时也能重置状态
+      ).then((_) async {
+        // 确保在对话框被意外关闭时也能重置状态和停止声音
+        await stopAlertSound();
         _isAlertDialogShowing = false;
         _currentAlertDialogHash = null;
       });
