@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
@@ -74,77 +75,151 @@ class ManufacturerDataParser {
   static DeviceData? parseManufacturerData(
       String deviceId, String deviceName, List<int> data,
       {BleDataType dataType = BleDataType.advertisement}) {
-    try {
-      if (data.length < 7) {
-        debugPrint('数据长度不足，需要至少7字节，实际: ${data.length}');
-        return null; // 数据长度不足
+    if (Platform.isWindows) {
+      try {
+        if (data.length < 7) {
+          debugPrint('数据长度不足，需要至少7字节，实际: ${data.length}');
+          return null; // 数据长度不足
+        }
+
+        // 打印原始数据用于调试
+        debugPrint(
+            '解析制造商数据: ${data.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
+
+        // 解析设备ID (前2字节，小端序)
+        int parsedDeviceId = data[0] | (data[1] << 8);
+        debugPrint(
+            '解析的设备ID: 0x${parsedDeviceId.toRadixString(16).padLeft(4, '0')}');
+
+        // 解析电流值 (第3-4字节，第4字节为高位)
+        int currentRaw = data[2] | (data[3] << 8);
+        debugPrint('电流原始值: $currentRaw');
+
+        // 解析电流单位 (第5字节)
+        int currentUnitCode = data[4];
+        String currentUnit;
+        double currentMultiplier;
+
+        switch (currentUnitCode) {
+          case 1:
+            currentUnit = 'nA';
+            currentMultiplier = 1e-9; // 转换为A
+            break;
+          case 10:
+            currentUnit = 'uA';
+            currentMultiplier = 1e-6; // 转换为A
+            break;
+          case 50:
+            currentUnit = 'mA';
+            currentMultiplier = 1e-3; // 转换为A
+            break;
+          case 100:
+            currentUnit = 'A';
+            currentMultiplier = 1; // 已经是A
+            break;
+          default:
+            debugPrint('未知的电流单位代码: $currentUnitCode');
+            return null; // 未知单位
+        }
+        debugPrint('电流单位: $currentUnit');
+
+        // 解析电压值 (第6-7字节，第7字节为高位，单位mV)
+        int voltageRaw = data[5] | (data[6] << 8);
+        double voltage = voltageRaw.toDouble(); // mV
+        debugPrint('电压值: $voltage mV');
+
+        // 计算实际电流值
+        double current = currentRaw * currentMultiplier;
+        debugPrint('电流值: $current A ($currentRaw $currentUnit)');
+
+        // 计算功率 (P = V * I)，电压转换为V
+        double power = (voltage / 1000.0) * current * 1000.0; // 转换为mW
+        debugPrint('功率值: $power mW');
+
+        return DeviceData(
+          deviceId: deviceId,
+          deviceName: deviceName,
+          timestamp: DateTime.now(),
+          current: currentRaw.toDouble(), // 保持原始值用于显示
+          currentUnit: currentUnit,
+          voltage: voltage,
+          power: power,
+          dataType: dataType,
+        );
+      } catch (e) {
+        debugPrint('解析厂商数据失败: $e');
+        return null;
       }
+    } else {
+      try {
+        if (data.length < 5) {
+          debugPrint('数据长度不足，需要至少5字节，实际: ${data.length}');
+          return null; // 数据长度不足
+        }
 
-      // 打印原始数据用于调试
-      debugPrint('解析制造商数据: ${data.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
+        // 打印原始数据用于调试
+        debugPrint(
+            '解析制造商数据: ${data.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
 
-      // 解析设备ID (前2字节，小端序)
-      int parsedDeviceId = data[0] | (data[1] << 8);
-      debugPrint('解析的设备ID: 0x${parsedDeviceId.toRadixString(16).padLeft(4, '0')}');
+        // 解析电流值 (第1-2字节，第2字节为高位)
+        int currentRaw = data[0] | (data[1] << 8);
+        debugPrint('电流原始值: $currentRaw');
 
-      // 解析电流值 (第3-4字节，第4字节为高位)
-      int currentRaw = data[2] | (data[3] << 8);
-      debugPrint('电流原始值: $currentRaw');
+        // 解析电流单位 (第3字节)
+        int currentUnitCode = data[2];
+        String currentUnit;
+        double currentMultiplier;
 
-      // 解析电流单位 (第5字节)
-      int currentUnitCode = data[4];
-      String currentUnit;
-      double currentMultiplier;
+        switch (currentUnitCode) {
+          case 1:
+            currentUnit = 'nA';
+            currentMultiplier = 1e-9; // 转换为A
+            break;
+          case 10:
+            currentUnit = 'uA';
+            currentMultiplier = 1e-6; // 转换为A
+            break;
+          case 50:
+            currentUnit = 'mA';
+            currentMultiplier = 1e-3; // 转换为A
+            break;
+          case 100:
+            currentUnit = 'A';
+            currentMultiplier = 1; // 已经是A
+            break;
+          default:
+            debugPrint('未知的电流单位代码: $currentUnitCode');
+            return null; // 未知单位
+        }
+        debugPrint('电流单位: $currentUnit');
 
-      switch (currentUnitCode) {
-        case 1:
-          currentUnit = 'nA';
-          currentMultiplier = 1e-9; // 转换为A
-          break;
-        case 10:
-          currentUnit = 'uA';
-          currentMultiplier = 1e-6; // 转换为A
-          break;
-        case 50:
-          currentUnit = 'mA';
-          currentMultiplier = 1e-3; // 转换为A
-          break;
-        case 100:
-          currentUnit = 'A';
-          currentMultiplier = 1; // 已经是A
-          break;
-        default:
-          debugPrint('未知的电流单位代码: $currentUnitCode');
-          return null; // 未知单位
+        // 解析电压值 (第4-5字节，第5字节为高位，单位mV)
+        int voltageRaw = data[3] | (data[4] << 8);
+        double voltage = voltageRaw.toDouble(); // mV
+        debugPrint('电压值: $voltage mV');
+
+        // 计算实际电流值
+        double current = currentRaw * currentMultiplier;
+        debugPrint('电流值: $current A ($currentRaw $currentUnit)');
+
+        // 计算功率 (P = V * I)，电压转换为V
+        double power = (voltage / 1000.0) * current * 1000.0; // 转换为mW
+        debugPrint('功率值: $power mW');
+
+        return DeviceData(
+          deviceId: deviceId,
+          deviceName: deviceName,
+          timestamp: DateTime.now(),
+          current: currentRaw.toDouble(), // 保持原始值用于显示
+          currentUnit: currentUnit,
+          voltage: voltage,
+          power: power,
+          dataType: dataType,
+        );
+      } catch (e) {
+        debugPrint('解析厂商数据失败: $e');
+        return null;
       }
-      debugPrint('电流单位: $currentUnit');
-
-      // 解析电压值 (第6-7字节，第7字节为高位，单位mV)
-      int voltageRaw = data[5] | (data[6] << 8);
-      double voltage = voltageRaw.toDouble(); // mV
-      debugPrint('电压值: $voltage mV');
-
-      // 计算实际电流值
-      double current = currentRaw * currentMultiplier;
-      debugPrint('电流值: $current A ($currentRaw $currentUnit)');
-
-      // 计算功率 (P = V * I)，电压转换为V
-      double power = (voltage / 1000.0) * current * 1000.0; // 转换为mW
-      debugPrint('功率值: $power mW');
-
-      return DeviceData(
-        deviceId: deviceId,
-        deviceName: deviceName,
-        timestamp: DateTime.now(),
-        current: currentRaw.toDouble(), // 保持原始值用于显示
-        currentUnit: currentUnit,
-        voltage: voltage,
-        power: power,
-        dataType: dataType,
-      );
-    } catch (e) {
-      debugPrint('解析厂商数据失败: $e');
-      return null;
     }
   }
 

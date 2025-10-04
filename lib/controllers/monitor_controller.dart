@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -40,15 +41,15 @@ class MonitorController extends GetxController {
   Timer? _activeScanTimer;
   Timer? _healthCheckTimer;
   Timer? _consumptionArraySaveTimer;
-  Timer? _batchSaveTimer;  // 新增：批量保存定时器
+  Timer? _batchSaveTimer; // 新增：批量保存定时器
 
   // 监控订阅
   StreamSubscription<List<ScanResult>>? _scanSubscription;
 
   // 数据缓存，用于去重和批量保存
-  final Map<String, DeviceData> _latestDataCache = {};  // 设备ID -> 最新数据
-  final Map<String, DateTime> _lastSaveTime = {};  // 设备ID -> 最后保存时间
-  final List<DeviceData> _pendingSaveData = [];  // 待保存的数据列表
+  final Map<String, DeviceData> _latestDataCache = {}; // 设备ID -> 最新数据
+  final Map<String, DateTime> _lastSaveTime = {}; // 设备ID -> 最后保存时间
+  final List<DeviceData> _pendingSaveData = []; // 待保存的数据列表
 
   @override
   void onInit() {
@@ -64,7 +65,7 @@ class MonitorController extends GetxController {
     _activeScanTimer?.cancel();
     _healthCheckTimer?.cancel();
     _consumptionArraySaveTimer?.cancel();
-    _batchSaveTimer?.cancel();  // 清理批量保存定时器
+    _batchSaveTimer?.cancel(); // 清理批量保存定时器
     _scanIntervalWorker?.dispose();
     _scanSubscription?.cancel();
 
@@ -189,13 +190,13 @@ class MonitorController extends GetxController {
       // 去重：相同地址只处理一次
       if (!uniqueIds.add(deviceId)) continue;
 
-      debugPrint('检查设备: $deviceId');
+      //debugPrint('检查设备: $deviceId');
 
       // 检查是否是已保存或选中的设备
       bool isTargetDevice = savedDevices.any((d) => d.deviceId == deviceId) ||
           selectedDevices.any((d) => d.deviceId == deviceId);
 
-      debugPrint('是否为目标设备: $isTargetDevice');
+      //debugPrint('是否为目标设备: $isTargetDevice');
 
       if (isTargetDevice) {
         debugPrint('处理目标设备数据: $deviceId');
@@ -219,9 +220,12 @@ class MonitorController extends GetxController {
     }
 
     // 更新已保存设备的名称（如果设备名称有更新）
-    final savedDevice = savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
-    if (savedDevice != null && deviceName != '未知设备' &&
-        deviceName.isNotEmpty && savedDevice.deviceName != deviceName) {
+    final savedDevice =
+        savedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+    if (savedDevice != null &&
+        deviceName != '未知设备' &&
+        deviceName.isNotEmpty &&
+        savedDevice.deviceName != deviceName) {
       debugPrint('更新已保存设备名称: ${savedDevice.deviceName} -> $deviceName');
       savedDevice.deviceName = deviceName;
       // 更新数据库中的设备名称
@@ -229,9 +233,12 @@ class MonitorController extends GetxController {
     }
 
     // 更新选中设备的名称（如果设备名称有更新）
-    final selectedDevice = selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
-    if (selectedDevice != null && deviceName != '未知设备' &&
-        deviceName.isNotEmpty && selectedDevice.deviceName != deviceName) {
+    final selectedDevice =
+        selectedDevices.firstWhereOrNull((d) => d.deviceId == deviceId);
+    if (selectedDevice != null &&
+        deviceName != '未知设备' &&
+        deviceName.isNotEmpty &&
+        selectedDevice.deviceName != deviceName) {
       debugPrint('更新选中设备名称: ${selectedDevice.deviceName} -> $deviceName');
       selectedDevice.deviceName = deviceName;
     }
@@ -244,8 +251,28 @@ class MonitorController extends GetxController {
     debugPrint('广播数据长度: ${result.advertisementData.manufacturerData.length}');
 
     // 打印制造商数据内容
+    if (!Platform.isWindows) {
+      for (var entry in result.advertisementData.manufacturerData.entries) {
+        debugPrint(
+            '制造商ID: 0x${(entry.value[1] | (entry.value[0] << 8)).toRadixString(16).padLeft(4, '0')}');
+        debugPrint(
+            '数据内容 (16进制): ${entry.value.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+        debugPrint('数据内容 (10进制): ${entry.value.join(', ')}');
+        debugPrint('数据长度: ${entry.value.length} 字节');
+      }
+    } else {
+      for (var entry in result.advertisementData.manufacturerData.entries) {
+        debugPrint('制造商ID: 0x${entry.key.toRadixString(16).padLeft(4, '0')}');
+        debugPrint(
+            '数据内容 (16进制): ${entry.value.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
+        debugPrint('数据内容 (10进制): ${entry.value.join(', ')}');
+        debugPrint('数据长度: ${entry.value.length} 字节');
+      }
+    }
+
     for (var entry in result.advertisementData.manufacturerData.entries) {
-      debugPrint('制造商ID: 0x${entry.key.toRadixString(16).padLeft(4, '0')}');
+      debugPrint(
+          '制造商ID: 0x${(entry.value[1] | (entry.value[0] << 8)).toRadixString(16).padLeft(4, '0')}');
       debugPrint(
           '数据内容 (16进制): ${entry.value.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
       debugPrint('数据内容 (10进制): ${entry.value.join(', ')}');
@@ -265,7 +292,7 @@ class MonitorController extends GetxController {
 
     // 打印服务UUID列表
     if (result.advertisementData.serviceUuids.isNotEmpty) {
-      debugPrint('服务UUID: ${result.advertisementData.serviceUuids.join(', ')}');
+      //debugPrint('服务UUID: ${result.advertisementData.serviceUuids.join(', ')}');
     }
 
     debugPrint('可连接: ${result.advertisementData.connectable}');
@@ -281,7 +308,8 @@ class MonitorController extends GetxController {
     // 如果厂商数据为空，检查服务数据中是否有符合格式的数据
     else if (result.advertisementData.serviceData.isNotEmpty) {
       for (var entry in result.advertisementData.serviceData.entries) {
-        if (entry.value.length >= 7) {  // 修改为7字节
+        if (entry.value.length >= 7) {
+          // 修改为7字节
           final manufDataMap = <int, List<int>>{0xFFFF: entry.value};
           _parseDataPacket(
               deviceId, deviceName, manufDataMap, BleDataType.scanResponse);
@@ -311,7 +339,7 @@ class MonitorController extends GetxController {
     for (var entry in manufData.entries) {
       // 跳过空数据
       if (entry.value.isEmpty) {
-        debugPrint('设备 $deviceId 广播包数据为空，跳过');
+        //debugPrint('设备 $deviceId 广播包数据为空，跳过');
         continue;
       }
 
@@ -353,18 +381,23 @@ class MonitorController extends GetxController {
 
             // 如果数据相同，检查时间间隔
             if (isIdentical) {
-              final timeDiff = data.timestamp.difference(cachedData.timestamp).inMilliseconds;
+              final timeDiff = data.timestamp
+                  .difference(cachedData.timestamp)
+                  .inMilliseconds;
               if (timeDiff < 1000) {
                 // 1秒内的相同数据，跳过
-                debugPrint('跳过1秒内的重复数据: $deviceId - ${data.current}${data.currentUnit}');
+                debugPrint(
+                    '跳过1秒内的重复数据: $deviceId - ${data.current}${data.currentUnit}');
                 break;
               }
             } else {
               // 数据不同，但检查时间间隔是否太短
-              final timeDiff = data.timestamp.difference(cachedData.timestamp).inMilliseconds;
-              if (timeDiff < 200) {
-                // 200毫秒内的数据变化，可能是噪声，跳过
-                debugPrint('跳过200ms内的频繁数据: $deviceId - 间隔${timeDiff}ms');
+              final timeDiff = data.timestamp
+                  .difference(cachedData.timestamp)
+                  .inMilliseconds;
+              if (timeDiff < 1000) {
+                // 1000毫秒内的数据变化，可能是噪声，跳过
+                debugPrint('跳过1000ms内的频繁数据: $deviceId - 间隔${timeDiff}ms');
                 break;
               }
             }
@@ -559,7 +592,7 @@ class MonitorController extends GetxController {
     isMonitoring.value = false;
     _activeScanTimer?.cancel();
     _activeScanTimer = null;
-    _batchSaveTimer?.cancel();  // 停止批量保存定时器
+    _batchSaveTimer?.cancel(); // 停止批量保存定时器
     _batchSaveTimer = null;
 
     // 停止监控时立即保存所有待保存的数据
@@ -594,7 +627,8 @@ class MonitorController extends GetxController {
         await _savePendingData();
 
         // 获取数据库中已有的数据条数
-        final existingDataCount = await _dbService.getDeviceDataCount(device.deviceId);
+        final existingDataCount =
+            await _dbService.getDeviceDataCount(device.deviceId);
         debugPrint('设备 ${device.deviceName} 数据库中已有 $existingDataCount 条数据');
 
         // 只保存新增的数据（内存中有但数据库中没有的）
@@ -603,14 +637,17 @@ class MonitorController extends GetxController {
           debugPrint('准备保存 ${device.dataHistory.length} 条历史数据');
 
           // 获取最近的一些数据用于去重比较
-          final recentDbData = await _dbService.getLatestDeviceData(device.deviceId, 100);
-          final recentTimestamps = recentDbData.map((d) =>
-            d.timestamp.millisecondsSinceEpoch ~/ 1000).toSet();
+          final recentDbData =
+              await _dbService.getLatestDeviceData(device.deviceId, 100);
+          final recentTimestamps = recentDbData
+              .map((d) => d.timestamp.millisecondsSinceEpoch ~/ 1000)
+              .toSet();
 
           // 筛选出真正需要保存的新数据
           final newDataToSave = <DeviceData>[];
           for (var data in device.dataHistory) {
-            final timestampInSeconds = data.timestamp.millisecondsSinceEpoch ~/ 1000;
+            final timestampInSeconds =
+                data.timestamp.millisecondsSinceEpoch ~/ 1000;
             if (!recentTimestamps.contains(timestampInSeconds)) {
               newDataToSave.add(data);
             }
@@ -643,7 +680,6 @@ class MonitorController extends GetxController {
       // 重要：保存成功后，重新加载数据以确保一致性
       // 这样可以确保内存中的数据与数据库同步
       await _loadSavedDevices();
-
     } catch (e) {
       debugPrint('保存设备失败: $e');
       Get.snackbar('错误', '保存设备失败: $e', snackPosition: SnackPosition.BOTTOM);
@@ -784,24 +820,41 @@ class MonitorController extends GetxController {
     // - 第3-4字节：电流大小（第4字节为高位）
     // - 第5字节：电流单位（1=nA, 10=uA, 50=mA, 100=A）
     // - 第6-7字节：电压大小（第7字节为高位），单位恒定为mV
+    if (Platform.isWindows) {
+      if (data.length < 7) {
+        return {'isValid': false, 'error': '数据长度不足：需要至少7字节，当前${data.length}字节'};
+      }
+      // 验证电流单位（第5字节）
+      final currentUnit = data[4];
+      if (currentUnit != 1 &&
+          currentUnit != 10 &&
+          currentUnit != 50 &&
+          currentUnit != 100) {
+        return {
+          'isValid': false,
+          'error': '电流单位无效：第5字节应为1(nA)、10(uA)、50(mA)或100(A)，当前为$currentUnit'
+        };
+      }
 
-    if (data.length < 7) {
-      return {'isValid': false, 'error': '数据长度不足：需要至少7字节，当前${data.length}字节'};
+      return {'isValid': true, 'error': ''};
+    } else {
+      if (data.length < 5) {
+        return {'isValid': false, 'error': '数据长度不足：需要至少5字节，当前${data.length}字节'};
+      }
+      // 验证电流单位（第5字节）
+      final currentUnit = data[2];
+      if (currentUnit != 1 &&
+          currentUnit != 10 &&
+          currentUnit != 50 &&
+          currentUnit != 100) {
+        return {
+          'isValid': false,
+          'error': '电流单位无效：第3字节应为1(nA)、10(uA)、50(mA)或100(A)，当前为$currentUnit'
+        };
+      }
+
+      return {'isValid': true, 'error': ''};
     }
-
-    // 验证电流单位（第5字节）
-    final currentUnit = data[4];
-    if (currentUnit != 1 &&
-        currentUnit != 10 &&
-        currentUnit != 50 &&
-        currentUnit != 100) {
-      return {
-        'isValid': false,
-        'error': '电流单位无效：第5字节应为1(nA)、10(uA)、50(mA)或100(A)，当前为$currentUnit'
-      };
-    }
-
-    return {'isValid': true, 'error': ''};
   }
 
   /// 显示格式错误通知
@@ -977,13 +1030,19 @@ class MonitorController extends GetxController {
   void _addToPendingSave(DeviceData data) {
     // 检查是否需要去重
     bool isDuplicate = false;
-    for (int i = _pendingSaveData.length - 1; i >= 0 && i >= _pendingSaveData.length - 10; i--) {
+    for (int i = _pendingSaveData.length - 1;
+        i >= 0 && i >= _pendingSaveData.length - 10;
+        i--) {
       final existingData = _pendingSaveData[i];
       if (existingData.deviceId == data.deviceId) {
         // 检查是否是重复数据
         if (existingData.current == data.current &&
             existingData.voltage == data.voltage &&
-            existingData.timestamp.difference(data.timestamp).abs().inMilliseconds < 1000) {
+            existingData.timestamp
+                    .difference(data.timestamp)
+                    .abs()
+                    .inMilliseconds <
+                1000) {
           isDuplicate = true;
           debugPrint('批量保存队列中发现重复数据，跳过: ${data.deviceId}');
           break;
@@ -1037,14 +1096,16 @@ class MonitorController extends GetxController {
 
         for (var data in deviceDataList) {
           // 创建唯一标识符（时间戳精确到秒 + 数据内容）
-          final timestamp = (data.timestamp.millisecondsSinceEpoch ~/ 1000).toString();
+          final timestamp =
+              (data.timestamp.millisecondsSinceEpoch ~/ 1000).toString();
           final dataHash = '$timestamp-${data.current}-${data.voltage}';
 
           if (!seenData.contains(dataHash)) {
             seenData.add(dataHash);
             uniqueData.add(data);
           } else {
-            debugPrint('批量保存时去重: ${data.deviceId} - ${data.current}${data.currentUnit}');
+            debugPrint(
+                '批量保存时去重: ${data.deviceId} - ${data.current}${data.currentUnit}');
           }
         }
 
@@ -1065,5 +1126,4 @@ class MonitorController extends GetxController {
       debugPrint('批量保存数据失败: $e');
     }
   }
-
 }

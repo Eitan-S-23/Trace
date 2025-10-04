@@ -1098,11 +1098,11 @@ class DeviceDetailPage extends StatelessWidget {
   }
 
   bool _checkDataFormat(List<int> data) {
-    // 检查是否符合指定格式：至少5字节，前2字节电流，第3字节单位，第4-5字节电压
-    if (data.length < 5) return false;
+    // 检查是否符合指定格式：至少7字节，前3 4字节电流，第5字节单位，第6-7字节电压
+    if (data.length < 7) return false;
 
     // 检查电流单位是否有效
-    final currentUnit = data[2];
+    final currentUnit = data[4];
     return currentUnit == 1 ||
         currentUnit == 10 ||
         currentUnit == 50 ||
@@ -1110,16 +1110,16 @@ class DeviceDetailPage extends StatelessWidget {
   }
 
   String _getFormatErrorMessage(List<int> data) {
-    if (data.length < 5) {
-      return '数据长度不足：需要至少5字节，当前${data.length}字节';
+    if (data.length < 7) {
+      return '数据长度不足：需要至少7字节，当前${data.length}字节';
     }
 
-    final currentUnit = data[2];
+    final currentUnit = data[4];
     if (currentUnit != 1 &&
         currentUnit != 10 &&
         currentUnit != 50 &&
         currentUnit != 100) {
-      return '电流单位无效：第3字节应为1(nA)、10(uA)、50(mA)或100(A)，当前为$currentUnit';
+      return '电流单位无效：第5字节应为1(nA)、10(uA)、50(mA)或100(A)，当前为$currentUnit';
     }
 
     return '数据格式错误';
