@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -319,34 +320,79 @@ class AlertService extends GetxController {
       if (customSoundPath != null && customSoundPath.isNotEmpty) {
         // 播放自定义铃声
         debugPrint('播放自定义铃声: $customSoundPath');
+        await _audioPlayer.stop(); // 停止之前的播放
         await _audioPlayer.play(DeviceFileSource(customSoundPath));
         debugPrint('自定义报警声音已播放');
       } else {
-        // 播放默认系统警告声音
-        debugPrint('播放默认系统警告声音');
-        for (int i = 0; i < 3; i++) {
-          await SystemSound.play(SystemSoundType.alert);
-          if (i < 2) await Future.delayed(const Duration(milliseconds: 500));
+        // 播放默认报警声音
+        debugPrint('播放默认报警声音');
+
+        // 在Windows上，SystemSound可能不工作，我们使用audioplayers播放一个生成的音调
+        // 或者播放Windows系统声音文件
+        try {
+          // 尝试播放Windows系统声音
+          if (Platform.isWindows) {
+            // Windows系统声音文件路径
+            const windowsAlertSound = r'C:\Windows\Media\Windows Notify System Generic.wav';
+            final soundFile = File(windowsAlertSound);
+
+            if (await soundFile.exists()) {
+              debugPrint('播放Windows系统提示音: $windowsAlertSound');
+              await _audioPlayer.stop(); // 停止之前的播放
+              await _audioPlayer.play(DeviceFileSource(windowsAlertSound));
+              debugPrint('Windows系统提示音已播放');
+            } else {
+              // 如果系统声音文件不存在，尝试其他Windows声音
+              final alternativeSounds = [
+                r'C:\Windows\Media\Windows Ding.wav',
+                r'C:\Windows\Media\Windows Error.wav',
+                r'C:\Windows\Media\Windows Exclamation.wav',
+                r'C:\Windows\Media\chord.wav',
+                r'C:\Windows\Media\notify.wav',
+              ];
+
+              bool soundPlayed = false;
+              for (String soundPath in alternativeSounds) {
+                final altSoundFile = File(soundPath);
+                if (await altSoundFile.exists()) {
+                  debugPrint('播放Windows系统声音: $soundPath');
+                  await _audioPlayer.stop();
+                  await _audioPlayer.play(DeviceFileSource(soundPath));
+                  soundPlayed = true;
+                  break;
+                }
+              }
+
+              if (!soundPlayed) {
+                debugPrint('未找到Windows系统声音文件，使用Flutter SystemSound');
+                // 回退到SystemSound（可能不工作）
+                for (int i = 0; i < 3; i++) {
+                  await SystemSound.play(SystemSoundType.click);
+                  if (i < 2) await Future.delayed(const Duration(milliseconds: 300));
+                }
+              }
+            }
+          } else {
+            // 非Windows平台，使用原有逻辑
+            for (int i = 0; i < 3; i++) {
+              await SystemSound.play(SystemSoundType.alert);
+              if (i < 2) await Future.delayed(const Duration(milliseconds: 500));
+            }
+          }
+        } catch (e) {
+          debugPrint('播放默认声音失败: $e');
+          // 最后的回退：使用SystemSound
+          try {
+            await SystemSound.play(SystemSoundType.click);
+          } catch (e2) {
+            debugPrint('SystemSound也失败: $e2');
+          }
         }
-        debugPrint('默认报警声音已播放');
+
+        debugPrint('默认报警声音处理完成');
       }
     } catch (e) {
       debugPrint('播放声音失败: $e');
-      // 如果自定义铃声播放失败，回退到系统声音
-      try {
-        for (int i = 0; i < 3; i++) {
-          await SystemSound.play(SystemSoundType.alert);
-          if (i < 2) await Future.delayed(const Duration(milliseconds: 500));
-        }
-      } catch (e2) {
-        debugPrint('系统声音也播放失败: $e2');
-        // 最后尝试使用assets中的默认声音
-        try {
-          await _audioPlayer.play(AssetSource('sounds/alert.mp3'));
-        } catch (e3) {
-          debugPrint('使用audioplayers播放assets声音也失败: $e3');
-        }
-      }
     }
   }
 

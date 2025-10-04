@@ -321,6 +321,7 @@ class DatabaseService {
   }
 
   /// 批量保存设备数据（替换该设备的所有历史数据）
+  /// 警告：此方法会删除该设备的所有现有数据！
   Future<void> saveDeviceDataBatch(List<DeviceData> dataList) async {
     if (dataList.isEmpty) return;
 
@@ -347,6 +348,33 @@ class DatabaseService {
 
     await batch.commit(noResult: true);
     debugPrint('批量保存 ${dataList.length} 条数据到设备 $deviceId（已替换该设备的历史数据）');
+  }
+
+  /// 批量追加设备数据（不删除现有数据，只添加新数据）
+  /// 这是更安全的保存方法，用于追加新的监控数据
+  Future<void> appendDeviceDataBatch(List<DeviceData> dataList) async {
+    if (dataList.isEmpty) return;
+
+    final db = await database;
+    final deviceId = dataList.first.deviceId;
+
+    // 使用事务确保数据一致性
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+
+      // 批量插入数据，使用IGNORE避免重复
+      for (var data in dataList) {
+        batch.insert(
+          'device_data',
+          data.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.ignore, // 忽略重复数据
+        );
+      }
+
+      await batch.commit(noResult: true);
+    });
+
+    debugPrint('批量追加 ${dataList.length} 条数据到设备 $deviceId');
   }
 
   /// 获取设备数据总数

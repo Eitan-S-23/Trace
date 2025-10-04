@@ -579,11 +579,51 @@ class MonitorController extends GetxController {
       for (var device in selectedDevices) {
         device.isMonitoring.value = true;
         debugPrint('保存设备: ${device.deviceId} - ${device.deviceName}');
+
+        // 先保存设备信息
         await _dbService.saveDevice(device);
 
-        // 保存设备的历史数据（仅追加新增的数据）
+        // 保存设备的历史数据
+        // 重要：这里不应该依赖于内存中的dataHistory
+        // 因为它可能会被清空或修改
+        // 正确的做法是：
+        // 1. 如果有待保存的数据，先保存待保存数据
+        // 2. 然后将内存中的新数据（尚未保存到数据库的）保存
+
+        // 先保存所有待保存的数据
+        await _savePendingData();
+
+        // 获取数据库中已有的数据条数
+        final existingDataCount = await _dbService.getDeviceDataCount(device.deviceId);
+        debugPrint('设备 ${device.deviceName} 数据库中已有 $existingDataCount 条数据');
+
+        // 只保存新增的数据（内存中有但数据库中没有的）
+        // 这需要更智能的去重逻辑
         if (device.dataHistory.isNotEmpty) {
-          await _dbService.saveDeviceDataBatch(device.dataHistory);
+          debugPrint('准备保存 ${device.dataHistory.length} 条历史数据');
+
+          // 获取最近的一些数据用于去重比较
+          final recentDbData = await _dbService.getLatestDeviceData(device.deviceId, 100);
+          final recentTimestamps = recentDbData.map((d) =>
+            d.timestamp.millisecondsSinceEpoch ~/ 1000).toSet();
+
+          // 筛选出真正需要保存的新数据
+          final newDataToSave = <DeviceData>[];
+          for (var data in device.dataHistory) {
+            final timestampInSeconds = data.timestamp.millisecondsSinceEpoch ~/ 1000;
+            if (!recentTimestamps.contains(timestampInSeconds)) {
+              newDataToSave.add(data);
+            }
+          }
+
+          if (newDataToSave.isNotEmpty) {
+            debugPrint('实际需要保存 ${newDataToSave.length} 条新数据');
+            // 使用appendDeviceDataBatch而不是saveDeviceDataBatch
+            // 这样不会删除已有的数据
+            await _dbService.appendDeviceDataBatch(newDataToSave);
+          } else {
+            debugPrint('没有新数据需要保存（所有数据已在数据库中）');
+          }
         }
 
         // 保存耗电量统计数组到数据库
@@ -599,6 +639,11 @@ class MonitorController extends GetxController {
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
           colorText: Colors.white);
+
+      // 重要：保存成功后，重新加载数据以确保一致性
+      // 这样可以确保内存中的数据与数据库同步
+      await _loadSavedDevices();
+
     } catch (e) {
       debugPrint('保存设备失败: $e');
       Get.snackbar('错误', '保存设备失败: $e', snackPosition: SnackPosition.BOTTOM);
@@ -1004,8 +1049,8 @@ class MonitorController extends GetxController {
         }
 
         if (uniqueData.isNotEmpty) {
-          // 批量保存到数据库
-          await _dbService.saveDeviceDataBatch(uniqueData);
+          // 批量保存到数据库 - 使用追加方式而不是替换
+          await _dbService.appendDeviceDataBatch(uniqueData);
           debugPrint('成功保存设备 $deviceId 的 ${uniqueData.length} 条唯一数据');
         }
       }

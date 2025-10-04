@@ -9,7 +9,8 @@
       "Bash(flutter test test/manufacturer_data_test.dart)",
       "Bash(flutter analyze lib/services/alert_service.dart)",
       "Bash(flutter analyze lib/services/bluetooth_service.dart lib/services/alert_service.dart)",
-      "Bash(flutter analyze lib/services/database_service.dart lib/services/alert_service.dart)"
+      "Bash(flutter analyze lib/services/database_service.dart lib/services/alert_service.dart)",
+      "Bash(flutter analyze lib/services/alert_service.dart lib/services/database_service.dart lib/controllers/monitor_controller.dart)"
     ],
     "deny": [],
     "ask": []
