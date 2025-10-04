@@ -227,7 +227,7 @@ class AlertService extends GetxController {
 
         // 然后触发报警
         await _triggerAlert(
-            data.deviceName, exceededThresholds, settings.alertType);
+            data.deviceName, exceededThresholds, settings);
       } else {
         // 没有异常，清除上次的异常数据哈希
         _lastAlertDataHash.remove(data.deviceId);
@@ -247,13 +247,14 @@ class AlertService extends GetxController {
 
   /// 触发报警
   Future<void> _triggerAlert(String deviceName, List<String> exceededItems,
-      AlertType alertType) async {
+      DeviceSettings settings) async {
     final message = '设备 $deviceName 异常:\n${exceededItems.join('\n')}';
 
     debugPrint('=== 开始触发报警 ===');
     debugPrint('设备: $deviceName');
     debugPrint('异常项目: ${exceededItems.join(', ')}');
-    debugPrint('报警类型: $alertType');
+    debugPrint('报警类型: ${settings.alertType}');
+    debugPrint('自定义铃声路径: ${settings.customSoundPath}');
 
     // 显示应用内通知（仅当前台运行时显示）
     if (Get.context != null) {
@@ -306,7 +307,7 @@ class AlertService extends GetxController {
         debugPrint('相同的报警对话框已显示，跳过重复显示');
       }
     } else {
-      debugPrint('Get.context为null，跳过前台通知显示');
+      debugPrint('Get.context为null，跳过前台通知显示，但仍触发声音和系统通知');
     }
 
     // 始终显示后台通知（无论前台后台）
@@ -322,33 +323,22 @@ class AlertService extends GetxController {
 
     debugPrint('报警消息: $message');
 
-    // 获取设备设置，以获取自定义铃声路径
-    final deviceId = _deviceSettingsCache.keys.firstWhere(
-      (id) => _deviceSettingsCache[id]?.deviceId == deviceName,
-      orElse: () => '',
-    );
-    final settings =
-        deviceId.isNotEmpty ? _deviceSettingsCache[deviceId] : null;
-
-    debugPrint(
-        '设备设置获取: deviceId=$deviceId, customSoundPath=${settings?.customSoundPath}');
-
     // 根据设置触发震动和/或声音
     try {
-      switch (alertType) {
+      switch (settings.alertType) {
         case AlertType.vibration:
           debugPrint('触发震动报警');
           await _triggerVibration();
           break;
         case AlertType.sound:
           debugPrint('触发铃声报警');
-          await _playAlertSound(settings?.customSoundPath);
+          await _playAlertSound(settings.customSoundPath);
           break;
         case AlertType.both:
           debugPrint('触发震动+铃声报警');
           await Future.wait([
             _triggerVibration(),
-            _playAlertSound(settings?.customSoundPath),
+            _playAlertSound(settings.customSoundPath),
           ]);
           break;
       }

@@ -31,7 +31,7 @@ class DeviceSettings {
     this.powerUnit = 'W',
     this.powerConsumptionUnit = 'mAh',
     this.alertEnabled = true,
-    this.alertType = AlertType.vibration,
+    this.alertType = AlertType.sound,  // 改为声音，因为Windows不支持振动
     this.customSoundPath,
   });
 
