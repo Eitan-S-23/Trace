@@ -226,8 +226,7 @@ class AlertService extends GetxController {
         _lastAlertDataHash[data.deviceId] = currentDataHash;
 
         // 然后触发报警
-        await _triggerAlert(
-            data.deviceName, exceededThresholds, settings);
+        await _triggerAlert(data.deviceName, exceededThresholds, settings);
       } else {
         // 没有异常，清除上次的异常数据哈希
         _lastAlertDataHash.remove(data.deviceId);
@@ -564,7 +563,7 @@ class AlertService extends GetxController {
                 _isAlertDialogShowing = false;
                 _currentAlertDialogHash = null;
                 // 可以跳转到设备详情页面
-                Get.toNamed('/device-detail');
+                Get.toNamed('/monitor');
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
