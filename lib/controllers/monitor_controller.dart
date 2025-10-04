@@ -10,7 +10,7 @@ import '../services/alert_service.dart';
 import 'ble_controller.dart';
 
 // 定义数据记录的最大条数
-const int MAX_DATA_RECORDS = 86400;
+const int MAX_DATA_RECORDS = 2592000;
 
 class MonitorController extends GetxController {
   static MonitorController get to => Get.find();

@@ -8,6 +8,7 @@ import 'monitor_page.dart';
 import 'saved_devices_page.dart';
 import 'scan_settings_page.dart';
 import 'device_comparison_page.dart';
+import 'device_detail_page.dart';
 import '../widgets/selectable_device_card.dart';
 
 class PowerMeterPage extends StatelessWidget {
@@ -239,7 +240,9 @@ class PowerMeterPage extends StatelessWidget {
                           isConnected: false,
                           isSelected:
                               monitorController.isDeviceSelected(device),
-                          onTap: () {},
+                          onTap: () {
+                            Get.to(() => DeviceDetailPage(device: device));
+                          },
                           onSelect: () =>
                               monitorController.selectDevice(device),
                           onConnect: () {},
