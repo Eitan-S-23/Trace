@@ -41,12 +41,39 @@ class AlertService extends GetxController {
   void onInit() {
     super.onInit();
     _loadAllDeviceSettings();
+    _initializeAudioPlayer();
   }
 
   @override
   void onClose() {
     _audioPlayer.dispose();
     super.onClose();
+  }
+
+  /// 初始化音频播放器
+  void _initializeAudioPlayer() {
+    try {
+      // 设置音频播放器配置
+      _audioPlayer.setReleaseMode(ReleaseMode.stop);
+      _audioPlayer.setPlayerMode(PlayerMode.mediaPlayer);
+
+      // 设置音量（确保默认音量不为0）
+      _audioPlayer.setVolume(1.0);
+
+      // 监听播放状态
+      _audioPlayer.onPlayerStateChanged.listen((PlayerState state) {
+        debugPrint('音频播放器状态: $state');
+      });
+
+      // 监听播放完成
+      _audioPlayer.onPlayerComplete.listen((event) {
+        debugPrint('音频播放完成');
+      });
+
+      debugPrint('音频播放器初始化完成');
+    } catch (e) {
+      debugPrint('音频播放器初始化失败: $e');
+    }
   }
 
   /// 加载所有设备设置到缓存
@@ -163,14 +190,17 @@ class AlertService extends GetxController {
       // 如果有超出阈值的项目，触发报警
       if (exceededThresholds.isNotEmpty) {
         // 创建当前异常数据的哈希值
-        final currentDataHash = '${data.current}_${data.voltage}_${data.power}_${powerConsumption}';
+        final currentDataHash =
+            '${data.current}_${data.voltage}_${data.power}_${powerConsumption}';
 
         // 首先检查基本的冷却时间（所有报警间隔至少5秒）
         final lastAlert = _lastAlertTime[data.deviceId];
         if (lastAlert != null) {
-          final timeSinceLastAlert = DateTime.now().difference(lastAlert).inSeconds;
+          final timeSinceLastAlert =
+              DateTime.now().difference(lastAlert).inSeconds;
           if (timeSinceLastAlert < alertCooldownSeconds) {
-            debugPrint('距离上次报警仅${timeSinceLastAlert}秒，需要等待${alertCooldownSeconds - timeSinceLastAlert}秒');
+            debugPrint(
+                '距离上次报警仅${timeSinceLastAlert}秒，需要等待${alertCooldownSeconds - timeSinceLastAlert}秒');
             return;
           }
         }
@@ -180,8 +210,10 @@ class AlertService extends GetxController {
         if (lastDataHash == currentDataHash) {
           // 相同的异常数据，需要更长的冷却时间
           if (lastAlert != null) {
-            final timeSinceLastAlert = DateTime.now().difference(lastAlert).inSeconds;
-            if (timeSinceLastAlert < 60) {  // 相同数据60秒内只报警一次
+            final timeSinceLastAlert =
+                DateTime.now().difference(lastAlert).inSeconds;
+            if (timeSinceLastAlert < 60) {
+              // 相同数据60秒内只报警一次
               debugPrint('相同异常数据${timeSinceLastAlert}秒内已报警，跳过');
               return;
             }
@@ -194,7 +226,8 @@ class AlertService extends GetxController {
         _lastAlertDataHash[data.deviceId] = currentDataHash;
 
         // 然后触发报警
-        await _triggerAlert(data.deviceName, exceededThresholds, settings.alertType);
+        await _triggerAlert(
+            data.deviceName, exceededThresholds, settings.alertType);
       } else {
         // 没有异常，清除上次的异常数据哈希
         _lastAlertDataHash.remove(data.deviceId);
@@ -217,13 +250,20 @@ class AlertService extends GetxController {
       AlertType alertType) async {
     final message = '设备 $deviceName 异常:\n${exceededItems.join('\n')}';
 
+    debugPrint('=== 开始触发报警 ===');
+    debugPrint('设备: $deviceName');
+    debugPrint('异常项目: ${exceededItems.join(', ')}');
+    debugPrint('报警类型: $alertType');
+
     // 显示应用内通知（仅当前台运行时显示）
     if (Get.context != null) {
       // 检查是否需要显示Snackbar（避免短时间内重复显示相同内容）
       bool shouldShowSnackbar = true;
       if (_lastSnackbarMessage == message && _lastSnackbarTime != null) {
-        final timeSinceLastSnackbar = DateTime.now().difference(_lastSnackbarTime!).inSeconds;
-        if (timeSinceLastSnackbar < 8) {  // 8秒内不重复显示相同的Snackbar
+        final timeSinceLastSnackbar =
+            DateTime.now().difference(_lastSnackbarTime!).inSeconds;
+        if (timeSinceLastSnackbar < 8) {
+          // 8秒内不重复显示相同的Snackbar
           shouldShowSnackbar = false;
           debugPrint('相同的Snackbar在${timeSinceLastSnackbar}秒前已显示，跳过');
         }
@@ -253,6 +293,7 @@ class AlertService extends GetxController {
 
         _lastSnackbarMessage = message;
         _lastSnackbarTime = DateTime.now();
+        debugPrint('Snackbar通知已显示');
       }
 
       // 创建对话框内容的哈希值，用于去重
@@ -264,38 +305,58 @@ class AlertService extends GetxController {
       } else {
         debugPrint('相同的报警对话框已显示，跳过重复显示');
       }
+    } else {
+      debugPrint('Get.context为null，跳过前台通知显示');
     }
 
     // 始终显示后台通知（无论前台后台）
-    await _notificationService.showDeviceAlertNotification(
-      deviceName: deviceName,
-      exceededItems: exceededItems,
-    );
+    try {
+      await _notificationService.showDeviceAlertNotification(
+        deviceName: deviceName,
+        exceededItems: exceededItems,
+      );
+      debugPrint('后台通知已发送');
+    } catch (e) {
+      debugPrint('发送后台通知失败: $e');
+    }
 
-    debugPrint('报警已触发: $message');
+    debugPrint('报警消息: $message');
 
     // 获取设备设置，以获取自定义铃声路径
     final deviceId = _deviceSettingsCache.keys.firstWhere(
       (id) => _deviceSettingsCache[id]?.deviceId == deviceName,
       orElse: () => '',
     );
-    final settings = deviceId.isNotEmpty ? _deviceSettingsCache[deviceId] : null;
+    final settings =
+        deviceId.isNotEmpty ? _deviceSettingsCache[deviceId] : null;
+
+    debugPrint(
+        '设备设置获取: deviceId=$deviceId, customSoundPath=${settings?.customSoundPath}');
 
     // 根据设置触发震动和/或声音
-    switch (alertType) {
-      case AlertType.vibration:
-        await _triggerVibration();
-        break;
-      case AlertType.sound:
-        await _playAlertSound(settings?.customSoundPath);
-        break;
-      case AlertType.both:
-        await Future.wait([
-          _triggerVibration(),
-          _playAlertSound(settings?.customSoundPath),
-        ]);
-        break;
+    try {
+      switch (alertType) {
+        case AlertType.vibration:
+          debugPrint('触发震动报警');
+          await _triggerVibration();
+          break;
+        case AlertType.sound:
+          debugPrint('触发铃声报警');
+          await _playAlertSound(settings?.customSoundPath);
+          break;
+        case AlertType.both:
+          debugPrint('触发震动+铃声报警');
+          await Future.wait([
+            _triggerVibration(),
+            _playAlertSound(settings?.customSoundPath),
+          ]);
+          break;
+      }
+    } catch (e) {
+      debugPrint('触发物理报警失败: $e');
     }
+
+    debugPrint('=== 报警触发完成 ===');
   }
 
   /// 触发震动
@@ -320,84 +381,117 @@ class AlertService extends GetxController {
       if (customSoundPath != null && customSoundPath.isNotEmpty) {
         // 播放自定义铃声
         debugPrint('播放自定义铃声: $customSoundPath');
-        await _audioPlayer.stop(); // 停止之前的播放
-        await _audioPlayer.play(DeviceFileSource(customSoundPath));
-        debugPrint('自定义报警声音已播放');
-      } else {
-        // 播放默认报警声音
-        debugPrint('播放默认报警声音');
 
-        // 在Windows上，SystemSound可能不工作，我们使用audioplayers播放一个生成的音调
-        // 或者播放Windows系统声音文件
-        try {
-          // 尝试播放Windows系统声音
-          if (Platform.isWindows) {
-            // Windows系统声音文件路径
-            const windowsAlertSound = r'C:\Windows\Media\Windows Notify System Generic.wav';
-            final soundFile = File(windowsAlertSound);
-
-            if (await soundFile.exists()) {
-              debugPrint('播放Windows系统提示音: $windowsAlertSound');
-              await _audioPlayer.stop(); // 停止之前的播放
-              await _audioPlayer.play(DeviceFileSource(windowsAlertSound));
-              debugPrint('Windows系统提示音已播放');
-            } else {
-              // 如果系统声音文件不存在，尝试其他Windows声音
-              final alternativeSounds = [
-                r'C:\Windows\Media\Windows Ding.wav',
-                r'C:\Windows\Media\Windows Error.wav',
-                r'C:\Windows\Media\Windows Exclamation.wav',
-                r'C:\Windows\Media\chord.wav',
-                r'C:\Windows\Media\notify.wav',
-              ];
-
-              bool soundPlayed = false;
-              for (String soundPath in alternativeSounds) {
-                final altSoundFile = File(soundPath);
-                if (await altSoundFile.exists()) {
-                  debugPrint('播放Windows系统声音: $soundPath');
-                  await _audioPlayer.stop();
-                  await _audioPlayer.play(DeviceFileSource(soundPath));
-                  soundPlayed = true;
-                  break;
-                }
-              }
-
-              if (!soundPlayed) {
-                debugPrint('未找到Windows系统声音文件，使用Flutter SystemSound');
-                // 回退到SystemSound（可能不工作）
-                for (int i = 0; i < 3; i++) {
-                  await SystemSound.play(SystemSoundType.click);
-                  if (i < 2) await Future.delayed(const Duration(milliseconds: 300));
-                }
-              }
-            }
-          } else {
-            // 非Windows平台，使用原有逻辑
-            for (int i = 0; i < 3; i++) {
-              await SystemSound.play(SystemSoundType.alert);
-              if (i < 2) await Future.delayed(const Duration(milliseconds: 500));
-            }
-          }
-        } catch (e) {
-          debugPrint('播放默认声音失败: $e');
-          // 最后的回退：使用SystemSound
-          try {
-            await SystemSound.play(SystemSoundType.click);
-          } catch (e2) {
-            debugPrint('SystemSound也失败: $e2');
-          }
+        // 检查文件是否存在
+        final soundFile = File(customSoundPath);
+        if (!await soundFile.exists()) {
+          debugPrint('自定义铃声文件不存在: $customSoundPath');
+          // 回退到默认铃声
+          await _playDefaultAlertSound();
+          return;
         }
 
-        debugPrint('默认报警声音处理完成');
+        // 停止之前的播放并设置音量
+        await _audioPlayer.stop();
+        await _audioPlayer.setVolume(1.0);
+
+        try {
+          // 尝试播放自定义铃声
+          await _audioPlayer.play(DeviceFileSource(customSoundPath));
+          debugPrint('自定义报警声音已播放');
+        } catch (e) {
+          debugPrint('播放自定义铃声失败: $e');
+          // 如果自定义铃声播放失败，回退到默认铃声
+          await _playDefaultAlertSound();
+        }
+      } else {
+        // 播放默认报警声音
+        await _playDefaultAlertSound();
       }
     } catch (e) {
       debugPrint('播放声音失败: $e');
+      // 最后的回退：尝试使用SystemSound
+      try {
+        await SystemSound.play(SystemSoundType.alert);
+      } catch (e2) {
+        debugPrint('SystemSound也失败: $e2');
+      }
+    }
+  }
+
+  /// 播放默认报警声音
+  Future<void> _playDefaultAlertSound() async {
+    debugPrint('播放默认报警声音');
+
+    try {
+      // 在Windows上，尝试播放Windows系统声音
+      if (Platform.isWindows) {
+        // Windows系统声音文件路径
+        const windowsAlertSound =
+            r'C:\Windows\Media\Windows Notify System Generic.wav';
+        final soundFile = File(windowsAlertSound);
+
+        if (await soundFile.exists()) {
+          debugPrint('播放Windows系统提示音: $windowsAlertSound');
+          await _audioPlayer.stop();
+          await _audioPlayer.setVolume(1.0);
+          await _audioPlayer.play(DeviceFileSource(windowsAlertSound));
+          debugPrint('Windows系统提示音已播放');
+          return;
+        }
+
+        // 如果系统声音文件不存在，尝试其他Windows声音
+        final alternativeSounds = [
+          r'C:\Windows\Media\Windows Ding.wav',
+          r'C:\Windows\Media\Windows Error.wav',
+          r'C:\Windows\Media\Windows Exclamation.wav',
+          r'C:\Windows\Media\chord.wav',
+          r'C:\Windows\Media\notify.wav',
+        ];
+
+        for (String soundPath in alternativeSounds) {
+          final altSoundFile = File(soundPath);
+          if (await altSoundFile.exists()) {
+            debugPrint('播放Windows系统声音: $soundPath');
+            await _audioPlayer.stop();
+            await _audioPlayer.setVolume(1.0);
+            await _audioPlayer.play(DeviceFileSource(soundPath));
+            debugPrint('Windows系统声音已播放');
+            return;
+          }
+        }
+
+        // 如果没有找到系统声音文件，使用Flutter SystemSound作为最后的手段
+        debugPrint('未找到Windows系统声音文件，使用Flutter SystemSound');
+        await _playSystemSoundFallback();
+      } else {
+        // 非Windows平台，使用Flutter SystemSound
+        await _playSystemSoundFallback();
+      }
+    } catch (e) {
+      debugPrint('播放默认声音失败: $e');
+      // 最后的回退：使用SystemSound
+      await _playSystemSoundFallback();
+    }
+
+    debugPrint('默认报警声音处理完成');
+  }
+
+  /// 使用SystemSound作为回退方案
+  Future<void> _playSystemSoundFallback() async {
+    try {
+      for (int i = 0; i < 3; i++) {
+        await SystemSound.play(SystemSoundType.alert);
+        if (i < 2) await Future.delayed(const Duration(milliseconds: 300));
+      }
+    } catch (e) {
+      debugPrint('SystemSound回退也失败: $e');
     }
   }
 
   /// 显示报警对话框
-  void _showAlertDialog(String deviceName, List<String> exceededItems, String dialogHash) {
+  void _showAlertDialog(
+      String deviceName, List<String> exceededItems, String dialogHash) {
     if (Get.context != null) {
       // 标记对话框正在显示
       _isAlertDialogShowing = true;
