@@ -292,13 +292,27 @@ class SavedDeviceCard extends StatelessWidget {
             size: 18,
           ),
           const SizedBox(width: 8),
-          Text(
-            '累计耗电量: ${powerConsumption.toStringAsFixed(3)} mAh',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2196F3),
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '本次记录耗电量: ${device.sessionConsumption.toStringAsFixed(3)} mAh',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF2196F3),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '累计耗电量: ${powerConsumption.toStringAsFixed(3)} mAh',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2196F3),
+                ),
+              ),
+            ],
           ),
         ],
       ),

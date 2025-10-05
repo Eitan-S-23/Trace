@@ -325,6 +325,24 @@ class DeviceMonitorCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
+                  '本次记录耗电量',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${device.sessionConsumption.toStringAsFixed(3)} mAh',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
                   '累计耗电量',
                   style: TextStyle(
                     fontSize: 12,

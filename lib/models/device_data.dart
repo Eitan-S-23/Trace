@@ -290,6 +290,9 @@ class SelectedDevice {
   // 当前统计的月份索引（用于月度数组）
   int _currentMonthIndex = 0;
 
+  // 本次会话耗电量（软件重启后清零）
+  double _sessionConsumption = 0.0;
+
   SelectedDevice({
     required this.deviceId,
     required this.deviceName,
@@ -302,6 +305,7 @@ class SelectedDevice {
     // 如果是从数据库加载，则保持现有的统计数组数据
     if (!loadFromDatabase) {
       clearAllConsumptionStats();
+      _sessionConsumption = 0.0; // 重启后清零本次会话耗电量
     }
   }
 
@@ -337,6 +341,7 @@ class SelectedDevice {
     if (updateConsumption) {
       _updateDailyConsumptionArray(data);
       _updateMonthlyConsumptionArray(data);
+      _updateSessionConsumption(data);
     }
   }
 
@@ -355,6 +360,9 @@ class SelectedDevice {
   /// 获取功耗
   double get powerConsumption =>
       ManufacturerDataParser.calculatePowerConsumption(dataHistory);
+
+  /// 获取本次会话耗电量（软件重启后清零）
+  double get sessionConsumption => _sessionConsumption;
 
   /// 更新每日耗电量统计数组
   void _updateDailyConsumptionArray(DeviceData newData) {
@@ -436,6 +444,37 @@ class SelectedDevice {
         final currentValue = _monthlyConsumptionArray[arrayIndex] ?? 0.0;
         _monthlyConsumptionArray[arrayIndex] =
             currentValue + consumptionIncrement;
+      }
+    }
+  }
+
+  /// 更新本次会话耗电量（软件重启后清零）
+  void _updateSessionConsumption(DeviceData newData) {
+    // 如果有前一个数据点，计算耗电量增量
+    if (dataHistory.length >= 2) {
+      final previousData = dataHistory[dataHistory.length - 2];
+
+      // 计算时间差（小时）
+      final timeDiffHours =
+          newData.timestamp.difference(previousData.timestamp).inMilliseconds /
+              (1000.0 * 60.0 * 60.0);
+
+      // 如果时间差合理（避免异常数据）
+      if (timeDiffHours > 0 && timeDiffHours < 24) {
+        // 转换电流为mA
+        final currentInMA =
+            _convertCurrentToMA(newData.current, newData.currentUnit);
+        final previousInMA =
+            _convertCurrentToMA(previousData.current, previousData.currentUnit);
+
+        // 使用梯形积分法计算平均电流
+        final avgCurrentMA = (currentInMA + previousInMA) / 2.0;
+
+        // 计算耗电量增量（mAh）
+        final consumptionIncrement = avgCurrentMA * timeDiffHours;
+
+        // 累加到本次会话耗电量
+        _sessionConsumption += consumptionIncrement;
       }
     }
   }
@@ -559,6 +598,12 @@ class SelectedDevice {
   void clearAllConsumptionStats() {
     clearDailyConsumptionStats();
     clearMonthlyConsumptionStats();
+    _sessionConsumption = 0.0; // 清零本次会话耗电量
+  }
+
+  /// 重置本次会话耗电量（用于软件重启时清零）
+  void resetSessionConsumption() {
+    _sessionConsumption = 0.0;
   }
 
   /// 从数据库加载每日耗电量统计数组

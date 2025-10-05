@@ -47,6 +47,14 @@ class _DeviceChartPageState extends State<DeviceChartPage>
     }
   }
 
+  /// 获取当前设备
+  SelectedDevice? _getDevice() {
+    return monitorController.selectedDevices
+            .firstWhereOrNull((d) => d.deviceId == widget.deviceId) ??
+        monitorController.savedDevices
+            .firstWhereOrNull((d) => d.deviceId == widget.deviceId);
+  }
+
   /// 获取当前显示的数据（筛选后或全部）
   List<DeviceData> _getCurrentDisplayData(SelectedDevice device) {
     if (_startDate != null || _endDate != null) {
@@ -324,14 +332,30 @@ class _DeviceChartPageState extends State<DeviceChartPage>
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            '累计耗电量: ${powerConsumption.toStringAsFixed(3)} mAh',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '本次记录耗电量: ${_getDevice()?.sessionConsumption.toStringAsFixed(3) ?? '0.000'} mAh',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '累计耗电量: ${powerConsumption.toStringAsFixed(3)} mAh',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                         ),
                       ],
