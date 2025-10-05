@@ -1156,7 +1156,8 @@ class _DeviceSettingsDialogState extends State<DeviceSettingsDialog> {
                   .toList(),
 
               // 自定义铃声选择（仅当选择声音或震动+声音时显示）
-              if (_alertType == AlertType.sound || _alertType == AlertType.both) ...[
+              if (_alertType == AlertType.sound ||
+                  _alertType == AlertType.both) ...[
                 const SizedBox(height: 16),
                 const Text(
                   '自定义铃声',
@@ -1168,24 +1169,27 @@ class _DeviceSettingsDialogState extends State<DeviceSettingsDialog> {
                 const SizedBox(height: 8),
                 ListTile(
                   leading: const Icon(Icons.music_note),
-                  title: Text(_customSoundPath != null && _customSoundPath!.isNotEmpty
+                  title: Text(_customSoundPath != null &&
+                          _customSoundPath!.isNotEmpty
                       ? '已选择: ${_customSoundPath!.split('/').last.split('\\').last}'
                       : '使用默认铃声'),
-                  subtitle: _customSoundPath != null && _customSoundPath!.isNotEmpty
-                      ? Text(_customSoundPath!,
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis)
-                      : const Text('点击选择自定义铃声文件'),
-                  trailing: _customSoundPath != null && _customSoundPath!.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            setState(() {
-                              _customSoundPath = null;
-                            });
-                          },
-                        )
-                      : null,
+                  subtitle:
+                      _customSoundPath != null && _customSoundPath!.isNotEmpty
+                          ? Text(_customSoundPath!,
+                              style: const TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis)
+                          : const Text('点击选择自定义铃声文件'),
+                  trailing:
+                      _customSoundPath != null && _customSoundPath!.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                setState(() {
+                                  _customSoundPath = null;
+                                });
+                              },
+                            )
+                          : null,
                   onTap: _selectCustomSound,
                 ),
               ],
@@ -1272,9 +1276,9 @@ class _DeviceSettingsDialogState extends State<DeviceSettingsDialog> {
     Function(String) onUnitChanged,
   ) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          flex: 2,
           child: TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1283,20 +1287,20 @@ class _DeviceSettingsDialogState extends State<DeviceSettingsDialog> {
               border: const OutlineInputBorder(),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
-                vertical: 8,
+                vertical: 10,
               ),
             ),
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(
+        IntrinsicWidth(
           child: DropdownButtonFormField<String>(
             value: selectedUnit,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               contentPadding: EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
+                horizontal: 8,
+                vertical: 10,
               ),
             ),
             items: units
@@ -1400,7 +1404,7 @@ class _DeviceSettingsDialogState extends State<DeviceSettingsDialog> {
         powerConsumptionUnit: _powerConsumptionUnit,
         alertEnabled: _alertEnabled,
         alertType: _alertType,
-        customSoundPath: _customSoundPath,  // 添加自定义铃声路径
+        customSoundPath: _customSoundPath, // 添加自定义铃声路径
       );
 
       final alertService = Get.find<AlertService>();
