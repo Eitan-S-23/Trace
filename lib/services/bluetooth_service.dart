@@ -1072,11 +1072,14 @@ class BluetoothService extends GetxController {
     bool writeWithResponse = false,
   }) async {
     try {
+      // 兼容传入的 service/characteristic 字符串中包含调试信息的情况
+      final normalizedServiceId = _extractUuidFromVerboseString(serviceId);
+      final normalizedCharId = _extractUuidFromVerboseString(characteristicId);
       if (Platform.isWindows) {
         await _adapter.writeCharacteristic(
           deviceAddress,
-          serviceId,
-          characteristicId,
+          normalizedServiceId,
+          normalizedCharId,
           data,
           writeWithResponse: writeWithResponse,
         );
@@ -1089,10 +1092,10 @@ class BluetoothService extends GetxController {
         for (final svc in services) {
           try {
             final sid = svc.uuid.toString();
-            if (_uuidLikeEquals(sid, serviceId)) {
+            if (_uuidLikeEquals(sid, normalizedServiceId)) {
               for (final ch in svc.characteristics) {
                 final cid = ch.uuid.toString();
-                if (_uuidLikeEquals(cid, characteristicId)) {
+                if (_uuidLikeEquals(cid, normalizedCharId)) {
                   await ch.write(Uint8List.fromList(data),
                       withoutResponse: !writeWithResponse);
                   return;
@@ -1114,11 +1117,45 @@ class BluetoothService extends GetxController {
       String deviceAddress, String serviceId, String characteristicId) {
     try {
       if (Platform.isWindows) {
-        // 当前win_ble未提供直接值流封装在此处，仅发起订阅
-        _adapter.subscribeToCharacteristic(
-            deviceAddress, serviceId, characteristicId);
-        // 需要用户侧通过win_ble提供的值流获取（若库支持）。此处返回null占位。
-        return null;
+        // Windows: 发起订阅，并通过轮询读取构建一个值流
+        return Stream<List<int>>.multi((controller) async {
+          List<int>? last;
+          Timer? timer;
+          try {
+            await _adapter.subscribeToCharacteristic(
+                deviceAddress, serviceId, characteristicId);
+          } catch (_) {}
+
+          Future<void> poll() async {
+            try {
+              final data = await readByAddress(
+                  deviceAddress, serviceId, characteristicId);
+              if (data.isNotEmpty) {
+                if (last == null || !listEquals(last, data)) {
+                  last = List<int>.from(data);
+                  controller.add(data);
+                }
+              }
+            } catch (e) {
+              controller.addError(e);
+            }
+          }
+
+          // 先立即读一次
+          await poll();
+          // 每250ms轮询一次
+          timer = Timer.periodic(const Duration(milliseconds: 250), (_) async {
+            await poll();
+          });
+
+          controller.onCancel = () async {
+            timer?.cancel();
+            try {
+              await _adapter.unSubscribeFromCharacteristic(
+                  deviceAddress, serviceId, characteristicId);
+            } catch (_) {}
+          };
+        });
       } else {
         final device = _findDeviceByAddress(deviceAddress);
         if (device == null) return null;
@@ -1185,8 +1222,38 @@ class BluetoothService extends GetxController {
     }
   }
 
-  /// 查找透传服务与可写特征（默认匹配 FFF0 服务）
-  /// 返回 { 'serviceId': ..., 'writeCharId': ... }
+  /// 读取特征值（跨平台）
+  Future<List<int>> readByAddress(
+      String deviceAddress, String serviceId, String characteristicId) async {
+    try {
+      if (Platform.isWindows) {
+        return await _adapter.readCharacteristic(
+            deviceAddress, serviceId, characteristicId);
+      } else {
+        final device = _findDeviceByAddress(deviceAddress);
+        if (device == null) return <int>[];
+        final services = await device.discoverServices();
+        for (final svc in services) {
+          final sid = svc.uuid.toString();
+          if (_uuidLikeEquals(sid, serviceId)) {
+            for (final ch in svc.characteristics) {
+              final cid = ch.uuid.toString();
+              if (_uuidLikeEquals(cid, characteristicId)) {
+                return await ch.read();
+              }
+            }
+          }
+        }
+        return <int>[];
+      }
+    } catch (e) {
+      debugPrint('读取失败($deviceAddress/$serviceId/$characteristicId): $e');
+      return <int>[];
+    }
+  }
+
+  /// 查找透传服务与可写/通知特征（默认匹配 FFF0 服务）
+  /// 返回 { 'serviceId': ..., 'writeCharId': ..., 'notifyCharId': ... }
   Future<Map<String, String>?> findTransparentUuidsByAddress(
     String deviceAddress, {
     String serviceUuidHint = 'fff0',
@@ -1195,19 +1262,9 @@ class BluetoothService extends GetxController {
       // 发现服务
       final services = await discoverServicesByAddress(deviceAddress);
 
-      String? normalizeId(dynamic obj) {
-        try {
-          final uuid = _getProperty(obj, 'uuid');
-          if (uuid != null) return uuid.toString();
-        } catch (_) {}
-        try {
-          final id = _getProperty(obj, 'id');
-          if (id != null) return id.toString();
-        } catch (_) {}
-        return obj?.toString();
-      }
+      String? normalizeId(dynamic obj) => _extractUuidFromAny(obj);
 
-      // 遍历服务，寻找匹配 serviceUuidHint 的服务
+      // 遍历服务，优先寻找匹配 serviceUuidHint 的服务
       for (final svc in services) {
         final sid = normalizeId(svc);
         if (sid == null) continue;
@@ -1217,18 +1274,49 @@ class BluetoothService extends GetxController {
               ? await _adapter.discoverCharacteristics(deviceAddress, sid)
               : _safeMobileCharacteristicsList(svc);
 
+          String? writeId;
+          String? notifyId;
           for (final ch in characteristics) {
             final cid = normalizeId(ch);
             if (cid == null) continue;
-
-            final isWritable = _isCharacteristicWritable(ch);
-            if (isWritable) {
-              return {
-                'serviceId': sid,
-                'writeCharId': cid,
-              };
+            if (_isCharacteristicWritable(ch) && writeId == null) {
+              writeId = cid;
+            }
+            if (_hasCharacteristicNotify(ch) && notifyId == null) {
+              notifyId = cid;
             }
           }
+
+          if (writeId != null || notifyId != null) {
+            return {
+              'serviceId': sid,
+              if (writeId != null) 'writeCharId': writeId,
+              if (notifyId != null) 'notifyCharId': notifyId,
+            };
+          }
+        }
+      }
+      // 如果没匹配到 serviceUuidHint，使用降级：选择第一个拥有可写/通知特征的服务
+      for (final svc in services) {
+        final sidRaw = normalizeId(svc);
+        if (sidRaw == null) continue;
+        final characteristics = Platform.isWindows
+            ? await _adapter.discoverCharacteristics(deviceAddress, sidRaw)
+            : _safeMobileCharacteristicsList(svc);
+        String? writeId;
+        String? notifyId;
+        for (final ch in characteristics) {
+          final cid = normalizeId(ch);
+          if (cid == null) continue;
+          if (_isCharacteristicWritable(ch) && writeId == null) writeId = cid;
+          if (_hasCharacteristicNotify(ch) && notifyId == null) notifyId = cid;
+        }
+        if (writeId != null || notifyId != null) {
+          return {
+            'serviceId': sidRaw,
+            if (writeId != null) 'writeCharId': writeId,
+            if (notifyId != null) 'notifyCharId': notifyId,
+          };
         }
       }
       return null;
@@ -1258,10 +1346,8 @@ class BluetoothService extends GetxController {
             _getProperty(ch, 'writeWithoutResponse') == true;
 
         final props = _getProperty(ch, 'properties');
-        final fromProps = props is Map
-            ? ((props['write'] == true) ||
-                (props['writeWithoutResponse'] == true))
-            : false;
+        final fromProps =
+            _propContains(props, ['write', 'writeWithoutResponse']);
         return canWrite || fromProps;
       } else {
         // FlutterBluePlus Characteristic
@@ -1275,6 +1361,163 @@ class BluetoothService extends GetxController {
     } catch (_) {
       return false;
     }
+  }
+
+  // 判断特征是否可读
+  bool _hasCharacteristicRead(dynamic ch) {
+    try {
+      if (Platform.isWindows) {
+        if (_getProperty(ch, 'read') == true ||
+            _getProperty(ch, 'canRead') == true) return true;
+        final props = _getProperty(ch, 'properties');
+        if (_propContains(props, ['read'])) return true;
+        return false;
+      } else {
+        return ch.properties.read == true;
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 判断特征是否支持通知/指示
+  bool _hasCharacteristicNotify(dynamic ch) {
+    try {
+      if (Platform.isWindows) {
+        if (_getProperty(ch, 'notify') == true ||
+            _getProperty(ch, 'canNotify') == true ||
+            _getProperty(ch, 'indicate') == true) return true;
+        final props = _getProperty(ch, 'properties');
+        if (_propContains(props, ['notify', 'indicate'])) return true;
+        return false;
+      } else {
+        return ch.properties.notify == true || ch.properties.indicate == true;
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 判断 properties 中是否包含指定能力（兼容 Map 或 List/字符串）
+  bool _propContains(dynamic props, List<String> keys) {
+    try {
+      if (props == null) return false;
+      final keySet = keys.map((e) => e.toLowerCase()).toSet();
+      if (props is Map) {
+        for (final entry in props.entries) {
+          final k = entry.key.toString().toLowerCase();
+          if (keySet.contains(k) && entry.value == true) return true;
+        }
+        return false;
+      }
+      if (props is List) {
+        for (final v in props) {
+          final s = v.toString().toLowerCase();
+          if (keySet.contains(s)) return true;
+        }
+        return false;
+      }
+      final s = props.toString().toLowerCase();
+      for (final k in keySet) {
+        if (s.contains(k)) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // 从任意对象中尽可能提取 UUID 字符串
+  String? _extractUuidFromAny(dynamic obj) {
+    try {
+      // 优先直接访问动态属性（FlutterBluePlus的service/characteristic支持）
+      final directUuid = obj.uuid;
+      if (directUuid != null) return directUuid.toString();
+    } catch (_) {}
+    try {
+      final directId = obj.id;
+      if (directId != null) return directId.toString();
+    } catch (_) {}
+    try {
+      final uuid = _getProperty(obj, 'uuid');
+      if (uuid != null) return uuid.toString();
+    } catch (_) {}
+    try {
+      final id = _getProperty(obj, 'id');
+      if (id != null) return id.toString();
+    } catch (_) {}
+    try {
+      final s = obj?.toString();
+      if (s == null) return null;
+      // 从类似 GUID 字符串中提取
+      final lower = s.toLowerCase();
+      if (lower.contains('uuid') || lower.contains('-')) return s;
+      // 直接返回字符串（如仅16位或32位uuid）
+      return s;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 列出服务ID（字符串）
+  Future<List<String>> listServiceIdsByAddress(String deviceAddress) async {
+    final list = <String>[];
+    try {
+      final services = await discoverServicesByAddress(deviceAddress);
+      for (final svc in services) {
+        final sid = _extractUuidFromAny(svc);
+        if (sid != null) list.add(sid);
+      }
+    } catch (e) {
+      debugPrint('列出服务ID失败($deviceAddress): $e');
+    }
+    return list;
+  }
+
+  /// 列出某服务下的全部特征及其属性（读/写/通知）
+  Future<List<Map<String, dynamic>>> listCharacteristicsWithPropertiesByAddress(
+      String deviceAddress,
+      {String serviceUuidHint = 'fff0'}) async {
+    final result = <Map<String, dynamic>>[];
+    try {
+      // 找到服务ID
+      final services = await discoverServicesByAddress(deviceAddress);
+      String? normalizeId(dynamic obj) {
+        try {
+          final uuid = _getProperty(obj, 'uuid');
+          if (uuid != null) return uuid.toString();
+        } catch (_) {}
+        try {
+          final id = _getProperty(obj, 'id');
+          if (id != null) return id.toString();
+        } catch (_) {}
+        return obj?.toString();
+      }
+
+      for (final svc in services) {
+        final sid = normalizeId(svc);
+        if (sid == null) continue;
+        if (_uuidLikeEquals(sid, serviceUuidHint)) {
+          final chars = Platform.isWindows
+              ? await _adapter.discoverCharacteristics(deviceAddress, sid)
+              : _safeMobileCharacteristicsList(svc);
+          for (final ch in chars) {
+            final cid = normalizeId(ch);
+            if (cid == null) continue;
+            result.add({
+              'uuid': cid,
+              'read': _hasCharacteristicRead(ch),
+              'write': _isCharacteristicWritable(ch),
+              'notify': _hasCharacteristicNotify(ch),
+            });
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('列出特征属性失败($deviceAddress): $e');
+    }
+    return result;
   }
 
   /// 辅助：根据地址在当前已知设备中查找设备
@@ -1299,6 +1542,26 @@ class BluetoothService extends GetxController {
     // 处理16位与128位互转（仅处理标准Base UUID场景）
     String to16(String x) => x.length >= 32 ? x.substring(4, 8) : x;
     return to16(na) == to16(nb);
+  }
+
+  /// 从可能包含调试描述的字符串中提取 UUID（支持 16位 或 128位）
+  String _extractUuidFromVerboseString(String input) {
+    final s = input.trim();
+    // 优先匹配 128-bit UUID
+    final re128 = RegExp(
+        r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}');
+    final m128 = re128.firstMatch(s);
+    if (m128 != null) return m128.group(0)!.toLowerCase();
+    // 再匹配 16-bit UUID（常见如 fe59 / fff0）
+    final re16 = RegExp(r'\b[0-9a-fA-F]{4}\b');
+    final m16 = re16.firstMatch(s);
+    if (m16 != null) return m16.group(0)!.toLowerCase();
+    // 尝试从键值对中解析（如 serviceUuid: fe59 或 characteristicUuid: ...）
+    final kv =
+        RegExp(r'(serviceUuid|characteristicUuid)\s*:\s*([0-9a-fA-F-]{4,36})');
+    final mkv = kv.firstMatch(s);
+    if (mkv != null) return mkv.group(2)!.toLowerCase();
+    return s.toLowerCase();
   }
 
   // 辅助方法：安全获取对象属性

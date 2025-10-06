@@ -478,13 +478,16 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         connectedDevice = device;
         _rxLogs.clear();
       });
-      // 预解析FFF0
-      final ids = await _bt.findTransparentUuidsByAddress(device.remoteId.str,
+      // 预解析透传服务（先试 fff0，再试 fe59，再用通用降级）
+      Map<String, String>? ids = await _bt.findTransparentUuidsByAddress(
+          device.remoteId.str,
           serviceUuidHint: 'fff0');
+      ids ??= await _bt.findTransparentUuidsByAddress(device.remoteId.str,
+          serviceUuidHint: 'fe59');
       if (ids != null) {
         serviceIdFFF0 = ids['serviceId'];
         writeCharId = ids['writeCharId'];
-        notifyCharId = ids['writeCharId']; // 常见硬件写入特征也会notify回显
+        notifyCharId = ids['notifyCharId'] ?? ids['writeCharId'];
         // 建立监听
         _attachNotify();
       }
@@ -520,14 +523,18 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
   Future<void> _sendCustomData(CustomButton button) async {
     if (!isConnected || connectedDevice == null) return;
     try {
-      // 若尚未解析到特征，尝试查找FFF0及可写特征
+      // 若尚未解析到特征，尝试查找FFF0/FE59及可写特征
       if (serviceIdFFF0 == null || writeCharId == null) {
-        final ids = await _bt.findTransparentUuidsByAddress(
+        Map<String, String>? ids = await _bt.findTransparentUuidsByAddress(
             connectedDevice!.remoteId.str,
             serviceUuidHint: 'fff0');
+        ids ??= await _bt.findTransparentUuidsByAddress(
+            connectedDevice!.remoteId.str,
+            serviceUuidHint: 'fe59');
         if (ids != null) {
           serviceIdFFF0 = ids['serviceId'];
           writeCharId = ids['writeCharId'];
+          notifyCharId = ids['notifyCharId'] ?? ids['writeCharId'];
         }
       }
       if (serviceIdFFF0 != null && writeCharId != null) {
