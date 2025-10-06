@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -25,7 +28,19 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
   String? writeCharId; // 实际匹配到的可写特征ID
   String? notifyCharId; // 若存在可通知特征
 
-  final List<String> _rxLogs = <String>[]; // 接收日志
+  final List<String> _rxLogs = <String>[]; // 旧的接收日志（保留兼容）
+  final List<_RxEntry> _rxEntries = <_RxEntry>[]; // 新的原始接收数据
+
+  bool _showHex = true; // 接收显示模式
+
+  // 发送输入与循环设置
+  final TextEditingController _sendController = TextEditingController();
+  bool _sendAsHex = false;
+  bool _loopSend = false;
+  int _sendIntervalMs = 1000;
+  final TextEditingController _intervalController =
+      TextEditingController(text: '1000');
+  Timer? _loopTimer;
 
   // 自定义按钮列表
   List<CustomButton> customButtons = [
@@ -50,9 +65,9 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text(
-          '遥控',
-          style: TextStyle(
+        title: Text(
+          isConnected ? (connectedDeviceName ?? '未知设备') : '遥控',
+          style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: Color(0xFF2E3A59),
@@ -63,6 +78,14 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         elevation: 0,
         centerTitle: false,
         actions: [
+          if (isConnected)
+            TextButton.icon(
+              onPressed: _disconnectDevice,
+              icon: const Icon(Icons.link_off, size: 18),
+              label: const Text('断开'),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF4A90E2)),
+            ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _showAddButtonDialog,
@@ -74,10 +97,7 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 连接状态卡片
-            _buildConnectionCard(),
-
-            const SizedBox(height: 24),
+            // 顶部连接卡片已移除
 
             // 扫描或设备列表
             if (!isConnected) _buildScanOrList(),
@@ -124,8 +144,57 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                 },
               ),
               const SizedBox(height: 24),
+              Row(
+                children: [
+                  const Text(
+                    '接收数据',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2E3A59),
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () => setState(() => _showHex = !_showHex),
+                    icon: Icon(
+                        _showHex ? Icons.hexagon_outlined : Icons.translate,
+                        size: 18),
+                    label: Text(_showHex ? 'HEX' : '文本'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF4A90E2),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_rxEntries.isEmpty)
+                      Text('暂无数据', style: TextStyle(color: Colors.grey[600]))
+                    else
+                      ..._rxEntries.reversed.take(50).map((e) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              _formatRxEntry(e),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          )),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               const Text(
-                '接收数据',
+                '发送数据',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -142,18 +211,86 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                   border: Border.all(color: Colors.grey.shade200),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (_rxLogs.isEmpty)
-                      Text('暂无数据', style: TextStyle(color: Colors.grey[600]))
-                    else
-                      ..._rxLogs.reversed.take(50).map((e) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              e,
-                              style: const TextStyle(fontSize: 12),
+                    TextField(
+                      controller: _sendController,
+                      decoration: const InputDecoration(
+                        hintText: '输入要发送的数据（文本或十六进制）',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      minLines: 1,
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: _sendAsHex,
+                              onChanged: (v) => setState(() => _sendAsHex = v),
+                              activeColor: const Color(0xFF4A90E2),
                             ),
-                          )),
+                            const Text('16进制发送'),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Switch(
+                              value: _loopSend,
+                              onChanged: (v) {
+                                setState(() => _loopSend = v);
+                                if (v) {
+                                  _startLoopTimer();
+                                } else {
+                                  _stopLoopTimer();
+                                }
+                              },
+                              activeColor: const Color(0xFF4A90E2),
+                            ),
+                            const Text('循环发送'),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                        SizedBox(
+                          width: 120,
+                          child: TextField(
+                            controller: _intervalController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: '间隔(ms)',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (v) {
+                              final parsed = int.tryParse(v.trim());
+                              if (parsed != null && parsed > 0) {
+                                _sendIntervalMs = parsed;
+                                if (_loopSend) {
+                                  _startLoopTimer();
+                                }
+                              }
+                            },
+                          ),
+                        ),
+                        const Spacer(),
+                        ElevatedButton.icon(
+                          onPressed: _sendInputOnce,
+                          icon: const Icon(Icons.send, size: 18),
+                          label: const Text('发送'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4A90E2),
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -170,73 +307,12 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
     );
   }
 
-  Widget _buildConnectionCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isConnected
-              ? [const Color(0xFF4CAF50), const Color(0xFF2E7D32)]
-              : [const Color(0xFF8E8E93), const Color(0xFF636366)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: (isConnected ? const Color(0xFF4CAF50) : Colors.grey)
-                .withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(
-            isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
-            size: 48,
-            color: Colors.white,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            isConnected ? '已连接' : '未连接',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            isConnected ? connectedDeviceName ?? '未知设备' : '请扫描并连接蓝牙设备',
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
-          ),
-          if (isConnected) ...[
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _disconnectDevice,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF4CAF50),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 8,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('断开连接'),
-            ),
-          ],
-        ],
-      ),
-    );
+  @override
+  void dispose() {
+    _loopTimer?.cancel();
+    _sendController.dispose();
+    _intervalController.dispose();
+    super.dispose();
   }
 
   // 已弃用：保留占位避免误用（不再引用）
@@ -477,6 +553,7 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         connectedDeviceName = name.isEmpty ? '未知设备' : name;
         connectedDevice = device;
         _rxLogs.clear();
+        _rxEntries.clear();
       });
       // 预解析透传服务（先试 fff0，再试 fe59，再用通用降级）
       Map<String, String>? ids = await _bt.findTransparentUuidsByAddress(
@@ -516,6 +593,8 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
       writeCharId = null;
       notifyCharId = null;
       _rxLogs.clear();
+      _rxEntries.clear();
+      _stopLoopTimer();
     });
     Get.snackbar('已断开连接', '设备已断开连接', snackPosition: SnackPosition.BOTTOM);
   }
@@ -733,11 +812,9 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
       final stream = _bt.subscribeNotifyByAddress(
           connectedDevice!.remoteId.str, targetService, targetChar);
       stream?.listen((event) {
-        final hex =
-            event.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-        final now = DateTime.now().toIso8601String().substring(11, 19);
         setState(() {
-          _rxLogs.add('[$now] $hex');
+          _rxEntries
+              .add(_RxEntry(time: DateTime.now(), data: List<int>.from(event)));
         });
       });
     } catch (_) {}
@@ -768,4 +845,154 @@ class CustomButton {
     required this.data,
     required this.color,
   });
+}
+
+class _RxEntry {
+  final DateTime time;
+  final List<int> data;
+  _RxEntry({required this.time, required this.data});
+}
+
+extension on _RemoteControlPageState {
+  String _formatRxEntry(_RxEntry e) {
+    final t = '[${e.time.toIso8601String().substring(11, 19)}] ';
+    return _showHex
+        ? '$t${_bytesToHex(e.data)}'
+        : '$t${_autoDecodeToString(e.data)}';
+  }
+
+  String _bytesToHex(List<int> data) {
+    return data.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+  }
+
+  String _autoDecodeToString(List<int> data) {
+    try {
+      if (data.length >= 2) {
+        // UTF-16 BOM detection
+        if (data[0] == 0xFF && data[1] == 0xFE) {
+          // UTF-16 LE
+          final bytes = Uint8List.fromList(data.sublist(2));
+          final bd = ByteData.view(bytes.buffer);
+          final codeUnits = <int>[];
+          for (int i = 0; i + 1 < bytes.length; i += 2) {
+            codeUnits.add(bd.getUint16(i, Endian.little));
+          }
+          return String.fromCharCodes(codeUnits);
+        }
+        if (data[0] == 0xFE && data[1] == 0xFF) {
+          // UTF-16 BE
+          final bytes = Uint8List.fromList(data.sublist(2));
+          final bd = ByteData.view(bytes.buffer);
+          final codeUnits = <int>[];
+          for (int i = 0; i + 1 < bytes.length; i += 2) {
+            codeUnits.add(bd.getUint16(i, Endian.big));
+          }
+          return String.fromCharCodes(codeUnits);
+        }
+      }
+      // Try UTF-8 strict first
+      return utf8.decode(data, allowMalformed: false);
+    } catch (_) {
+      try {
+        // Fallback ASCII (allow invalid)
+        return ascii.decode(data, allowInvalid: true);
+      } catch (_) {
+        try {
+          // Fallback Latin1 to preserve bytes
+          return latin1.decode(data, allowInvalid: true);
+        } catch (_) {
+          // Final fallback to hex
+          return _bytesToHex(data);
+        }
+      }
+    }
+  }
+
+  Future<void> _ensureTransparentIds() async {
+    if (connectedDevice == null) return;
+    if (serviceIdFFF0 != null && writeCharId != null) return;
+    Map<String, String>? ids = await _bt.findTransparentUuidsByAddress(
+        connectedDevice!.remoteId.str,
+        serviceUuidHint: 'fff0');
+    ids ??= await _bt.findTransparentUuidsByAddress(
+        connectedDevice!.remoteId.str,
+        serviceUuidHint: 'fe59');
+    if (ids != null) {
+      serviceIdFFF0 = ids['serviceId'];
+      writeCharId = ids['writeCharId'];
+      notifyCharId = ids['notifyCharId'] ?? ids['writeCharId'];
+    }
+  }
+
+  List<int> _parseHexInput(String input) {
+    final cleaned = input
+        .replaceAll(RegExp(r'[^0-9a-fA-F]'), ' ')
+        .replaceAll(RegExp(r'0x', caseSensitive: false), ' ')
+        .trim();
+    if (cleaned.isEmpty) return <int>[];
+    if (cleaned.contains(' ')) {
+      final parts = cleaned.split(RegExp(r'\s+'));
+      return parts
+          .where((p) => p.isNotEmpty)
+          .map((p) => int.parse(p, radix: 16))
+          .toList();
+    } else {
+      // continuous hex string
+      if (cleaned.length % 2 != 0) {
+        throw FormatException('十六进制长度必须为偶数');
+      }
+      final out = <int>[];
+      for (int i = 0; i < cleaned.length; i += 2) {
+        out.add(int.parse(cleaned.substring(i, i + 2), radix: 16));
+      }
+      return out;
+    }
+  }
+
+  Future<void> _sendInputOnce() async {
+    if (!isConnected || connectedDevice == null) return;
+    try {
+      await _ensureTransparentIds();
+      if (serviceIdFFF0 == null || writeCharId == null) {
+        Get.snackbar('错误', '未找到可写特征', snackPosition: SnackPosition.BOTTOM);
+        return;
+      }
+      final text = _sendController.text.trim();
+      if (text.isEmpty) return;
+      final bytes = _sendAsHex ? _parseHexInput(text) : utf8.encode(text);
+      if (bytes.isEmpty) return;
+      await _bt.writeByAddress(
+        connectedDevice!.remoteId.str,
+        serviceIdFFF0!,
+        writeCharId!,
+        bytes,
+        writeWithResponse: true,
+      );
+      Get.snackbar(
+          '发送成功',
+          _sendAsHex
+              ? _bytesToHex(bytes)
+              : (text.length > 50 ? text.substring(0, 50) + '…' : text),
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: const Color(0xFF4A90E2),
+          colorText: Colors.white,
+          duration: const Duration(seconds: 2));
+    } catch (e) {
+      Get.snackbar('发送失败', '$e', snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  void _startLoopTimer() {
+    _loopTimer?.cancel();
+    if (!_loopSend) return;
+    _loopTimer =
+        Timer.periodic(Duration(milliseconds: _sendIntervalMs), (_) async {
+      await _sendInputOnce();
+    });
+  }
+
+  void _stopLoopTimer() {
+    _loopTimer?.cancel();
+    _loopTimer = null;
+  }
 }
