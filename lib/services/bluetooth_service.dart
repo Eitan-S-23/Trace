@@ -933,6 +933,21 @@ class BluetoothService extends GetxController {
         if (!connectedDevices.contains(device)) {
           connectedDevices.add(device);
         }
+        // 监听移动端连接状态，及时反映断开
+        try {
+          _deviceConnectionSubscriptions[device.remoteId.str]?.cancel();
+        } catch (_) {}
+        _deviceConnectionSubscriptions[device.remoteId.str] =
+            device.connectionState.listen((state) {
+          if (state == BluetoothConnectionState.connected) {
+            if (!connectedDevices.contains(device)) {
+              connectedDevices.add(device);
+            }
+          } else if (state == BluetoothConnectionState.disconnected) {
+            connectedDevices.remove(device);
+          }
+        });
+
         Get.snackbar('成功', '设备连接成功', snackPosition: SnackPosition.BOTTOM);
       }
     } catch (e) {

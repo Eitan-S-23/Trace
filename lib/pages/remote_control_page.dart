@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../controllers/ble_controller.dart';
 import '../services/bluetooth_service.dart' as bt_service;
+import '../services/database_service.dart';
 
 class RemoteControlPage extends StatefulWidget {
   const RemoteControlPage({Key? key}) : super(key: key);
@@ -41,26 +42,63 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
   final TextEditingController _intervalController =
       TextEditingController(text: '1000');
   Timer? _loopTimer;
+  StreamSubscription? _connectedDevicesSub;
+  bool _handlingAutoDisconnect = false;
 
-  // 自定义按钮列表
-  List<CustomButton> customButtons = [
-    CustomButton(
-      id: '1',
-      name: '开关灯',
-      icon: Icons.lightbulb_outline,
-      data: [0x01, 0x02, 0x03],
-      color: Colors.amber,
-    ),
-    CustomButton(
-      id: '2',
-      name: '鸣笛',
-      icon: Icons.campaign,
-      data: [0x04, 0x05, 0x06],
-      color: Colors.red,
-    ),
-  ];
+  // 自定义按钮列表（全局共享）
+  List<CustomButton> customButtons = [];
 
   @override
+  void initState() {
+    super.initState();
+    _subscribeConnectionChanges();
+    _loadCustomButtons();
+  }
+
+  void _subscribeConnectionChanges() {
+    _connectedDevicesSub = _ble.connectedDevices.listen((list) {
+      if (!mounted) return;
+      if (isConnected && connectedDevice != null) {
+        final stillConnected =
+            list.any((d) => d.remoteId.str == connectedDevice!.remoteId.str);
+        if (!stillConnected) {
+          _onAutoDisconnected();
+        }
+      }
+    });
+  }
+
+  Future<void> _onAutoDisconnected() async {
+    if (_handlingAutoDisconnect) return;
+    _handlingAutoDisconnect = true;
+    await _detachNotify();
+    _stopLoopTimer();
+    if (!mounted) return;
+    setState(() {
+      isConnected = false;
+      connectedDeviceName = null;
+      connectedDevice = null;
+      serviceIdFFF0 = null;
+      writeCharId = null;
+      notifyCharId = null;
+      _rxLogs.clear();
+      _rxEntries.clear();
+    });
+    // 弹窗提示，并回到扫描界面（自动开始扫描）
+    if (!Get.isDialogOpen!) {
+      Get.defaultDialog(
+        title: '蓝牙已断开',
+        middleText: '设备连接已断开，已返回扫描界面',
+        confirm: TextButton(
+          onPressed: () => Get.back(),
+          child: const Text('确定'),
+        ),
+      );
+    }
+    await _startScanReal();
+    _handlingAutoDisconnect = false;
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -128,20 +166,23 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 1.2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+              Container(
+                height: 220,
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const BouncingScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 1.2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: customButtons.length,
+                  itemBuilder: (context, index) {
+                    final button = customButtons[index];
+                    return _buildCustomButton(button);
+                  },
                 ),
-                itemCount: customButtons.length,
-                itemBuilder: (context, index) {
-                  final button = customButtons[index];
-                  return _buildCustomButton(button);
-                },
               ),
               const SizedBox(height: 24),
               Row(
@@ -318,7 +359,19 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
     _loopTimer?.cancel();
     _sendController.dispose();
     _intervalController.dispose();
+    _connectedDevicesSub?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadCustomButtons() async {
+    try {
+      final db = DatabaseService();
+      final rows = await db.getCustomButtons();
+      final list = rows.map((m) => CustomButtonDb.fromDbMap(m)).toList();
+      if (mounted) setState(() => customButtons = list);
+    } catch (e) {
+      debugPrint('加载自定义按钮失败: $e');
+    }
   }
 
   // 已弃用：保留占位避免误用（不再引用）
@@ -444,7 +497,7 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         onLongPress: () => _editButton(button),
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: LinearGradient(
@@ -457,38 +510,45 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
             ),
           ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: button.color.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   button.icon,
-                  size: 32,
+                  size: 28,
                   color: button.color,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               Text(
                 button.name,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: button.color.withOpacity(0.8),
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 4),
-              Text(
-                '数据: ${button.data.map((e) => e.toRadixString(16).toUpperCase()).join(' ')}',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey.shade600,
+              const SizedBox(height: 2),
+              Flexible(
+                child: Text(
+                  button.isHex
+                      ? 'HEX: ${button.data.map((e) => e.toRadixString(16).toUpperCase()).join(' ')}'
+                      : 'TXT: ${button.textPayload ?? ''}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade600,
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -623,11 +683,20 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         }
       }
       if (serviceIdFFF0 != null && writeCharId != null) {
+        final payload =
+            button.isHex ? button.data : utf8.encode(button.textPayload ?? '');
+        if (payload.isEmpty) {
+          Get.snackbar('错误', '按钮数据为空', snackPosition: SnackPosition.BOTTOM);
+          return;
+        }
         await _bt.writeByAddress(connectedDevice!.remoteId.str, serviceIdFFF0!,
-            writeCharId!, button.data,
+            writeCharId!, payload,
             writeWithResponse: true);
-        Get.snackbar('指令已发送',
-            '${button.name}: ${button.data.map((e) => e.toRadixString(16).toUpperCase()).join(' ')}',
+        Get.snackbar(
+            '指令已发送',
+            button.isHex
+                ? '${button.name}: ${button.data.map((e) => e.toRadixString(16).toUpperCase()).join(' ')}'
+                : '${button.name}: ${button.textPayload ?? ''}',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: button.color,
             colorText: Colors.white,
@@ -651,12 +720,17 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
 
   void _showEditButtonDialog(CustomButton? button) {
     final nameController = TextEditingController(text: button?.name ?? '');
+    final isHexDefault = button?.isHex ?? true;
     final dataController = TextEditingController(
-      text: button?.data
-              .map((e) => e.toRadixString(16).toUpperCase())
-              .join(' ') ??
-          '',
+      text: button == null
+          ? ''
+          : (button.isHex
+              ? button.data
+                  .map((e) => e.toRadixString(16).toUpperCase())
+                  .join(' ')
+              : button.textPayload ?? ''),
     );
+    bool isHexSelected = isHexDefault;
     IconData selectedIcon = button?.icon ?? Icons.touch_app;
     Color selectedColor = button?.color ?? Colors.blue;
 
@@ -677,12 +751,24 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                // Hex选择
+                Row(
+                  children: [
+                    Switch(
+                      value: isHexSelected,
+                      onChanged: (v) => setState(() => isHexSelected = v),
+                      activeColor: const Color(0xFF4A90E2),
+                    ),
+                    const Text('Hex'),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: dataController,
-                  decoration: const InputDecoration(
-                    labelText: '发送数据 (十六进制，空格分隔)',
-                    hintText: '例如: 01 02 03',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: isHexSelected ? '发送数据 (十六进制，空格分隔)' : '发送数据 (文本)',
+                    hintText: isHexSelected ? '例如: 01 02 03' : '例如: hello',
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -691,15 +777,25 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: [
+                  children: <IconData>[
                     Icons.lightbulb_outline,
                     Icons.power_settings_new,
                     Icons.campaign,
                     Icons.music_note,
                     Icons.flash_on,
                     Icons.favorite,
+                    Icons.lock_open,
+                    Icons.doorbell,
+                    Icons.wifi,
+                    Icons.bolt,
+                    Icons.speaker,
+                    Icons.thermostat,
+                    Icons.directions_bike,
+                    Icons.toys,
+                    Icons.settings_remote,
+                    Icons.sensors,
                   ]
-                      .map((icon) => GestureDetector(
+                      .map<Widget>((IconData icon) => GestureDetector(
                             onTap: () => setState(() => selectedIcon = icon),
                             child: Container(
                               padding: const EdgeInsets.all(8),
@@ -720,15 +816,21 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: [
+                  children: <Color>[
                     Colors.blue,
                     Colors.red,
                     Colors.green,
                     Colors.orange,
                     Colors.purple,
                     Colors.teal,
+                    Colors.indigo,
+                    Colors.brown,
+                    Colors.cyan,
+                    Colors.pink,
+                    Colors.deepPurple,
+                    Colors.lime,
                   ]
-                      .map((color) => GestureDetector(
+                      .map<Widget>((Color color) => GestureDetector(
                             onTap: () => setState(() => selectedColor = color),
                             child: Container(
                               width: 32,
@@ -751,8 +853,11 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
             if (button != null)
               TextButton(
                 onPressed: () {
-                  setState(() {
-                    customButtons.removeWhere((b) => b.id == button.id);
+                  // 删除数据库并更新内存
+                  DatabaseService().deleteCustomButton(button.id).then((_) {
+                    setState(() {
+                      customButtons.removeWhere((b) => b.id == button.id);
+                    });
                   });
                   Navigator.pop(context);
                 },
@@ -770,33 +875,52 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                 if (name.isEmpty || dataStr.isEmpty) return;
 
                 try {
-                  final data = dataStr
-                      .split(' ')
-                      .map((s) => int.parse(s, radix: 16))
-                      .toList();
+                  final id = button?.id ??
+                      DateTime.now().millisecondsSinceEpoch.toString();
+                  List<int> hexData = <int>[];
+                  String? textPayload;
+                  if (isHexSelected) {
+                    hexData = _parseHexInput(dataStr);
+                  } else {
+                    textPayload = dataStr;
+                  }
 
                   final newButton = CustomButton(
-                    id: button?.id ??
-                        DateTime.now().millisecondsSinceEpoch.toString(),
+                    id: id,
                     name: name,
                     icon: selectedIcon,
-                    data: data,
+                    data: hexData,
                     color: selectedColor,
+                    isHex: isHexSelected,
+                    textPayload: textPayload,
                   );
 
-                  setState(() {
-                    if (button != null) {
-                      final index =
-                          customButtons.indexWhere((b) => b.id == button.id);
-                      if (index != -1) {
-                        customButtons[index] = newButton;
+                  // 保存数据库
+                  DatabaseService()
+                      .upsertCustomButton(
+                    id: id,
+                    name: name,
+                    iconCode: selectedIcon.codePoint,
+                    colorValue: selectedColor.value,
+                    isHex: isHexSelected,
+                    payload: isHexSelected
+                        ? _bytesToHex(hexData)
+                        : textPayload ?? '',
+                  )
+                      .then((_) {
+                    setState(() {
+                      if (button != null) {
+                        final index =
+                            customButtons.indexWhere((b) => b.id == button.id);
+                        if (index != -1) {
+                          customButtons[index] = newButton;
+                        }
+                      } else {
+                        customButtons.add(newButton);
                       }
-                    } else {
-                      customButtons.add(newButton);
-                    }
+                    });
+                    Navigator.pop(context);
                   });
-
-                  Navigator.pop(context);
                 } catch (e) {
                   Get.snackbar('错误', '数据格式不正确');
                 }
@@ -843,6 +967,8 @@ class CustomButton {
   final IconData icon;
   final List<int> data;
   final Color color;
+  final bool isHex;
+  final String? textPayload; // 当isHex=false时使用
 
   CustomButton({
     required this.id,
@@ -850,7 +976,37 @@ class CustomButton {
     required this.icon,
     required this.data,
     required this.color,
+    required this.isHex,
+    this.textPayload,
   });
+}
+
+extension CustomButtonDb on CustomButton {
+  static CustomButton fromDbMap(Map<String, dynamic> m) {
+    final isHex = (m['isHex'] ?? 1) == 1;
+    final payload = (m['payload'] ?? '') as String;
+    List<int> data = <int>[];
+    String? textPayload;
+    if (isHex) {
+      // 允许payload存的是空格分隔hex
+      data = payload
+          .split(RegExp(r'\s+'))
+          .where((p) => p.isNotEmpty)
+          .map((p) => int.parse(p, radix: 16))
+          .toList();
+    } else {
+      textPayload = payload;
+    }
+    return CustomButton(
+      id: m['id'] as String,
+      name: m['name'] as String,
+      icon: IconData(m['iconCode'] as int, fontFamily: 'MaterialIcons'),
+      data: data,
+      color: Color(m['colorValue'] as int),
+      isHex: isHex,
+      textPayload: textPayload,
+    );
+  }
 }
 
 class _RxEntry {

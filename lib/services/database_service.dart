@@ -24,7 +24,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 5, // 升级版本号以支持自定义铃声路径
+      version: 6, // 新增自定义按钮表
       onCreate: _createTables,
       onUpgrade: _upgradeDatabase,
     );
@@ -126,6 +126,22 @@ class DatabaseService {
       // 添加自定义铃声路径字段
       await db.execute('''
         ALTER TABLE device_settings ADD COLUMN customSoundPath TEXT
+      ''');
+    }
+
+    if (oldVersion < 6) {
+      // 创建自定义按钮表（全局共享，不区分设备）
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS custom_buttons (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          iconCode INTEGER NOT NULL,
+          colorValue INTEGER NOT NULL,
+          isHex INTEGER NOT NULL,
+          payload TEXT NOT NULL,
+          createdAt INTEGER,
+          updatedAt INTEGER
+        )
       ''');
     }
   }
@@ -245,6 +261,20 @@ class DatabaseService {
 
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_monthly_consumption_year_month ON monthly_power_consumption (year, monthIndex)
+    ''');
+
+    // 创建自定义按钮表
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS custom_buttons (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        iconCode INTEGER NOT NULL,
+        colorValue INTEGER NOT NULL,
+        isHex INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        createdAt INTEGER,
+        updatedAt INTEGER
+      )
     ''');
   }
 
@@ -1020,6 +1050,66 @@ class DatabaseService {
     if (_database != null) {
       await _database!.close();
       _database = null;
+    }
+  }
+
+  // ================= 自定义按钮（全局共享）=================
+
+  Future<void> upsertCustomButton({
+    required String id,
+    required String name,
+    required int iconCode,
+    required int colorValue,
+    required bool isHex,
+    required String payload,
+  }) async {
+    final db = await database;
+    await _ensureCustomButtonsTable(db);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert(
+      'custom_buttons',
+      {
+        'id': id,
+        'name': name,
+        'iconCode': iconCode,
+        'colorValue': colorValue,
+        'isHex': isHex ? 1 : 0,
+        'payload': payload,
+        'createdAt': now,
+        'updatedAt': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getCustomButtons() async {
+    final db = await database;
+    await _ensureCustomButtonsTable(db);
+    return await db.query('custom_buttons', orderBy: 'updatedAt DESC');
+  }
+
+  Future<void> deleteCustomButton(String id) async {
+    final db = await database;
+    await _ensureCustomButtonsTable(db);
+    await db.delete('custom_buttons', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> _ensureCustomButtonsTable(Database db) async {
+    try {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS custom_buttons (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          iconCode INTEGER NOT NULL,
+          colorValue INTEGER NOT NULL,
+          isHex INTEGER NOT NULL,
+          payload TEXT NOT NULL,
+          createdAt INTEGER,
+          updatedAt INTEGER
+        )
+      ''');
+    } catch (e) {
+      debugPrint('确保自定义按钮表存在失败: $e');
     }
   }
 }
