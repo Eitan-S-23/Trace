@@ -652,18 +652,26 @@ class BluetoothService extends GetxController {
                         if (value != null) {
                           debugPrint('  $prop: $value (${value?.runtimeType})');
                           // 如果是制造商数据，尝试打印具体内容
-                          if (prop.contains('manufacturer') || prop.contains('adv') || prop.contains('data')) {
+                          if (prop.contains('manufacturer') ||
+                              prop.contains('adv') ||
+                              prop.contains('data')) {
                             if (value is Map) {
                               debugPrint('    Map内容:');
                               value.forEach((k, v) {
                                 debugPrint('      键: $k, 值: $v');
                                 if (v is List) {
-                                  final hexStr = v.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+                                  final hexStr = v
+                                      .map((b) =>
+                                          b.toRadixString(16).padLeft(2, '0'))
+                                      .join(' ');
                                   debugPrint('      16进制: $hexStr');
                                 }
                               });
                             } else if (value is List) {
-                              final hexStr = value.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+                              final hexStr = value
+                                  .map((b) =>
+                                      b.toRadixString(16).padLeft(2, '0'))
+                                  .join(' ');
                               debugPrint('    List内容(16进制): $hexStr');
                               debugPrint('    List内容(10进制): $value');
                             }
@@ -766,8 +774,10 @@ class BluetoothService extends GetxController {
                 String finalDeviceName = deviceName;
                 if (finalDeviceName == '未知设备' || finalDeviceName.isEmpty) {
                   // 尝试保持之前的名称
-                  final existingName = updatedResults[existingResultIndex].advertisementData.advName;
-                  if (existingName != null && existingName.isNotEmpty && existingName != '未知设备') {
+                  final existingName = updatedResults[existingResultIndex]
+                      .advertisementData
+                      .advName;
+                  if (existingName.isNotEmpty && existingName != '未知设备') {
                     finalDeviceName = existingName;
                     debugPrint('保持现有设备名称: $finalDeviceName');
                   }
@@ -1005,6 +1015,292 @@ class BluetoothService extends GetxController {
     }
   }
 
+  /// 通过设备地址发现服务（用于遥控透传）
+  Future<List<dynamic>> discoverServicesByAddress(String deviceAddress) async {
+    try {
+      if (Platform.isWindows) {
+        return await _adapter.discoverServices(deviceAddress);
+      } else {
+        // 移动端：直接通过FlutterBluePlus发现服务（要求设备已连接）
+        final device = _findDeviceByAddress(deviceAddress);
+        if (device == null) {
+          throw UnsupportedError('未找到设备，无法发现服务: $deviceAddress');
+        }
+        final services = await device.discoverServices();
+        return services; // 返回动态列表，调用方做解析
+      }
+    } catch (e) {
+      debugPrint('发现服务失败($deviceAddress): $e');
+      rethrow;
+    }
+  }
+
+  /// 通过设备地址与服务ID发现特征（用于遥控透传）
+  Future<List<dynamic>> discoverCharacteristicsByAddress(
+      String deviceAddress, String serviceId) async {
+    try {
+      if (Platform.isWindows) {
+        return await _adapter.discoverCharacteristics(deviceAddress, serviceId);
+      } else {
+        final device = _findDeviceByAddress(deviceAddress);
+        if (device == null) {
+          throw UnsupportedError('未找到设备，无法发现特征: $deviceAddress');
+        }
+        final services = await device.discoverServices();
+        for (final svc in services) {
+          try {
+            final id = svc.uuid.toString();
+            if (_uuidLikeEquals(id, serviceId)) {
+              return svc.characteristics;
+            }
+          } catch (_) {}
+        }
+        return <dynamic>[];
+      }
+    } catch (e) {
+      debugPrint('发现特征失败($deviceAddress/$serviceId): $e');
+      rethrow;
+    }
+  }
+
+  /// 通过设备地址向指定服务/特征写入（用于遥控透传）
+  Future<void> writeByAddress(
+    String deviceAddress,
+    String serviceId,
+    String characteristicId,
+    List<int> data, {
+    bool writeWithResponse = false,
+  }) async {
+    try {
+      if (Platform.isWindows) {
+        await _adapter.writeCharacteristic(
+          deviceAddress,
+          serviceId,
+          characteristicId,
+          data,
+          writeWithResponse: writeWithResponse,
+        );
+      } else {
+        final device = _findDeviceByAddress(deviceAddress);
+        if (device == null) {
+          throw UnsupportedError('未找到设备，无法写入: $deviceAddress');
+        }
+        final services = await device.discoverServices();
+        for (final svc in services) {
+          try {
+            final sid = svc.uuid.toString();
+            if (_uuidLikeEquals(sid, serviceId)) {
+              for (final ch in svc.characteristics) {
+                final cid = ch.uuid.toString();
+                if (_uuidLikeEquals(cid, characteristicId)) {
+                  await ch.write(Uint8List.fromList(data),
+                      withoutResponse: !writeWithResponse);
+                  return;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+        throw UnsupportedError('未找到目标特征: $characteristicId');
+      }
+    } catch (e) {
+      debugPrint('写入失败($deviceAddress/$serviceId/$characteristicId): $e');
+      rethrow;
+    }
+  }
+
+  /// 订阅通知（Windows 走 WinBle，移动端走FlutterBlue特征）
+  Stream<List<int>>? subscribeNotifyByAddress(
+      String deviceAddress, String serviceId, String characteristicId) {
+    try {
+      if (Platform.isWindows) {
+        // 当前win_ble未提供直接值流封装在此处，仅发起订阅
+        _adapter.subscribeToCharacteristic(
+            deviceAddress, serviceId, characteristicId);
+        // 需要用户侧通过win_ble提供的值流获取（若库支持）。此处返回null占位。
+        return null;
+      } else {
+        final device = _findDeviceByAddress(deviceAddress);
+        if (device == null) return null;
+        // 使用flutter_blue_plus发现对应特征并订阅
+        return Stream<List<int>>.multi((controller) async {
+          try {
+            final services = await device.discoverServices();
+            for (final svc in services) {
+              final sid = svc.uuid.toString();
+              if (_uuidLikeEquals(sid, serviceId)) {
+                for (final ch in svc.characteristics) {
+                  final cid = ch.uuid.toString();
+                  if (_uuidLikeEquals(cid, characteristicId)) {
+                    await ch.setNotifyValue(true);
+                    final sub = ch.onValueReceived.listen(controller.add,
+                        onError: controller.addError, onDone: controller.close);
+                    controller.onCancel = () async {
+                      await ch.setNotifyValue(false);
+                      await sub.cancel();
+                    };
+                    return; // 成功建立监听
+                  }
+                }
+              }
+            }
+            controller.close();
+          } catch (e) {
+            controller.addError(e);
+            controller.close();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('订阅通知失败: $e');
+      return null;
+    }
+  }
+
+  Future<void> unSubscribeNotifyByAddress(
+      String deviceAddress, String serviceId, String characteristicId) async {
+    try {
+      if (Platform.isWindows) {
+        await _adapter.unSubscribeFromCharacteristic(
+            deviceAddress, serviceId, characteristicId);
+      } else {
+        final device = _findDeviceByAddress(deviceAddress);
+        if (device == null) return;
+        final services = await device.discoverServices();
+        for (final svc in services) {
+          final sid = svc.uuid.toString();
+          if (_uuidLikeEquals(sid, serviceId)) {
+            for (final ch in svc.characteristics) {
+              final cid = ch.uuid.toString();
+              if (_uuidLikeEquals(cid, characteristicId)) {
+                await ch.setNotifyValue(false);
+                return;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('取消通知失败: $e');
+    }
+  }
+
+  /// 查找透传服务与可写特征（默认匹配 FFF0 服务）
+  /// 返回 { 'serviceId': ..., 'writeCharId': ... }
+  Future<Map<String, String>?> findTransparentUuidsByAddress(
+    String deviceAddress, {
+    String serviceUuidHint = 'fff0',
+  }) async {
+    try {
+      // 发现服务
+      final services = await discoverServicesByAddress(deviceAddress);
+
+      String? normalizeId(dynamic obj) {
+        try {
+          final uuid = _getProperty(obj, 'uuid');
+          if (uuid != null) return uuid.toString();
+        } catch (_) {}
+        try {
+          final id = _getProperty(obj, 'id');
+          if (id != null) return id.toString();
+        } catch (_) {}
+        return obj?.toString();
+      }
+
+      // 遍历服务，寻找匹配 serviceUuidHint 的服务
+      for (final svc in services) {
+        final sid = normalizeId(svc);
+        if (sid == null) continue;
+        if (_uuidLikeEquals(sid, serviceUuidHint)) {
+          // 发现特征
+          final characteristics = Platform.isWindows
+              ? await _adapter.discoverCharacteristics(deviceAddress, sid)
+              : _safeMobileCharacteristicsList(svc);
+
+          for (final ch in characteristics) {
+            final cid = normalizeId(ch);
+            if (cid == null) continue;
+
+            final isWritable = _isCharacteristicWritable(ch);
+            if (isWritable) {
+              return {
+                'serviceId': sid,
+                'writeCharId': cid,
+              };
+            }
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('查找透传UUID失败($deviceAddress): $e');
+      return null;
+    }
+  }
+
+  // 移动端：安全获取服务的特征列表
+  List<dynamic> _safeMobileCharacteristicsList(dynamic service) {
+    try {
+      final chars = service.characteristics;
+      if (chars is List) return chars;
+    } catch (_) {}
+    return const <dynamic>[];
+  }
+
+  // 判断特征是否可写（跨平台）
+  bool _isCharacteristicWritable(dynamic ch) {
+    try {
+      if (Platform.isWindows) {
+        final canWrite = _getProperty(ch, 'canWrite') == true ||
+            _getProperty(ch, 'write') == true ||
+            _getProperty(ch, 'isWritable') == true ||
+            _getProperty(ch, 'writeWithResponse') == true ||
+            _getProperty(ch, 'writeWithoutResponse') == true;
+
+        final props = _getProperty(ch, 'properties');
+        final fromProps = props is Map
+            ? ((props['write'] == true) ||
+                (props['writeWithoutResponse'] == true))
+            : false;
+        return canWrite || fromProps;
+      } else {
+        // FlutterBluePlus Characteristic
+        try {
+          return ch.properties.write == true ||
+              ch.properties.writeWithoutResponse == true;
+        } catch (_) {
+          return false;
+        }
+      }
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 辅助：根据地址在当前已知设备中查找设备
+  BluetoothDevice? _findDeviceByAddress(String deviceAddress) {
+    final foundConnected = connectedDevices.firstWhereOrNull(
+        (d) => d.remoteId.str.toLowerCase() == deviceAddress.toLowerCase());
+    if (foundConnected != null) return foundConnected;
+    final foundScanned = scanResults
+        .firstWhereOrNull((r) =>
+            r.device.remoteId.str.toLowerCase() == deviceAddress.toLowerCase())
+        ?.device;
+    return foundScanned;
+  }
+
+  /// 辅助：宽松判断两个UUID是否等价（支持16位/128位、大小写、带不带连字符）
+  bool _uuidLikeEquals(String a, String b) {
+    String norm(String x) =>
+        x.toLowerCase().replaceAll('-', '').replaceAll('0x', '').trim();
+    final na = norm(a);
+    final nb = norm(b);
+    if (na == nb) return true;
+    // 处理16位与128位互转（仅处理标准Base UUID场景）
+    String to16(String x) => x.length >= 32 ? x.substring(4, 8) : x;
+    return to16(na) == to16(nb);
+  }
+
   // 辅助方法：安全获取对象属性
   dynamic _getProperty(dynamic object, String propertyName) {
     try {
@@ -1140,7 +1436,8 @@ class BluetoothService extends GetxController {
             lowerUuid.contains('180a') || // Device Information
             lowerUuid.contains('180d') || // Heart Rate
             lowerUuid.contains('180f') || // Battery Service
-            lowerUuid.contains('1805')) { // Current Time Service
+            lowerUuid.contains('1805')) {
+          // Current Time Service
           return true;
         }
         // iBeacon UUID pattern表示不可连接

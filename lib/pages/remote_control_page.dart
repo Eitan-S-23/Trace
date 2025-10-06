@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import '../controllers/ble_controller.dart';
+import '../services/bluetooth_service.dart' as bt_service;
 
 class RemoteControlPage extends StatefulWidget {
   const RemoteControlPage({Key? key}) : super(key: key);
@@ -9,9 +12,20 @@ class RemoteControlPage extends StatefulWidget {
 }
 
 class _RemoteControlPageState extends State<RemoteControlPage> {
+  final BleController _ble = Get.find<BleController>();
+  final bt_service.BluetoothService _bt =
+      Get.find<bt_service.BluetoothService>();
+
   bool isScanning = false;
   bool isConnected = false;
   String? connectedDeviceName;
+  BluetoothDevice? connectedDevice;
+
+  String? serviceIdFFF0; // 实际匹配到的服务ID
+  String? writeCharId; // 实际匹配到的可写特征ID
+  String? notifyCharId; // 若存在可通知特征
+
+  final List<String> _rxLogs = <String>[]; // 接收日志
 
   // 自定义按钮列表
   List<CustomButton> customButtons = [
@@ -65,12 +79,12 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
 
             const SizedBox(height: 24),
 
-            // 扫描按钮
-            if (!isConnected) _buildScanButton(),
+            // 扫描或设备列表
+            if (!isConnected) _buildScanOrList(),
 
             if (!isConnected) const SizedBox(height: 24),
 
-            // 自定义按钮区域
+            // 自定义按钮区域 + RX日志
             if (isConnected) ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -93,10 +107,7 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 16),
-
-              // 按钮网格
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -111,6 +122,40 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                   final button = customButtons[index];
                   return _buildCustomButton(button);
                 },
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                '接收数据',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2E3A59),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_rxLogs.isEmpty)
+                      Text('暂无数据', style: TextStyle(color: Colors.grey[600]))
+                    else
+                      ..._rxLogs.reversed.take(50).map((e) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              e,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          )),
+                  ],
+                ),
               ),
             ],
 
@@ -194,10 +239,15 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
     );
   }
 
-  Widget _buildScanButton() {
+  // 已弃用：保留占位避免误用（不再引用）
+  // Widget _buildScanButton() => const SizedBox.shrink();
+
+  Widget _buildScanOrList() {
+    final devices = _ble.discoveredDevices;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -211,85 +261,90 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (isScanning) ...[
-            const SizedBox(
-              width: 48,
-              height: 48,
-              child: CircularProgressIndicator(),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '正在扫描设备...',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2E3A59),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '请确保目标设备已开启蓝牙',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _stopScan,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('停止扫描'),
-            ),
-          ] else ...[
-            const Icon(
-              Icons.bluetooth_searching,
-              size: 48,
-              color: Color(0xFF4A90E2),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '扫描蓝牙设备',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2E3A59),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              '点击开始扫描附近的蓝牙设备',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _startScan,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4A90E2),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                '开始扫描',
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '附近设备',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
+                  color: Color(0xFF2E3A59),
                 ),
               ),
-            ),
-          ],
+              if (!isScanning)
+                ElevatedButton.icon(
+                  onPressed: _startScanReal,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('开始扫描'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4A90E2),
+                    foregroundColor: Colors.white,
+                  ),
+                )
+              else
+                ElevatedButton.icon(
+                  onPressed: _stopScanReal,
+                  icon: const Icon(Icons.stop),
+                  label: const Text('停止扫描'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (isScanning) const LinearProgressIndicator(minHeight: 3),
+          const SizedBox(height: 12),
+          Obx(() {
+            final list = devices;
+            if (list.isEmpty) {
+              return const Text(
+                '未发现设备，点击开始扫描',
+                style: TextStyle(color: Colors.grey),
+              );
+            }
+            return ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: list.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                color: Colors.grey.shade200,
+              ),
+              itemBuilder: (context, index) {
+                final dev = list[index];
+                final name = _ble.getDeviceName(dev);
+                final rssi = _ble.getDeviceRssi(dev);
+                final connectable = _ble.isConnectable(dev);
+                return ListTile(
+                  leading: Icon(
+                    connectable
+                        ? Icons.bluetooth_searching
+                        : Icons.bluetooth_disabled,
+                    color: connectable ? const Color(0xFF4A90E2) : Colors.grey,
+                  ),
+                  title: Text(name.isEmpty ? '未知设备' : name),
+                  subtitle: Text(
+                    '地址: ${dev.remoteId.str}   RSSI: $rssi',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: ElevatedButton(
+                    onPressed: connectable ? () => _connect(dev) : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          connectable ? const Color(0xFF4CAF50) : Colors.grey,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('连接'),
+                  ),
+                );
+              },
+            );
+          }),
         ],
       ),
     );
@@ -400,62 +455,98 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
     );
   }
 
-  void _startScan() {
-    setState(() {
-      isScanning = true;
-    });
+  Future<void> _startScanReal() async {
+    setState(() => isScanning = true);
+    try {
+      await _ble.startScan();
+    } catch (_) {}
+  }
 
-    // 模拟扫描过程
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          isScanning = false;
-          isConnected = true;
-          connectedDeviceName = '智能设备 #001';
-        });
+  Future<void> _stopScanReal() async {
+    await _ble.stopScan();
+    if (mounted) setState(() => isScanning = false);
+  }
 
-        Get.snackbar(
-          '连接成功',
-          '已连接到 $connectedDeviceName',
+  Future<void> _connect(BluetoothDevice device) async {
+    try {
+      await _ble.connectDevice(device);
+      await _stopScanReal();
+      final name = _ble.getDeviceName(device);
+      setState(() {
+        isConnected = true;
+        connectedDeviceName = name.isEmpty ? '未知设备' : name;
+        connectedDevice = device;
+        _rxLogs.clear();
+      });
+      // 预解析FFF0
+      final ids = await _bt.findTransparentUuidsByAddress(device.remoteId.str,
+          serviceUuidHint: 'fff0');
+      if (ids != null) {
+        serviceIdFFF0 = ids['serviceId'];
+        writeCharId = ids['writeCharId'];
+        notifyCharId = ids['writeCharId']; // 常见硬件写入特征也会notify回显
+        // 建立监听
+        _attachNotify();
+      }
+      Get.snackbar('连接成功', '已连接到 $connectedDeviceName',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      }
-    });
+          colorText: Colors.white);
+    } catch (e) {
+      Get.snackbar('连接失败', '$e', snackPosition: SnackPosition.BOTTOM);
+    }
   }
 
-  void _stopScan() {
-    setState(() {
-      isScanning = false;
-    });
-  }
-
-  void _disconnectDevice() {
+  Future<void> _disconnectDevice() async {
+    // 先取消监听
+    await _detachNotify();
+    if (connectedDevice != null) {
+      try {
+        await _ble.disconnectDevice(connectedDevice!);
+      } catch (_) {}
+    }
     setState(() {
       isConnected = false;
       connectedDeviceName = null;
+      connectedDevice = null;
+      serviceIdFFF0 = null;
+      writeCharId = null;
+      notifyCharId = null;
+      _rxLogs.clear();
     });
-
-    Get.snackbar(
-      '已断开连接',
-      '设备已断开连接',
-      snackPosition: SnackPosition.BOTTOM,
-    );
+    Get.snackbar('已断开连接', '设备已断开连接', snackPosition: SnackPosition.BOTTOM);
   }
 
-  void _sendCustomData(CustomButton button) {
-    if (!isConnected) return;
-
-    // TODO: 实际发送蓝牙数据
-    Get.snackbar(
-      '指令已发送',
-      '${button.name}: ${button.data.map((e) => e.toRadixString(16).toUpperCase()).join(' ')}',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: button.color,
-      colorText: Colors.white,
-      duration: const Duration(seconds: 2),
-    );
+  Future<void> _sendCustomData(CustomButton button) async {
+    if (!isConnected || connectedDevice == null) return;
+    try {
+      // 若尚未解析到特征，尝试查找FFF0及可写特征
+      if (serviceIdFFF0 == null || writeCharId == null) {
+        final ids = await _bt.findTransparentUuidsByAddress(
+            connectedDevice!.remoteId.str,
+            serviceUuidHint: 'fff0');
+        if (ids != null) {
+          serviceIdFFF0 = ids['serviceId'];
+          writeCharId = ids['writeCharId'];
+        }
+      }
+      if (serviceIdFFF0 != null && writeCharId != null) {
+        await _bt.writeByAddress(connectedDevice!.remoteId.str, serviceIdFFF0!,
+            writeCharId!, button.data,
+            writeWithResponse: true);
+        Get.snackbar('指令已发送',
+            '${button.name}: ${button.data.map((e) => e.toRadixString(16).toUpperCase()).join(' ')}',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: button.color,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 2));
+      } else {
+        Get.snackbar('错误', '未找到FFF0服务或可写特征',
+            snackPosition: SnackPosition.BOTTOM);
+      }
+    } catch (e) {
+      Get.snackbar('发送失败', '$e', snackPosition: SnackPosition.BOTTOM);
+    }
   }
 
   void _editButton(CustomButton button) {
@@ -624,6 +715,35 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _attachNotify() async {
+    if (connectedDevice == null || serviceIdFFF0 == null) return;
+    final targetService = serviceIdFFF0!;
+    final targetChar = notifyCharId ?? writeCharId;
+    if (targetChar == null) return;
+    try {
+      final stream = _bt.subscribeNotifyByAddress(
+          connectedDevice!.remoteId.str, targetService, targetChar);
+      stream?.listen((event) {
+        final hex =
+            event.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+        final now = DateTime.now().toIso8601String().substring(11, 19);
+        setState(() {
+          _rxLogs.add('[$now] $hex');
+        });
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _detachNotify() async {
+    if (connectedDevice == null || serviceIdFFF0 == null) return;
+    final targetChar = notifyCharId ?? writeCharId;
+    if (targetChar == null) return;
+    try {
+      await _bt.unSubscribeNotifyByAddress(
+          connectedDevice!.remoteId.str, serviceIdFFF0!, targetChar);
+    } catch (_) {}
   }
 }
 
