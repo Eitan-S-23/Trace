@@ -170,27 +170,37 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
+                height: 200,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.grey.shade200),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_rxEntries.isEmpty)
-                      Text('暂无数据', style: TextStyle(color: Colors.grey[600]))
-                    else
-                      ..._rxEntries.reversed.take(50).map((e) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              _formatRxEntry(e),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          )),
-                  ],
-                ),
+                child: _rxEntries.isEmpty
+                    ? Align(
+                        alignment: Alignment.topLeft,
+                        child: Text('暂无数据',
+                            style: TextStyle(color: Colors.grey[600])),
+                      )
+                    : Scrollbar(
+                        thumbVisibility: true,
+                        child: ListView.builder(
+                          reverse: true,
+                          itemCount:
+                              _rxEntries.length > 200 ? 200 : _rxEntries.length,
+                          itemBuilder: (context, index) {
+                            final e = _rxEntries[_rxEntries.length - 1 - index];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Text(
+                                _formatRxEntry(e),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -225,41 +235,47 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                       maxLines: 3,
                     ),
                     const SizedBox(height: 8),
+                    // 16进制发送 单独一行
                     Row(
                       children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Switch(
-                              value: _sendAsHex,
-                              onChanged: (v) => setState(() => _sendAsHex = v),
-                              activeColor: const Color(0xFF4A90E2),
-                            ),
-                            const Text('16进制发送'),
-                          ],
+                        Switch(
+                          value: _sendAsHex,
+                          onChanged: (v) => setState(() => _sendAsHex = v),
+                          activeColor: const Color(0xFF4A90E2),
                         ),
-                        const SizedBox(width: 12),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Switch(
-                              value: _loopSend,
-                              onChanged: (v) {
-                                setState(() => _loopSend = v);
-                                if (v) {
-                                  _startLoopTimer();
-                                } else {
-                                  _stopLoopTimer();
-                                }
-                              },
-                              activeColor: const Color(0xFF4A90E2),
-                            ),
-                            const Text('循环发送'),
-                          ],
+                        const Text('16进制发送'),
+                        const Spacer(),
+                        ElevatedButton.icon(
+                          onPressed: _sendInputOnce,
+                          icon: const Icon(Icons.send, size: 18),
+                          label: const Text('发送'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4A90E2),
+                            foregroundColor: Colors.white,
+                          ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // 循环发送 + 间隔 单独一行
+                    Row(
+                      children: [
+                        Switch(
+                          value: _loopSend,
+                          onChanged: (v) {
+                            setState(() => _loopSend = v);
+                            if (v) {
+                              _startLoopTimer();
+                            } else {
+                              _stopLoopTimer();
+                            }
+                          },
+                          activeColor: const Color(0xFF4A90E2),
+                        ),
+                        const Text('循环发送'),
                         const SizedBox(width: 12),
                         SizedBox(
-                          width: 120,
+                          width: 150,
                           child: TextField(
                             controller: _intervalController,
                             keyboardType: TextInputType.number,
@@ -277,16 +293,6 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                                 }
                               }
                             },
-                          ),
-                        ),
-                        const Spacer(),
-                        ElevatedButton.icon(
-                          onPressed: _sendInputOnce,
-                          icon: const Icon(Icons.send, size: 18),
-                          label: const Text('发送'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4A90E2),
-                            foregroundColor: Colors.white,
                           ),
                         ),
                       ],
