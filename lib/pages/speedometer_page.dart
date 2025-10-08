@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'ota_upgrade_page.dart';
+import 'cycling_dashboard_page.dart';
 
 class SpeedometerPage extends StatelessWidget {
   const SpeedometerPage({Key? key}) : super(key: key);
@@ -354,7 +355,7 @@ class SpeedometerPage extends StatelessWidget {
                       subtitle: '开始新的骑行记录',
                       onTap: () {
                         Navigator.pop(context);
-                        // TODO: 导航到骑行页面
+                        Get.to(() => const CyclingDashboardPage());
                       },
                     ),
                     const SizedBox(height: 32),
