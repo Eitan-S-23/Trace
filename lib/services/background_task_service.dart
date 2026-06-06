@@ -45,9 +45,6 @@ class BackgroundTaskService extends GetxService {
     // 初始化通知服务（确保在后台也能显示通知）
     await _notificationService.initialize();
 
-    // 确保蓝牙控制器在后台也能工作
-    await _bleController.startScan();
-
     debugPrint('后台任务服务已初始化');
   }
 
@@ -64,6 +61,11 @@ class BackgroundTaskService extends GetxService {
   /// 执行后台检查
   Future<void> _performBackgroundCheck() async {
     try {
+      final monitoringDevices = _monitorController.monitoringDevices;
+      if (monitoringDevices.isEmpty) {
+        return;
+      }
+
       // 检查蓝牙扫描状态，如果停止了就重启
       if (!_bleController.isScanning.value) {
         debugPrint('后台模式：重新启动蓝牙扫描');
@@ -71,9 +73,7 @@ class BackgroundTaskService extends GetxService {
       }
 
       // 检查是否有监控中的设备
-      if (_monitorController.monitoringDevices.isNotEmpty) {
-        debugPrint('后台模式：监控设备数量 ${_monitorController.monitoringDevices.length}');
-      }
+      debugPrint('后台模式：监控设备数量 ${monitoringDevices.length}');
     } catch (e) {
       debugPrint('后台检查失败: $e');
     }
@@ -83,6 +83,9 @@ class BackgroundTaskService extends GetxService {
   void setBackgroundMode(bool isBackground) {
     _isBackgroundMode = isBackground;
     debugPrint('应用状态切换: ${isBackground ? '后台' : '前台'}');
+    if (isBackground) {
+      unawaited(_performBackgroundCheck());
+    }
   }
 
   /// 确保后台通知权限
