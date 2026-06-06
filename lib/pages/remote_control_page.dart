@@ -8,6 +8,39 @@ import '../controllers/ble_controller.dart';
 import '../services/bluetooth_service.dart' as bt_service;
 import '../services/database_service.dart';
 
+const List<IconData> _customButtonIconChoices = <IconData>[
+  Icons.lightbulb_outline,
+  Icons.power_settings_new,
+  Icons.campaign,
+  Icons.music_note,
+  Icons.flash_on,
+  Icons.favorite,
+  Icons.lock_open,
+  Icons.doorbell,
+  Icons.wifi,
+  Icons.bolt,
+  Icons.speaker,
+  Icons.thermostat,
+  Icons.directions_bike,
+  Icons.toys,
+  Icons.settings_remote,
+  Icons.sensors,
+];
+
+IconData _customButtonIconForCode(int? codePoint) {
+  if (codePoint == null) {
+    return Icons.touch_app;
+  }
+
+  for (final icon in _customButtonIconChoices) {
+    if (icon.codePoint == codePoint) {
+      return icon;
+    }
+  }
+
+  return Icons.touch_app;
+}
+
 class RemoteControlPage extends StatefulWidget {
   const RemoteControlPage({Key? key}) : super(key: key);
 
@@ -777,24 +810,7 @@ class _RemoteControlPageState extends State<RemoteControlPage> {
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
-                  children: <IconData>[
-                    Icons.lightbulb_outline,
-                    Icons.power_settings_new,
-                    Icons.campaign,
-                    Icons.music_note,
-                    Icons.flash_on,
-                    Icons.favorite,
-                    Icons.lock_open,
-                    Icons.doorbell,
-                    Icons.wifi,
-                    Icons.bolt,
-                    Icons.speaker,
-                    Icons.thermostat,
-                    Icons.directions_bike,
-                    Icons.toys,
-                    Icons.settings_remote,
-                    Icons.sensors,
-                  ]
+                  children: _customButtonIconChoices
                       .map<Widget>((IconData icon) => GestureDetector(
                             onTap: () => setState(() => selectedIcon = icon),
                             child: Container(
@@ -997,10 +1013,11 @@ extension CustomButtonDb on CustomButton {
     } else {
       textPayload = payload;
     }
+    final iconCode = m['iconCode'];
     return CustomButton(
       id: m['id'] as String,
       name: m['name'] as String,
-      icon: IconData(m['iconCode'] as int, fontFamily: 'MaterialIcons'),
+      icon: _customButtonIconForCode(iconCode is int ? iconCode : null),
       data: data,
       color: Color(m['colorValue'] as int),
       isHex: isHex,
