@@ -4,6 +4,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import '../models/device_data.dart';
 import '../models/device_settings.dart';
+import '../models/ride_models.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -27,6 +28,7 @@ class DatabaseService {
       version: 6, // 新增自定义按钮表
       onCreate: _createTables,
       onUpgrade: _upgradeDatabase,
+      onOpen: _createRideTables,
     );
   }
 
@@ -275,6 +277,47 @@ class DatabaseService {
         createdAt INTEGER,
         updatedAt INTEGER
       )
+    ''');
+
+    await _createRideTables(db);
+  }
+
+  Future<void> _createRideTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS rides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        deviceId TEXT,
+        deviceName TEXT,
+        startTime INTEGER NOT NULL,
+        endTime INTEGER NOT NULL,
+        durationSeconds INTEGER NOT NULL,
+        distanceKm REAL NOT NULL DEFAULT 0.0,
+        avgSpeedKmh REAL NOT NULL DEFAULT 0.0,
+        maxSpeedKmh REAL NOT NULL DEFAULT 0.0,
+        totalClimbM REAL NOT NULL DEFAULT 0.0,
+        createdAt INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS ride_points (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rideId INTEGER NOT NULL,
+        timestamp INTEGER NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        speedKmh REAL NOT NULL DEFAULT 0.0,
+        altitudeM REAL NOT NULL DEFAULT 0.0,
+        FOREIGN KEY (rideId) REFERENCES rides (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_rides_start_time ON rides (startTime DESC)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_ride_points_ride_time ON ride_points (rideId, timestamp ASC)
     ''');
   }
 
@@ -1043,6 +1086,92 @@ class DatabaseService {
 
     await batch.commit();
     debugPrint('保存设备 $deviceId 的月度耗电量统计数组到数据库');
+  }
+
+  /// 保存骑行记录
+  Future<int> insertRide(RideSession ride) async {
+    final db = await database;
+    await _createRideTables(db);
+    final values = ride.toMap()
+      ..remove('id')
+      ..['createdAt'] = DateTime.now().millisecondsSinceEpoch;
+    return await db.insert('rides', values);
+  }
+
+  Future<void> insertRidePoints(int rideId, List<RidePoint> points) async {
+    if (points.isEmpty) return;
+
+    final db = await database;
+    await _createRideTables(db);
+    final batch = db.batch();
+    for (final point in points) {
+      batch.insert('ride_points', point.toMap(savedRideId: rideId));
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<RideSession>> getRecentRides({int limit = 20}) async {
+    final db = await database;
+    await _createRideTables(db);
+    final maps = await db.query(
+      'rides',
+      orderBy: 'startTime DESC',
+      limit: limit,
+    );
+    return maps.map(RideSession.fromMap).toList();
+  }
+
+  Future<List<RidePoint>> getRidePoints(int rideId) async {
+    final db = await database;
+    await _createRideTables(db);
+    final maps = await db.query(
+      'ride_points',
+      where: 'rideId = ?',
+      whereArgs: [rideId],
+      orderBy: 'timestamp ASC',
+    );
+    return maps.map(RidePoint.fromMap).toList();
+  }
+
+  Future<Map<String, double>> getRideTotals({DateTime? since}) async {
+    final db = await database;
+    await _createRideTables(db);
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(distanceKm), 0) AS distanceKm,
+        COALESCE(SUM(durationSeconds), 0) AS durationSeconds,
+        COALESCE(MAX(maxSpeedKmh), 0) AS maxSpeedKmh,
+        COALESCE(SUM(totalClimbM), 0) AS totalClimbM
+      FROM rides
+      ${since == null ? '' : 'WHERE startTime >= ?'}
+      ''',
+      since == null ? const [] : [since.millisecondsSinceEpoch],
+    );
+    final row = rows.first;
+    return {
+      'distanceKm': (row['distanceKm'] as num).toDouble(),
+      'durationSeconds': (row['durationSeconds'] as num).toDouble(),
+      'maxSpeedKmh': (row['maxSpeedKmh'] as num).toDouble(),
+      'totalClimbM': (row['totalClimbM'] as num).toDouble(),
+    };
+  }
+
+  Future<void> deleteRide(int rideId) async {
+    final db = await database;
+    await _createRideTables(db);
+    await db.transaction((txn) async {
+      await txn.delete(
+        'ride_points',
+        where: 'rideId = ?',
+        whereArgs: [rideId],
+      );
+      await txn.delete(
+        'rides',
+        where: 'id = ?',
+        whereArgs: [rideId],
+      );
+    });
   }
 
   /// 关闭数据库

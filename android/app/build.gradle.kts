@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.wen.gaia.gaia" // 替换为你的项目包名
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
