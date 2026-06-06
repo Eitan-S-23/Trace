@@ -87,6 +87,13 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+set(BLE_SERVER_EXE "${CMAKE_SOURCE_DIR}/../BLEServer.exe")
+if(EXISTS "${BLE_SERVER_EXE}")
+  install(FILES "${BLE_SERVER_EXE}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

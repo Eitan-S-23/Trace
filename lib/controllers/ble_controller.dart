@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:get/get.dart';
@@ -27,11 +26,7 @@ class BleController extends GetxController {
   // 设备扫描结果数据
   var scanResults = <ScanResult>[].obs;
 
-  // 扫描订阅
-  StreamSubscription<List<ScanResult>>? _scanSubscription;
-
-  // 适配器状态订阅
-  StreamSubscription<BluetoothAdapterState>? _adapterSubscription;
+  final List<Worker> _workers = [];
 
   @override
   void onInit() {
@@ -41,40 +36,41 @@ class BleController extends GetxController {
 
   @override
   void onClose() {
-    _scanSubscription?.cancel();
-    _adapterSubscription?.cancel();
+    _disposeWorkers();
     super.onClose();
   }
 
   /// 初始化蓝牙
   Future<void> initBluetooth() async {
     try {
+      _disposeWorkers();
+
       // 监听BluetoothService的状态变化
-      ever(_bluetoothService.adapterState, (state) {
+      _workers.add(ever(_bluetoothService.adapterState, (state) {
         adapterState.value = state;
         if (state != BluetoothAdapterState.on) {
           discoveredDevices.clear();
           scanResults.clear();
           isScanning.value = false;
         }
-      });
+      }));
 
-      ever(_bluetoothService.isScanning, (scanning) {
+      _workers.add(ever(_bluetoothService.isScanning, (scanning) {
         isScanning.value = scanning;
-      });
+      }));
 
-      ever(_bluetoothService.discoveredDevices, (devices) {
+      _workers.add(ever(_bluetoothService.discoveredDevices, (devices) {
         discoveredDevices.assignAll(devices);
-      });
+      }));
 
-      ever(_bluetoothService.connectedDevices, (devices) {
+      _workers.add(ever(_bluetoothService.connectedDevices, (devices) {
         connectedDevices.assignAll(devices);
-      });
+      }));
 
-      ever(_bluetoothService.scanResults, (results) {
+      _workers.add(ever(_bluetoothService.scanResults, (results) {
         debugPrint('BleController接收到扫描结果: ${results.length} 个设备');
         scanResults.assignAll(results);
-      });
+      }));
 
       // 获取当前状态
       adapterState.value = _bluetoothService.adapterState.value;
@@ -88,6 +84,13 @@ class BleController extends GetxController {
       debugPrint('初始化蓝牙失败: $e');
       Get.snackbar('错误', '初始化蓝牙失败: $e', snackPosition: SnackPosition.BOTTOM);
     }
+  }
+
+  void _disposeWorkers() {
+    for (final worker in _workers) {
+      worker.dispose();
+    }
+    _workers.clear();
   }
 
   /// 请求蓝牙权限
@@ -186,18 +189,13 @@ class BleController extends GetxController {
     if (scanResult != null) {
       final advName = scanResult.advertisementData.advName;
       debugPrint('扫描结果中设备名称: $advName');
-      if (advName != null && advName.isNotEmpty) {
+      if (advName.isNotEmpty) {
         return advName;
       }
     }
 
-    // 如果扫描结果中没有名称，回退到设备本身的名称属性
-    String deviceName = '';
-    if (device.name?.isNotEmpty == true) {
-      deviceName = device.name!;
-    } else if (device.platformName.isNotEmpty) {
-      deviceName = device.platformName;
-    }
+    // 如果扫描结果中没有名称，回退到平台提供的设备名称。
+    final deviceName = device.platformName;
 
     debugPrint('最终设备名称: $deviceName');
     return deviceName.isNotEmpty ? deviceName : '未知设备';

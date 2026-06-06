@@ -26,6 +26,7 @@ class OtaService extends GetxController {
 
   // MQTT消息监听
   StreamSubscription? _mqttSubscription;
+  StreamSubscription<List<int>>? _otaNotificationSubscription;
 
   // HTTP客户端用于固件下载
   final Dio _dio = Dio();
@@ -60,6 +61,7 @@ class OtaService extends GetxController {
   @override
   void onClose() {
     _mqttSubscription?.cancel();
+    _otaNotificationSubscription?.cancel();
     _mqttClient?.disconnect();
     _dio.close();
     super.onClose();
@@ -290,6 +292,7 @@ class OtaService extends GetxController {
       _connectedDevice = device;
       _upgradeProgress.value = 0.0;
       _upgradeStatus.value = '连接设备中...';
+      await _stopOtaNotificationListening();
 
       // 连接BLE设备
       if (!device.isConnected) {
@@ -337,6 +340,7 @@ class OtaService extends GetxController {
       Get.snackbar('成功', 'OTA升级完成');
       return true;
     } catch (e) {
+      await _stopOtaNotificationListening();
       _upgradeStatus.value = 'OTA升级失败: $e';
       _isUpgrading.value = false;
       Get.snackbar('错误', 'OTA升级失败: $e');
@@ -364,33 +368,81 @@ class OtaService extends GetxController {
 
     final firmwareData = await _firmwareFile!.readAsBytes();
     final totalSize = firmwareData.length;
+    if (totalSize == 0) {
+      throw Exception('固件文件为空');
+    }
     // const chunkSize = 20; // BLE每次传输的字节数（当前未使用，但在实际BLE传输中会用到）
 
-    // 监听设备的请求
-    await _otaCharacteristic!.setNotifyValue(true);
+    try {
+      // 监听设备的请求
+      await _otaCharacteristic!.setNotifyValue(true);
 
-    _otaCharacteristic!.onValueReceived.listen((value) async {
-      // 解析设备请求: 版本号 + 起始字节 + 结束字节
-      if (value.length >= 12) {
-        // 假设请求格式固定长度
-        final startByte = _bytesToInt(value.sublist(4, 8));
-        final endByte = _bytesToInt(value.sublist(8, 12));
+      await _otaNotificationSubscription?.cancel();
+      _otaNotificationSubscription =
+          _otaCharacteristic!.onValueReceived.listen((value) async {
+        try {
+          if (!_isUpgrading.value || value.length < 12) return;
 
-        debugPrint('设备请求固件数据: $startByte - $endByte');
+          // 解析设备请求: 版本号 + 起始字节 + 结束字节
+          final startByte = _bytesToInt(value.sublist(4, 8));
+          final requestedEndByte = _bytesToInt(value.sublist(8, 12));
 
-        // 发送请求的固件数据段
-        await _sendFirmwareChunk(firmwareData, startByte, endByte);
+          if (startByte < 0 ||
+              requestedEndByte < startByte ||
+              startByte >= totalSize) {
+            debugPrint('忽略无效固件数据请求: $startByte - $requestedEndByte');
+            return;
+          }
 
-        // 更新进度
-        _upgradeProgress.value = endByte / totalSize;
-        _upgradeStatus.value =
-            '传输中: ${(endByte / totalSize * 100).toStringAsFixed(1)}%';
+          final endByte =
+              requestedEndByte >= totalSize ? totalSize - 1 : requestedEndByte;
+          debugPrint('设备请求固件数据: $startByte - $endByte');
+
+          await _sendFirmwareChunk(firmwareData, startByte, endByte);
+
+          final progress = (endByte + 1) / totalSize;
+          _upgradeProgress.value = progress > 1.0 ? 1.0 : progress;
+          _upgradeStatus.value =
+              '传输中: ${(_upgradeProgress.value * 100).toStringAsFixed(1)}%';
+        } catch (e) {
+          _isUpgrading.value = false;
+          _upgradeStatus.value = '固件传输失败: $e';
+          debugPrint('固件传输失败: $e');
+        }
+      }, onError: (Object error, StackTrace stackTrace) {
+        _isUpgrading.value = false;
+        _upgradeStatus.value = '固件传输监听失败: $error';
+        debugPrint('固件传输监听失败: $error');
+      }, cancelOnError: false);
+
+      // 等待传输完成
+      final deadline = DateTime.now().add(const Duration(minutes: 10));
+      while (_isUpgrading.value && _upgradeProgress.value < 1.0) {
+        if (DateTime.now().isAfter(deadline)) {
+          throw Exception('固件传输超时');
+        }
+        await Future.delayed(const Duration(milliseconds: 100));
       }
-    });
 
-    // 等待传输完成
-    while (_upgradeProgress.value < 1.0) {
-      await Future.delayed(const Duration(milliseconds: 100));
+      if (!_isUpgrading.value && _upgradeProgress.value < 1.0) {
+        throw Exception('OTA升级已取消');
+      }
+    } finally {
+      await _stopOtaNotificationListening();
+    }
+  }
+
+  Future<void> _stopOtaNotificationListening() async {
+    await _otaNotificationSubscription?.cancel();
+    _otaNotificationSubscription = null;
+
+    final characteristic = _otaCharacteristic;
+    if (characteristic == null) return;
+
+    try {
+      await characteristic.setNotifyValue(false);
+    } catch (e) {
+      debugPrint('关闭OTA通知失败: $e');
     }
   }
 
@@ -428,6 +480,7 @@ class OtaService extends GetxController {
   Future<void> cancelUpgrade() async {
     _isUpgrading.value = false;
     _upgradeStatus.value = '升级已取消';
+    await _stopOtaNotificationListening();
 
     if (_connectedDevice != null && _connectedDevice!.isConnected) {
       await _connectedDevice!.disconnect();

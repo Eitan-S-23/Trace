@@ -438,6 +438,7 @@ class BluetoothService extends GetxController {
   // 平台特定的控制器
   StreamSubscription? _scanSubscription;
   StreamSubscription? _adapterSubscription;
+  Timer? _scanTimeoutTimer;
   final Map<String, StreamSubscription> _deviceConnectionSubscriptions = {};
 
   // 蓝牙适配器实例
@@ -451,8 +452,10 @@ class BluetoothService extends GetxController {
 
   @override
   void onClose() {
+    _scanTimeoutTimer?.cancel();
     _scanSubscription?.cancel();
     _adapterSubscription?.cancel();
+    isScanning.value = false;
 
     // 清理所有设备连接订阅
     for (var subscription in _deviceConnectionSubscriptions.values) {
@@ -546,6 +549,9 @@ class BluetoothService extends GetxController {
   /// 通用蓝牙扫描（适用于所有平台）
   Future<void> _startScan(Duration? timeout) async {
     isScanning.value = true;
+    _scanTimeoutTimer?.cancel();
+    await _scanSubscription?.cancel();
+    _scanSubscription = null;
     // 不要清空设备列表，让设备累计
     // discoveredDevices.clear();
     // scanResults.clear();
@@ -554,7 +560,7 @@ class BluetoothService extends GetxController {
       debugPrint('${Platform.isWindows ? "Windows" : "Mobile"}蓝牙扫描已启动');
 
       // 使用适配器进行扫描
-      await _adapter.startScan(timeout: timeout);
+      await _adapter.startScan();
 
       // 监听扫描结果
       _scanSubscription = _adapter.scanResults.listen((results) {
@@ -863,13 +869,17 @@ class BluetoothService extends GetxController {
                 results.map((result) => result.device).toList();
           }
         }
-      });
+      }, onError: (Object error, StackTrace stackTrace) {
+        debugPrint('扫描结果监听失败: $error');
+        isScanning.value = false;
+        _scanTimeoutTimer?.cancel();
+      }, cancelOnError: false);
 
       debugPrint('${Platform.isWindows ? "Windows" : "Mobile"}蓝牙扫描正常启动');
 
       // 处理扫描超时
       if (timeout != null) {
-        Timer(timeout, () => stopScan());
+        _scanTimeoutTimer = Timer(timeout, () => stopScan());
       }
     } catch (e) {
       isScanning.value = false;
@@ -898,12 +908,15 @@ class BluetoothService extends GetxController {
 
     try {
       await _adapter.stopScan();
-
-      _scanSubscription?.cancel();
-      isScanning.value = false;
       debugPrint('蓝牙扫描已停止');
     } catch (e) {
       debugPrint('停止扫描失败: $e');
+    } finally {
+      _scanTimeoutTimer?.cancel();
+      _scanTimeoutTimer = null;
+      await _scanSubscription?.cancel();
+      _scanSubscription = null;
+      isScanning.value = false;
     }
   }
 

@@ -213,9 +213,9 @@ class MonitorController extends GetxController {
 
     // 如果从BleController获取的名称为"未知设备"，尝试从扫描结果中获取
     if (deviceName == '未知设备' || deviceName.isEmpty) {
-      if (result.advertisementData.advName != null &&
-          result.advertisementData.advName!.isNotEmpty) {
-        deviceName = result.advertisementData.advName!;
+      final advName = result.advertisementData.advName;
+      if (advName.isNotEmpty) {
+        deviceName = advName;
       }
     }
 

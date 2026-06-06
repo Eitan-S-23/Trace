@@ -229,8 +229,9 @@ class DeviceCard extends StatelessWidget {
   IconData _getDeviceIcon() {
     // 通过扫描结果获取设备名称用于图标判断
     final scanResult = controller.getScanResult(device);
-    final deviceName = scanResult?.advertisementData.advName ??
-        (device.name?.isNotEmpty == true ? device.name! : device.platformName);
+    final advName = scanResult?.advertisementData.advName;
+    final deviceName =
+        advName != null && advName.isNotEmpty ? advName : device.platformName;
     final name = deviceName.toLowerCase();
 
     if (name.contains('phone') || name.contains('iphone')) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,8 @@ class AlertService extends GetxController {
   final DatabaseService _dbService = DatabaseService();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final NotificationService _notificationService = NotificationService();
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<void>? _playerCompleteSubscription;
 
   // 存储设备设置的缓存
   final Map<String, DeviceSettings> _deviceSettingsCache = {};
@@ -46,6 +49,8 @@ class AlertService extends GetxController {
 
   @override
   void onClose() {
+    _playerStateSubscription?.cancel();
+    _playerCompleteSubscription?.cancel();
     _audioPlayer.dispose();
     super.onClose();
   }
@@ -61,12 +66,13 @@ class AlertService extends GetxController {
       _audioPlayer.setVolume(1.0);
 
       // 监听播放状态
-      _audioPlayer.onPlayerStateChanged.listen((PlayerState state) {
+      _playerStateSubscription =
+          _audioPlayer.onPlayerStateChanged.listen((PlayerState state) {
         debugPrint('音频播放器状态: $state');
       });
 
       // 监听播放完成
-      _audioPlayer.onPlayerComplete.listen((event) {
+      _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((_) {
         debugPrint('音频播放完成');
       });
 
