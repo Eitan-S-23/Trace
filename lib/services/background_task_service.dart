@@ -10,11 +10,12 @@ import 'notification_service.dart';
 class BackgroundTaskService extends GetxService {
   static BackgroundTaskService get to => Get.find();
 
-  final NotificationService _notificationService = NotificationService();
+  final NotificationService _notificationService = Get.find();
   final BleController _bleController = Get.find();
   final MonitorController _monitorController = Get.find();
 
   Timer? _backgroundCheckTimer;
+  AppLifecycleObserver? _lifecycleObserver;
   bool _isBackgroundMode = false;
 
   @override
@@ -27,19 +28,25 @@ class BackgroundTaskService extends GetxService {
   @override
   void onClose() {
     _backgroundCheckTimer?.cancel();
+    final observer = _lifecycleObserver;
+    if (observer != null) {
+      WidgetsBinding.instance.removeObserver(observer);
+      _lifecycleObserver = null;
+    }
     super.onClose();
   }
 
   /// 初始化后台任务
   Future<void> _initializeBackgroundTask() async {
     // 监听应用生命周期变化
-    WidgetsBinding.instance.addObserver(AppLifecycleObserver(this));
+    _lifecycleObserver ??= AppLifecycleObserver(this);
+    WidgetsBinding.instance.addObserver(_lifecycleObserver!);
 
     // 初始化通知服务（确保在后台也能显示通知）
     await _notificationService.initialize();
 
     // 确保蓝牙控制器在后台也能工作
-    _bleController.startScan();
+    await _bleController.startScan();
 
     debugPrint('后台任务服务已初始化');
   }

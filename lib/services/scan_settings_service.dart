@@ -23,7 +23,7 @@ class ScanSettingsService extends GetxController {
       final prefs = await SharedPreferences.getInstance();
       scanInterval.value = prefs.getInt('scan_interval') ?? 1000;
     } catch (e) {
-      print('加载扫描设置失败: $e');
+      debugPrint('加载扫描设置失败: $e');
     }
   }
 
@@ -33,7 +33,7 @@ class ScanSettingsService extends GetxController {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('scan_interval', scanInterval.value);
     } catch (e) {
-      print('保存扫描设置失败: $e');
+      debugPrint('保存扫描设置失败: $e');
     }
   }
 

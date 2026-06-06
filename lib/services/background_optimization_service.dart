@@ -19,6 +19,7 @@ class BackgroundOptimizationService extends GetxController {
 
   Timer? _backgroundTimer;
   Timer? _networkOptimizationTimer;
+  Timer? _optimizedScanStopTimer;
 
   // 网络使用统计
   var _networkUsageOptimized = false.obs;
@@ -42,13 +43,13 @@ class BackgroundOptimizationService extends GetxController {
   void onClose() {
     _backgroundTimer?.cancel();
     _networkOptimizationTimer?.cancel();
+    _optimizedScanStopTimer?.cancel();
     super.onClose();
   }
 
   /// 初始化优化设置
   void _initializeOptimization() {
-    // 监听应用生命周期变化
-    _startNetworkOptimization();
+    // Timers are started only when background mode is active.
   }
 
   /// 进入后台模式
@@ -88,6 +89,7 @@ class BackgroundOptimizationService extends GetxController {
   /// 应用后台扫描设置
   void _applyBackgroundScanSettings() {
     // 将扫描间隔调整为后台模式
+    _backgroundTimer?.cancel();
     _backgroundTimer = Timer.periodic(
       Duration(milliseconds: _backgroundScanInterval.value),
       (timer) {
@@ -101,6 +103,9 @@ class BackgroundOptimizationService extends GetxController {
   /// 应用前台扫描设置
   void _applyForegroundScanSettings() {
     _backgroundTimer?.cancel();
+    _backgroundTimer = null;
+    _optimizedScanStopTimer?.cancel();
+    _optimizedScanStopTimer = null;
     // 前台扫描由原有的监控控制器处理
   }
 
@@ -120,8 +125,11 @@ class BackgroundOptimizationService extends GetxController {
       _bleController.startScan();
 
       // 2秒后停止扫描
-      Timer(const Duration(seconds: 2), () {
-        _bleController.stopScan();
+      _optimizedScanStopTimer?.cancel();
+      _optimizedScanStopTimer = Timer(const Duration(seconds: 2), () {
+        if (_isBackgroundMode.value) {
+          _bleController.stopScan();
+        }
       });
     }
   }
@@ -140,6 +148,7 @@ class BackgroundOptimizationService extends GetxController {
   void _disableNetworkOptimization() {
     _networkUsageOptimized.value = false;
     _networkOptimizationTimer?.cancel();
+    _networkOptimizationTimer = null;
 
     debugPrint('网络优化已禁用');
   }

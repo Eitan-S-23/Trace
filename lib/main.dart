@@ -32,7 +32,7 @@ void main() async {
     // 初始化数据库
     await DatabaseService().database;
   } catch (e) {
-    print('Database initialization error: $e');
+    debugPrint('Database initialization error: $e');
   }
 
   runApp(const MyApp());
