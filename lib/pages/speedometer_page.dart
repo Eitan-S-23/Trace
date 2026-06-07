@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/ride_controller.dart';
-import '../models/ride_models.dart';
 
 class SpeedometerPage extends StatefulWidget {
   const SpeedometerPage({super.key});
@@ -27,7 +26,7 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
     if (!_scrollController.hasClients) return;
     _scrollController.animateTo(
       0,
-      duration: const Duration(milliseconds: 240),
+      duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
     );
   }
@@ -45,18 +44,26 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
         child: Column(
           children: [
             Expanded(
-              child: Obx(
-                () {
-                  final selectedIndex = controller.activeTabIndex.value;
-                  return ListView(
-                    key: PageStorageKey<String>('ride-tab-$selectedIndex'),
-                    controller: _scrollController,
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                    children: _buildPageChildren(controller, selectedIndex),
-                  );
-                },
-              ),
+              child: Obx(() {
+                final selectedIndex = controller.activeTabIndex.value;
+                return ListView(
+                  key: PageStorageKey<String>('speedometer-$selectedIndex'),
+                  controller: _scrollController,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+                  children: [
+                    _TopChrome(
+                      selectedIndex: selectedIndex,
+                      isConnected: selectedIndex != 3,
+                    ),
+                    const SizedBox(height: 18),
+                    _SelectedPage(
+                      controller: controller,
+                      selectedIndex: selectedIndex,
+                    ),
+                  ],
+                );
+              }),
             ),
             _RideTabBar(
               controller: controller,
@@ -67,265 +74,155 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
       ),
     );
   }
-
-  List<Widget> _buildPageChildren(
-    RideController controller,
-    int selectedIndex,
-  ) {
-    final children = <Widget>[
-      _Header(controller: controller),
-      const SizedBox(height: 14),
-    ];
-
-    switch (selectedIndex) {
-      case 1:
-        children.addAll(_buildAnalysisContent(controller));
-        break;
-      case 2:
-        children.addAll(_buildRecordContent(controller));
-        break;
-      case 3:
-        children.addAll(_buildProfileContent(controller));
-        break;
-      case 0:
-      default:
-        children.addAll(_buildDashboardContent(controller));
-    }
-
-    return children;
-  }
-
-  List<Widget> _buildDashboardContent(RideController controller) {
-    return [
-      _HeroSection(controller: controller),
-      const SizedBox(height: 10),
-      _MetricGrid(controller: controller),
-      const SizedBox(height: 10),
-      LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 330) {
-            return Column(
-              children: [
-                _TrackCard(controller: controller),
-                const SizedBox(height: 10),
-                _AltitudeCard(controller: controller),
-              ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: _TrackCard(controller: controller)),
-              const SizedBox(width: 10),
-              Expanded(child: _AltitudeCard(controller: controller)),
-            ],
-          );
-        },
-      ),
-      const SizedBox(height: 10),
-      _SpeedTrendCard(controller: controller),
-      const SizedBox(height: 10),
-      LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 330) {
-            return Column(
-              children: [
-                _WeeklyDistanceCard(controller: controller),
-                const SizedBox(height: 10),
-                _MonthlyGoalCard(controller: controller),
-              ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(
-                flex: 7,
-                child: _WeeklyDistanceCard(controller: controller),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 4,
-                child: _MonthlyGoalCard(controller: controller),
-              ),
-            ],
-          );
-        },
-      ),
-    ];
-  }
-
-  List<Widget> _buildAnalysisContent(RideController controller) {
-    return [
-      _AnalysisSummaryCard(controller: controller),
-      const SizedBox(height: 10),
-      _SpeedTrendCard(controller: controller),
-      const SizedBox(height: 10),
-      _WeeklyDistanceCard(controller: controller),
-      const SizedBox(height: 10),
-      _MonthlyGoalCard(controller: controller),
-      const SizedBox(height: 10),
-      _RecentRides(controller: controller),
-    ];
-  }
-
-  List<Widget> _buildRecordContent(RideController controller) {
-    return [
-      _SaveRideCard(controller: controller),
-      const SizedBox(height: 10),
-      _RecentRides(controller: controller),
-    ];
-  }
-
-  List<Widget> _buildProfileContent(RideController controller) {
-    return [
-      _ProfileSummaryCard(controller: controller),
-      const SizedBox(height: 10),
-      _MonthlyGoalCard(controller: controller),
-      const SizedBox(height: 10),
-      _RecentRides(controller: controller),
-    ];
-  }
 }
 
-class _DesignHeader extends StatelessWidget {
-  const _DesignHeader();
+class _SelectedPage extends StatelessWidget {
+  const _SelectedPage({
+    required this.controller,
+    required this.selectedIndex,
+  });
+
+  final RideController controller;
+  final int selectedIndex;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              Container(
-                width: 22,
-                height: 34,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+    switch (selectedIndex) {
+      case 1:
+        return _StatisticsPage(controller: controller);
+      case 2:
+        return const _RoutesPage();
+      case 3:
+        return _DevicesPage(controller: controller);
+      case 0:
+      default:
+        return _DashboardPage(controller: controller);
+    }
+  }
+}
+
+class _TopChrome extends StatelessWidget {
+  const _TopChrome({
+    required this.selectedIndex,
+    required this.isConnected,
+  });
+
+  final int selectedIndex;
+  final bool isConnected;
+
+  String get _title {
+    if (selectedIndex == 2) return '路线';
+    if (selectedIndex == 3) return '设备';
+    return '码表';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 54,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: Colors.white.withOpacity(0.78)),
+                  ),
+                  child: const Icon(
+                    Icons.more_vert,
+                    color: Colors.white,
+                    size: 15,
+                  ),
                 ),
-                child: const Icon(Icons.more_vert, color: Colors.white, size: 14),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '已连接',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.92),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      isConnected ? '已连接' : '未连接',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.90),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'iGPSPORT BSC300',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.66),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 2),
+                    Text(
+                      'iGPSPORT BSC300',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.70),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text(
-            '码表',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0.5,
+                  ],
+                ),
+              ],
             ),
           ),
-        ),
-        Expanded(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(
-                  Icons.cloud_sync_outlined,
-                  color: Colors.white,
-                  size: 25,
-                ),
+          Padding(
+            padding: const EdgeInsets.only(top: 13),
+            child: Text(
+              _title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.2,
               ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.more_horiz, color: Colors.white),
-              ),
-            ],
+            ),
           ),
-        ),
-      ],
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons.cloud_sync_outlined,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(
+                    Icons.more_horiz,
+                    color: Colors.white,
+                    size: 25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _DesignSectionTabs extends StatelessWidget {
-  const _DesignSectionTabs({
-    required this.selectedIndex,
-    required this.onSelect,
-  });
+class _DashboardPage extends StatelessWidget {
+  const _DashboardPage({required this.controller});
 
-  final int selectedIndex;
-  final ValueChanged<int> onSelect;
+  final RideController controller;
 
   @override
   Widget build(BuildContext context) {
-    const labels = ['活动', '统计', '训练', '路线', '设备'];
-    const mappedTabs = [0, 1, 1, 2, 3];
-    final activeTopIndex = switch (selectedIndex) {
-      0 => 0,
-      1 => 1,
-      2 => 3,
-      3 => 4,
-      _ => 0,
-    };
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
       children: [
-        for (var i = 0; i < labels.length; i++)
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => onSelect(mappedTabs[i]),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: i == activeTopIndex
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.58),
-                      fontSize: 16,
-                      fontWeight:
-                          i == activeTopIndex ? FontWeight.w900 : FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: i == activeTopIndex ? 24 : 0,
-                    height: 3,
-                    decoration: BoxDecoration(
-                      color: _RideColors.orange,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        _ActivityHeroCard(controller: controller),
+        const SizedBox(height: 12),
+        _DesignMetricGrid(controller: controller),
+        const SizedBox(height: 12),
+        _SpeedAltitudePanel(controller: controller),
+        const SizedBox(height: 12),
+        const _DistributionGrid(),
       ],
     );
   }
@@ -339,215 +236,2526 @@ class _ActivityHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final hasRide = controller.distanceKm.value > 0 ||
-          controller.elapsed.value > Duration.zero;
-      final distance = hasRide
-          ? controller.distanceKm.value.toStringAsFixed(2)
-          : '102.63';
-      final duration =
-          hasRide ? _formatDuration(controller.elapsed.value) : '03:45:28';
-      final avgSpeed = hasRide
-          ? controller.avgSpeedKmh.value.toStringAsFixed(1)
-          : '27.3';
-      final climb = hasRide
-          ? controller.totalClimbM.value.toStringAsFixed(0)
-          : '1268';
+      final sample = _RideSample.from(controller);
 
-      return Container(
-        height: 252,
+      return _GlassPanel(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _RideColors.panel,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.34),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: 0,
-              right: 0,
-              bottom: 52,
-              width: 180,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: CustomPaint(
-                  painter: _RoutePreviewPainter(),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 0,
-              top: 10,
-              child: Column(
-                children: [
-                  _FloatingRoundIcon(icon: Icons.fullscreen),
-                  const SizedBox(height: 14),
-                  _FloatingRoundIcon(icon: Icons.share_outlined),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 236,
+            child: Stack(
               children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.directions_bike,
-                      color: _RideColors.orange,
-                      size: 22,
+                Positioned.fill(
+                  left: 120,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: CustomPaint(
+                      painter: const _RouteMapPainter(),
+                      child: const SizedBox.expand(),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '户外骑行',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.94),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '2024/05/18  08:32',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.62),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 12),
-                RichText(
-                  text: TextSpan(
+                Positioned(
+                  right: 6,
+                  top: 18,
+                  child: Column(
                     children: [
-                      TextSpan(
-                        text: distance,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 52,
-                          height: 0.95,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -2.2,
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' km',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.92),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
+                      _RoundIconButton(icon: Icons.fullscreen, onTap: () {}),
+                      const SizedBox(height: 16),
+                      _RoundIconButton(icon: Icons.share_outlined, onTap: () {}),
                     ],
                   ),
                 ),
-                const Spacer(),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _HeroStat(label: '运动时间', value: duration, unit: ''),
-                    const SizedBox(width: 22),
-                    _HeroStat(label: '平均速度', value: avgSpeed, unit: 'km/h'),
-                    const SizedBox(width: 22),
-                    _HeroStat(label: '累计爬升', value: climb, unit: 'm'),
-                    const SizedBox(width: 22),
-                    const _HeroStat(label: '训练负荷', value: '187', unit: '高'),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Color(0xFFFFCB2D),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'PR',
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.directions_bike,
+                          color: _RideColors.orange,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 9),
+                        Text(
+                          '户外骑行',
                           style: TextStyle(
-                            color: Color(0xFF1B1B1B),
-                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.96),
+                            fontSize: 22,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 11),
+                    Text(
+                      '2024/05/18  08:32',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.62),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 15),
+                    RichText(
+                      text: TextSpan(
                         children: [
-                          const Text(
-                            '个人新纪录！',
-                            style: TextStyle(
-                              color: Color(0xFFFFD84A),
-                              fontSize: 14,
+                          TextSpan(
+                            text: sample.distanceText,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 56,
+                              height: 0.96,
                               fontWeight: FontWeight.w900,
+                              letterSpacing: -2.4,
                             ),
                           ),
-                          Text(
-                            '最长距离  ${distance}km',
+                          TextSpan(
+                            text: ' km',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.62),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                              color: Colors.white.withOpacity(0.92),
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Text(
-                      '查看详情',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.78),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.chevron_right,
-                      color: Colors.white.withValues(alpha: 0.78),
-                      size: 20,
+                    const Spacer(),
+                    Wrap(
+                      spacing: 22,
+                      runSpacing: 12,
+                      children: [
+                        _HeroStat(
+                          label: '运动时间',
+                          value: sample.durationText,
+                          unit: '',
+                        ),
+                        _HeroStat(
+                          label: '平均速度',
+                          value: sample.avgSpeedText,
+                          unit: 'km/h',
+                        ),
+                        _HeroStat(
+                          label: '累计爬升',
+                          value: sample.climbText,
+                          unit: 'm',
+                        ),
+                        const _HeroStat(
+                          label: '训练负荷',
+                          value: '187',
+                          unit: '高',
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ],
             ),
-          ],
+          ),
+          Divider(color: Colors.white.withOpacity(0.08), height: 1),
+          const SizedBox(height: 13),
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFCB2D),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFCB2D).withOpacity(0.25),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Text(
+                    'PR',
+                    style: TextStyle(
+                      color: Color(0xFF1C1B17),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '个人新纪录!',
+                      style: TextStyle(
+                        color: Color(0xFFFFD74A),
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '最长距离  ${sample.distanceText}km',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.68),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () {},
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white.withOpacity(0.82),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('查看详情'),
+                    SizedBox(width: 3),
+                    Icon(Icons.chevron_right, size: 20),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
         ),
       );
     });
   }
 }
 
-class _FloatingRoundIcon extends StatelessWidget {
-  const _FloatingRoundIcon({required this.icon});
+class _DesignMetricGrid extends StatelessWidget {
+  const _DesignMetricGrid({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final sample = _RideSample.from(controller);
+      final cards = [
+        _MetricTile(
+          icon: Icons.speed,
+          color: const Color(0xFF2088FF),
+          title: '平均速度',
+          value: sample.avgSpeedText,
+          unit: 'km/h',
+          footnote: '最高 ${sample.maxSpeedText} km/h',
+          sparkColor: const Color(0xFF2088FF),
+          values: const [16, 17, 18, 18, 20, 24, 22, 29, 27, 31, 30, 33],
+        ),
+        const _MetricTile(
+          icon: Icons.bolt,
+          color: Color(0xFF64D72A),
+          title: '平均功率',
+          value: '186',
+          unit: 'w',
+          footnote: '最大 562 w',
+          sparkColor: Color(0xFF64D72A),
+          values: [110, 112, 118, 135, 172, 188, 160, 176, 182, 194, 181, 202],
+        ),
+        const _MetricTile(
+          icon: Icons.favorite,
+          color: Color(0xFFFF3B5F),
+          title: '平均心率',
+          value: '156',
+          unit: 'bpm',
+          footnote: '最大 188 bpm',
+          sparkColor: Color(0xFFFF3B5F),
+          values: [98, 106, 118, 130, 146, 159, 154, 165, 172, 169, 176, 182],
+        ),
+        const _MetricTile(
+          icon: Icons.track_changes,
+          color: Color(0xFFFFC400),
+          title: '平均踏频',
+          value: '87',
+          unit: 'rpm',
+          footnote: '最高 118 rpm',
+          sparkColor: Color(0xFFFFC400),
+          values: [62, 64, 63, 70, 76, 91, 84, 79, 82, 88, 84, 92],
+        ),
+        _MetricTile(
+          icon: Icons.terrain,
+          color: const Color(0xFFA533FF),
+          title: '累计爬升',
+          value: sample.climbText,
+          unit: 'm',
+          footnote: '总上升 ${sample.climbText} m',
+          sparkColor: const Color(0xFFA533FF),
+          values: const [
+            0,
+            20,
+            45,
+            110,
+            180,
+            260,
+            360,
+            510,
+            650,
+            820,
+            1010,
+            1268,
+          ],
+        ),
+        const _MetricTile(
+          icon: Icons.thermostat,
+          color: Color(0xFF42D8E6),
+          title: '平均温度',
+          value: '22.4',
+          unit: '°C',
+          footnote: '最高 28.6 °C',
+          sparkColor: Color(0xFF42D8E6),
+          values: [24, 23, 22, 20, 18, 19, 23, 22, 20, 19, 22, 21],
+        ),
+      ];
+
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final columns = constraints.maxWidth < 420 ? 2 : 3;
+          const spacing = 8.0;
+          final width =
+              (constraints.maxWidth - spacing * (columns - 1)) / columns;
+          return Wrap(
+            spacing: spacing,
+            runSpacing: spacing,
+            children: [
+              for (final card in cards) SizedBox(width: width, child: card),
+            ],
+          );
+        },
+      );
+    });
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.value,
+    required this.unit,
+    required this.footnote,
+    required this.sparkColor,
+    required this.values,
+  });
 
   final IconData icon;
+  final Color color;
+  final String title;
+  final String value;
+  final String unit;
+  final String footnote;
+  final Color sparkColor;
+  final List<double> values;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+      child: SizedBox(
+        height: 150,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.13),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: color.withOpacity(0.90), width: 2),
+                  ),
+                  child: Icon(icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: value,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 32,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.8,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' $unit',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.72),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              footnote,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.58),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            SizedBox(
+              height: 34,
+              child: CustomPaint(
+                painter: _SparklinePainter(values: values, color: sparkColor),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeedAltitudePanel extends StatelessWidget {
+  const _SpeedAltitudePanel({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final sample = _RideSample.from(controller);
+      final speedData = controller.speedTrendKmh.isEmpty
+          ? const [32.0, 28, 35, 20, 34, 30, 38, 27, 31, 34, 25, 36, 33, 29]
+          : controller.speedTrendKmh.toList();
+      final altitudeData = controller.altitudeTrendM.isEmpty
+          ? const [
+              0.0,
+              35,
+              70,
+              180,
+              320,
+              420,
+              620,
+              900,
+              1150,
+              1268,
+              1040,
+              780,
+              520,
+              360,
+            ]
+          : controller.altitudeTrendM.toList();
+
+      return _GlassPanel(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                '速度 & 海拔',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const Spacer(),
+              _LegendText(
+                label: '平均',
+                value: '${sample.avgSpeedText} km/h',
+                color: const Color(0xFF2B9DFF),
+              ),
+              const SizedBox(width: 16),
+              _LegendText(
+                label: '累计爬升',
+                value: '${sample.climbText} m',
+                color: const Color(0xFFA533FF),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 194,
+            child: CustomPaint(
+              painter: _DualLineChartPainter(
+                speed: speedData,
+                altitude: altitudeData,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ],
+        ),
+      );
+    });
+  }
+}
+
+class _DistributionGrid extends StatelessWidget {
+  const _DistributionGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 460;
+        final panels = [
+          const _ZoneDistributionPanel(
+            title: '功率分布',
+            summaryLabel: '平均功率',
+            summaryValue: '186 w',
+            centerText: '186',
+            centerSubtext: '平均功率',
+            colors: [
+              Color(0xFFFF3158),
+              Color(0xFFFF7A1A),
+              Color(0xFFFFD21A),
+              Color(0xFF4AD14A),
+              Color(0xFF268DFF),
+            ],
+            labels: [
+              'Z5  > 350 w',
+              'Z4  250 - 350 w',
+              'Z3  180 - 250 w',
+              'Z2  120 - 180 w',
+              'Z1  < 120 w',
+            ],
+            values: ['12:15   11%', '28:47   26%', '40:21   36%', '32:16   18%', '12:09   9%'],
+            distribution: [0.11, 0.26, 0.36, 0.18, 0.09],
+          ),
+          const _ZoneDistributionPanel(
+            title: '心率分布',
+            summaryLabel: '平均心率',
+            summaryValue: '156 bpm',
+            centerText: '156',
+            centerSubtext: '平均心率',
+            colors: [
+              Color(0xFFFF3158),
+              Color(0xFFFF7A1A),
+              Color(0xFFFFD21A),
+              Color(0xFF4AD14A),
+              Color(0xFF268DFF),
+            ],
+            labels: [
+              'Z5  > 178 bpm',
+              'Z4  160 - 178 bpm',
+              'Z3  140 - 160 bpm',
+              'Z2  120 - 140 bpm',
+              'Z1  < 120 bpm',
+            ],
+            values: ['08:36   6%', '26:18   17%', '55:21   36%', '48:23   31%', '11:10   10%'],
+            distribution: [0.06, 0.17, 0.36, 0.31, 0.10],
+          ),
+        ];
+
+        if (compact) {
+          return Column(
+            children: [
+              panels[0],
+              const SizedBox(height: 8),
+              panels[1],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: panels[0]),
+            const SizedBox(width: 8),
+            Expanded(child: panels[1]),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ZoneDistributionPanel extends StatelessWidget {
+  const _ZoneDistributionPanel({
+    required this.title,
+    required this.summaryLabel,
+    required this.summaryValue,
+    required this.centerText,
+    required this.centerSubtext,
+    required this.colors,
+    required this.labels,
+    required this.values,
+    required this.distribution,
+  });
+
+  final String title;
+  final String summaryLabel;
+  final String summaryValue;
+  final String centerText;
+  final String centerSubtext;
+  final List<Color> colors;
+  final List<String> labels;
+  final List<String> values;
+  final List<double> distribution;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.all(14),
+      child: SizedBox(
+        height: 186,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const Spacer(),
+                _LegendText(
+                  label: summaryLabel,
+                  value: summaryValue,
+                  color: title == '功率分布'
+                      ? const Color(0xFF2B9DFF)
+                      : const Color(0xFFA533FF),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 104,
+                    height: 104,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CustomPaint(
+                          painter: _DonutPainter(
+                            colors: colors,
+                            values: distribution,
+                            backgroundColor: _RideColors.panel,
+                          ),
+                          child: const SizedBox.expand(),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              centerText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              centerSubtext,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.50),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        for (var i = 0; i < labels.length; i++)
+                          Row(
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: colors[i],
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Expanded(
+                                child: Text(
+                                  labels[i],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.72),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                values[i],
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.82),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatisticsPage extends StatelessWidget {
+  const _StatisticsPage({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final stats = _RideStats.from(controller);
+
+      return _OuterFrame(
+        child: Column(
+        children: [
+          const _PeriodSegment(selectedIndex: 1),
+          const SizedBox(height: 18),
+          const _MonthSelector(label: '2024年5月'),
+          const SizedBox(height: 18),
+          _StatsOverview(stats: stats),
+          const SizedBox(height: 12),
+          _BarTrendPanel(
+            title: '里程趋势',
+            unit: '单位：km',
+            values: const [82, 32, 74, 8, 41, 79, 11, 58, 44, 88, 99, 59, 14, 75, 80, 102, 66],
+            labels: const ['05/01', '05/08', '05/15', '05/22', '05/29'],
+            color: _RideColors.orange,
+            tooltipTitle: '5月18日',
+            tooltipValue: '102.6 km',
+            maxValue: 120,
+          ),
+          const SizedBox(height: 12),
+          _BarTrendPanel(
+            title: '运动时长趋势',
+            unit: '单位：小时',
+            values: const [5, 2, 5, 0.5, 2.5, 4.9, 0.7, 3.4, 2.7, 5.3, 6.0, 3.7, 0.9, 4.6, 5.0, 6.6, 4.2],
+            labels: const ['05/01', '05/08', '05/15', '05/22', '05/29'],
+            color: const Color(0xFF268DFF),
+            tooltipTitle: '5月18日',
+            tooltipValue: '3:45:28',
+            maxValue: 8,
+          ),
+          const SizedBox(height: 12),
+          const _AnnualDistributionPanel(),
+        ],
+        ),
+      );
+    });
+  }
+}
+
+class _PeriodSegment extends StatelessWidget {
+  const _PeriodSegment({required this.selectedIndex});
+
+  final int selectedIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['周', '月', '年', '全部'];
+    return Container(
+      height: 47,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: i == selectedIndex
+                      ? Colors.white.withOpacity(0.08)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  labels[i],
+                  style: TextStyle(
+                    color: i == selectedIndex
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.62),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MonthSelector extends StatelessWidget {
+  const _MonthSelector({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.chevron_left, color: Colors.white.withOpacity(0.86), size: 30),
+        const SizedBox(width: 42),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(width: 42),
+        Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.86), size: 30),
+      ],
+    );
+  }
+}
+
+class _StatsOverview extends StatelessWidget {
+  const _StatsOverview({required this.stats});
+
+  final _RideStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '总览',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 18),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 3,
+            childAspectRatio: 1.34,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 10,
+            children: [
+              _OverviewMetric(label: '活动次数', value: stats.rideCount, unit: '次'),
+              _OverviewMetric(label: '总里程', value: stats.totalDistance, unit: 'km'),
+              _OverviewMetric(label: '总时间', value: stats.totalDuration, unit: ''),
+              _OverviewMetric(label: '总爬升', value: stats.totalClimb, unit: 'm'),
+              _OverviewMetric(label: '总消耗', value: stats.calories, unit: 'kcal'),
+              _OverviewMetric(label: '平均速度', value: stats.avgSpeed, unit: 'km/h'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OverviewMetric extends StatelessWidget {
+  const _OverviewMetric({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final String label;
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.56),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.6,
+                  ),
+                ),
+                if (unit.isNotEmpty)
+                  TextSpan(
+                    text: ' $unit',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.58),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BarTrendPanel extends StatelessWidget {
+  const _BarTrendPanel({
+    required this.title,
+    required this.unit,
+    required this.values,
+    required this.labels,
+    required this.color,
+    required this.tooltipTitle,
+    required this.tooltipValue,
+    required this.maxValue,
+  });
+
+  final String title;
+  final String unit;
+  final List<double> values;
+  final List<String> labels;
+  final Color color;
+  final String tooltipTitle;
+  final String tooltipValue;
+  final double maxValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                unit,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.54),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 210,
+            child: CustomPaint(
+              painter: _BarChartPainter(
+                values: values,
+                labels: labels,
+                color: color,
+                maxValue: maxValue,
+                tooltipIndex: values.length > 16 ? 15 : values.length - 1,
+                tooltipTitle: tooltipTitle,
+                tooltipValue: tooltipValue,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnnualDistributionPanel extends StatelessWidget {
+  const _AnnualDistributionPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                '运动类型分布',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '单位：km',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.54),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: const [
+                    _DistributionRow(
+                      color: _RideColors.orange,
+                      label: '户外骑行',
+                      value: '872.3 km',
+                      ratio: '85%',
+                    ),
+                    SizedBox(height: 24),
+                    _DistributionRow(
+                      color: Color(0xFF268DFF),
+                      label: '室内骑行',
+                      value: '102.4 km',
+                      ratio: '10%',
+                    ),
+                    SizedBox(height: 24),
+                    _DistributionRow(
+                      color: Color(0xFF62D729),
+                      label: '其他运动',
+                      value: '51.6 km',
+                      ratio: '5%',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 20),
+              SizedBox(
+                width: 148,
+                height: 148,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      painter: const _DonutPainter(
+                        colors: [
+                          _RideColors.orange,
+                          Color(0xFF268DFF),
+                          Color(0xFF62D729),
+                        ],
+                        values: [0.85, 0.10, 0.05],
+                        backgroundColor: _RideColors.panel,
+                        strokeWidth: 25,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          '1026.3',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          '总里程 (km)',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.54),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DistributionRow extends StatelessWidget {
+  const _DistributionRow({
+    required this.color,
+    required this.label,
+    required this.value,
+    required this.ratio,
+  });
+
+  final Color color;
+  final String label;
+  final String value;
+  final String ratio;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.82),
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          ratio,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.82),
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoutesPage extends StatelessWidget {
+  const _RoutesPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const _RouteModeTabs(),
+        const SizedBox(height: 12),
+        const _RouteSearchBar(),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '路线（18）',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.72),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const _RouteListCard(
+          title: '周末环山路线',
+          date: '2024/05/18  08:32',
+          distance: '102.63',
+          climb: '1268',
+          duration: '03:45:28',
+          difficulty: '中等',
+          difficultyColor: Color(0xFFA46AFF),
+          variant: 0,
+        ),
+        const SizedBox(height: 10),
+        const _RouteListCard(
+          title: '滨海骑行路线',
+          date: '2024/05/12  07:15',
+          distance: '65.28',
+          climb: '512',
+          duration: '02:28:16',
+          difficulty: '简单',
+          difficultyColor: Color(0xFF62D729),
+          variant: 1,
+        ),
+        const SizedBox(height: 10),
+        const _RouteListCard(
+          title: '城市探索路线',
+          date: '2024/05/05  09:42',
+          distance: '88.47',
+          climb: '876',
+          duration: '03:12:45',
+          difficulty: '困难',
+          difficultyColor: Color(0xFFFF3B5F),
+          variant: 2,
+        ),
+        const SizedBox(height: 10),
+        const _RouteListCard(
+          title: '晨间训练路线',
+          date: '2024/04/28  06:30',
+          distance: '45.16',
+          climb: '321',
+          duration: '01:48:22',
+          difficulty: '简单',
+          difficultyColor: Color(0xFF62D729),
+          variant: 3,
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteModeTabs extends StatelessWidget {
+  const _RouteModeTabs();
+
+  @override
+  Widget build(BuildContext context) {
+    const labels = ['我的路线', '收藏路线', '导入路线'];
+    return _OuterFrame(
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: Container(
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: i == 0
+                      ? _RideColors.orange.withOpacity(0.13)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: i == 0
+                      ? Border.all(color: _RideColors.orange.withOpacity(0.85))
+                      : null,
+                ),
+                child: Text(
+                  labels[i],
+                  style: TextStyle(
+                    color: i == 0
+                        ? _RideColors.orange
+                        : Colors.white.withOpacity(0.70),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteSearchBar extends StatelessWidget {
+  const _RouteSearchBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.search, color: Colors.white.withOpacity(0.64), size: 23),
+                const SizedBox(width: 8),
+                Text(
+                  '搜索路线名称或地点',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.48),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Row(
+            children: [
+              const Text(
+                '全部',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.keyboard_arrow_down,
+                color: Colors.white.withOpacity(0.78),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteListCard extends StatelessWidget {
+  const _RouteListCard({
+    required this.title,
+    required this.date,
+    required this.distance,
+    required this.climb,
+    required this.duration,
+    required this.difficulty,
+    required this.difficultyColor,
+    required this.variant,
+  });
+
+  final String title;
+  final String date;
+  final String distance;
+  final String climb;
+  final String duration;
+  final String difficulty;
+  final Color difficultyColor;
+  final int variant;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: EdgeInsets.zero,
+      child: SizedBox(
+        height: 176,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 148,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(14),
+                ),
+                child: CustomPaint(
+                  painter: _RouteMapPainter(variant: variant),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      date,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.60),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _RouteBadge(
+                          label: '公路',
+                          color: _RideColors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        _RouteBadge(
+                          label: '难度 $difficulty',
+                          color: difficultyColor,
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Wrap(
+                      spacing: 14,
+                      runSpacing: 4,
+                      children: [
+                        _RouteMetric(value: distance, unit: 'km'),
+                        _RouteMetric(value: climb, unit: 'm'),
+                        _RouteMetric(value: duration, unit: ''),
+                      ],
+                    ),
+                    Divider(color: Colors.white.withOpacity(0.08), height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Icon(Icons.star_border, color: Colors.white.withOpacity(0.68)),
+                        const SizedBox(width: 28),
+                        Icon(Icons.share_outlined, color: Colors.white.withOpacity(0.68)),
+                        const SizedBox(width: 28),
+                        Icon(Icons.more_horiz, color: Colors.white.withOpacity(0.68)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteBadge extends StatelessWidget {
+  const _RouteBadge({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 38,
-      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.10),
-        shape: BoxShape.circle,
+        color: color.withOpacity(0.09),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: color),
       ),
-      child: Icon(icon, color: Colors.white.withValues(alpha: 0.82), size: 21),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteMetric extends StatelessWidget {
+  const _RouteMetric({
+    required this.value,
+    required this.unit,
+  });
+
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          if (unit.isNotEmpty)
+            TextSpan(
+              text: ' $unit',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.62),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DevicesPage extends StatelessWidget {
+  const _DevicesPage({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _ScanPanel(controller: controller),
+        const SizedBox(height: 12),
+        const _AvailableDevicesPanel(),
+        const SizedBox(height: 12),
+        const _ConnectedDevicePanel(),
+      ],
+    );
+  }
+}
+
+class _ScanPanel extends StatelessWidget {
+  const _ScanPanel({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+      child: Column(
+        children: [
+          const Text(
+            '正在扫描设备...',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '请确保设备已开机并靠近手机',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.66),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 22),
+          SizedBox(
+            height: 304,
+            child: CustomPaint(
+              painter: const _RadarPainter(),
+              child: Center(
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF3BE23E).withOpacity(0.18),
+                  ),
+                  child: const Icon(
+                    Icons.bluetooth,
+                    color: Color(0xFF3BE23E),
+                    size: 36,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton(
+            onPressed: controller.loadRideHistory,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _RideColors.orange,
+              side: BorderSide(color: Colors.white.withOpacity(0.14)),
+              minimumSize: const Size(260, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+            ),
+            child: const Text(
+              '停止扫描',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvailableDevicesPanel extends StatelessWidget {
+  const _AvailableDevicesPanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Text(
+                '可用设备',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const Spacer(),
+              Icon(Icons.refresh, color: Colors.white.withOpacity(0.78)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const _DeviceRow(
+            title: 'iGPSPORT BSC300_1234',
+            type: '码表',
+            bars: 4,
+          ),
+          const SizedBox(height: 10),
+          const _DeviceRow(
+            title: 'iGPSPORT SR30_5678',
+            type: '雷达',
+            bars: 4,
+          ),
+          const SizedBox(height: 10),
+          const _DeviceRow(
+            title: 'iGPSPORT HR40_9012',
+            type: '心率带',
+            bars: 3,
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Text(
+                '未找到我的设备',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.68),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.82)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceRow extends StatelessWidget {
+  const _DeviceRow({
+    required this.title,
+    required this.type,
+    required this.bars,
+  });
+
+  final String title;
+  final String type;
+  final int bars;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 82,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.035),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.07)),
+      ),
+      child: Row(
+        children: [
+          _DeviceThumbnail(kind: type, compact: true),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.white.withOpacity(0.18)),
+                    ),
+                    child: Text(
+                      type,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.78),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _SignalBars(value: bars),
+          const SizedBox(width: 16),
+          OutlinedButton(
+            onPressed: () {},
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _RideColors.orange,
+              side: const BorderSide(color: _RideColors.orange),
+              minimumSize: const Size(76, 38),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            child: const Text(
+              '连接',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceThumbnail extends StatelessWidget {
+  const _DeviceThumbnail({
+    required this.kind,
+    this.compact = false,
+  });
+
+  final String kind;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (kind == '雷达') return _RadarDeviceThumbnail(compact: compact);
+    if (kind == '心率带') return _HeartRateDeviceThumbnail(compact: compact);
+    return _ComputerDeviceThumbnail(compact: compact);
+  }
+}
+
+class _ComputerDeviceThumbnail extends StatelessWidget {
+  const _ComputerDeviceThumbnail({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = compact ? 50.0 : 84.0;
+    final height = compact ? 62.0 : 104.0;
+    final screenInset = compact ? 7.0 : 12.0;
+    return SizedBox(
+      width: compact ? 56 : 92,
+      height: compact ? 64 : 108,
+      child: Center(
+        child: Container(
+          width: width,
+          height: height,
+          padding: EdgeInsets.all(screenInset),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(compact ? 10 : 16),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF30343A), Color(0xFF101318)],
+            ),
+            border: Border.all(color: Colors.white.withOpacity(0.16)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.34),
+                blurRadius: compact ? 10 : 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(compact ? 6 : 10),
+              color: const Color(0xFF1B2026),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'iGPS',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.86),
+                    fontSize: compact ? 5 : 9,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                SizedBox(height: compact ? 3 : 6),
+                for (var i = 0; i < 3; i++)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: compact ? 2 : 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _DeviceScreenLine(width: compact ? 13 : 22),
+                        SizedBox(width: compact ? 3 : 5),
+                        _DeviceScreenLine(width: compact ? 8 : 15),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RadarDeviceThumbnail extends StatelessWidget {
+  const _RadarDeviceThumbnail({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: compact ? 56 : 92,
+      height: compact ? 64 : 108,
+      child: Center(
+        child: Container(
+          width: compact ? 42 : 68,
+          height: compact ? 58 : 92,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2E3338), Color(0xFF101318)],
+            ),
+            border: Border.all(color: Colors.white.withOpacity(0.14)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.34),
+                blurRadius: compact ? 10 : 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Container(
+              width: compact ? 18 : 30,
+              height: compact ? 18 : 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.05),
+                border: Border.all(color: Colors.white.withOpacity(0.18)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeartRateDeviceThumbnail extends StatelessWidget {
+  const _HeartRateDeviceThumbnail({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: compact ? 56 : 92,
+      height: compact ? 64 : 108,
+      child: Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: compact ? 54 : 88,
+              height: compact ? 16 : 26,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(999),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF14171C), Color(0xFF2B3036), Color(0xFF14171C)],
+                ),
+              ),
+            ),
+            Container(
+              width: compact ? 34 : 54,
+              height: compact ? 24 : 38,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(compact ? 7 : 11),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF282D32), Color(0xFF0F1216)],
+                ),
+                border: Border.all(color: Colors.white.withOpacity(0.12)),
+              ),
+              child: Center(
+                child: Text(
+                  'iGPS',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.78),
+                    fontSize: compact ? 5 : 8,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceScreenLine extends StatelessWidget {
+  const _DeviceScreenLine({required this.width});
+
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: 2,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.76),
+        borderRadius: BorderRadius.circular(999),
+      ),
+    );
+  }
+}
+
+class _ConnectedDevicePanel extends StatelessWidget {
+  const _ConnectedDevicePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _DeviceThumbnail(kind: '码表'),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'iGPSPORT BSC300_1234',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF3BE23E),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '已连接',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.76),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '固件版本：v1.23.0',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.66),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '电量：100%',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.66),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const _DeviceSettingRow(
+            icon: Icons.settings,
+            color: Color(0xFF268DFF),
+            title: '设备设置',
+          ),
+          const _DeviceSettingRow(
+            icon: Icons.grid_view,
+            color: Color(0xFF4AD14A),
+            title: '页面配置',
+          ),
+          const _DeviceSettingRow(
+            icon: Icons.link,
+            color: Color(0xFFA533FF),
+            title: '传感器管理',
+          ),
+          const _DeviceSwitchRow(
+            icon: Icons.pause,
+            color: _RideColors.orange,
+            title: '自动暂停',
+            subtitle: '停止运动时自动暂停记录',
+          ),
+          const _DeviceSwitchRow(
+            icon: Icons.trip_origin,
+            color: Color(0xFFFFC400),
+            title: '自动计圈',
+            subtitle: '按距离自动生成计圈',
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            onPressed: () {},
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _RideColors.orange,
+              minimumSize: const Size(double.infinity, 52),
+              side: BorderSide(color: Colors.white.withOpacity(0.12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: const Text(
+              '解除绑定',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceSettingRow extends StatelessWidget {
+  const _DeviceSettingRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DeviceRowBase(
+      icon: icon,
+      color: color,
+      title: title,
+      trailing: Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.76)),
+    );
+  }
+}
+
+class _DeviceSwitchRow extends StatelessWidget {
+  const _DeviceSwitchRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DeviceRowBase(
+      icon: icon,
+      color: color,
+      title: title,
+      subtitle: subtitle,
+      trailing: Switch(
+        value: true,
+        onChanged: (_) {},
+        activeColor: Colors.white,
+        activeTrackColor: _RideColors.orange,
+      ),
+    );
+  }
+}
+
+class _DeviceRowBase extends StatelessWidget {
+  const _DeviceRowBase({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.trailing,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String? subtitle;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      minHeight: 70,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.11),
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 2),
+            ),
+            child: Icon(icon, color: color, size: 21),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.56),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          trailing,
+        ],
+      ),
+    );
+  }
+}
+
+class _SignalBars extends StatelessWidget {
+  const _SignalBars({required this.value});
+
+  final int value;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          for (var i = 0; i < 4; i++)
+            Container(
+              width: 4,
+              height: 8.0 + i * 5,
+              decoration: BoxDecoration(
+                color: i < value
+                    ? const Color(0xFF55E8E6)
+                    : Colors.white.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RideTabBar extends StatelessWidget {
+  const _RideTabBar({
+    required this.controller,
+    required this.onSelect,
+  });
+
+  final RideController controller;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final selectedIndex = controller.activeTabIndex.value;
+      final isRecording = controller.isRecording.value;
+      final isPaused = controller.isPaused.value;
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF101720).withOpacity(0.98),
+          border: Border(
+            top: BorderSide(color: Colors.white.withOpacity(0.08)),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.40),
+              blurRadius: 30,
+              offset: const Offset(0, -12),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 78,
+            child: Row(
+              children: [
+                _BottomAction(
+                  icon: Icons.speed,
+                  label: '仪表盘',
+                  selected: selectedIndex == 0,
+                  onTap: () => onSelect(0),
+                ),
+                _BottomAction(
+                  icon: Icons.bar_chart,
+                  label: '统计',
+                  selected: selectedIndex == 1,
+                  onTap: () => onSelect(1),
+                ),
+                _BottomAction(
+                  icon: Icons.explore,
+                  label: '路线',
+                  selected: selectedIndex == 2,
+                  onTap: () => onSelect(2),
+                ),
+                _BottomRecordAction(
+                  isRecording: isRecording,
+                  isPaused: isPaused,
+                  onTap: () {
+                    if (isRecording) {
+                      controller.pauseResume();
+                    } else {
+                      controller.start();
+                    }
+                  },
+                ),
+                _BottomAction(
+                  icon: Icons.devices_other,
+                  label: '设备',
+                  selected: selectedIndex == 3,
+                  onTap: () => onSelect(3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
+  }
+}
+
+class _BottomRecordAction extends StatelessWidget {
+  const _BottomRecordAction({
+    required this.isRecording,
+    required this.isPaused,
+    required this.onTap,
+  });
+
+  final bool isRecording;
+  final bool isPaused;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = isRecording && !isPaused ? Icons.pause : Icons.play_arrow;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: _RideColors.orange,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: _RideColors.orange.withOpacity(0.36),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Icon(icon, color: Colors.white, size: 28),
+            ),
+            const SizedBox(height: 5),
+            const Text(
+              '开始/暂停',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: _RideColors.orange,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomAction extends StatelessWidget {
+  const _BottomAction({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? _RideColors.orange : Colors.white.withOpacity(0.62);
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: selected ? 42 : 36,
+              height: selected ? 42 : 36,
+              decoration: BoxDecoration(
+                color: selected
+                    ? _RideColors.orange.withOpacity(0.12)
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: selected ? _RideColors.orange : color,
+                  width: selected ? 2 : 1.7,
+                ),
+              ),
+              child: Icon(icon, color: color, size: selected ? 23 : 21),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OuterFrame extends StatelessWidget {
+  const _OuterFrame({
+    required this.child,
+    this.padding = const EdgeInsets.all(10),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: const Color(0xFF151B24).withOpacity(0.82),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _GlassPanel extends StatelessWidget {
+  const _GlassPanel({
+    required this.child,
+    this.padding = const EdgeInsets.all(14),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF222A35).withOpacity(0.82),
+            const Color(0xFF141A23).withOpacity(0.96),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.30),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.10),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white.withOpacity(0.82), size: 23),
+      ),
     );
   }
 }
@@ -565,7 +2773,8 @@ class _HeroStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Flexible(
+    return SizedBox(
+      width: 88,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -574,12 +2783,12 @@ class _HeroStat extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.48),
-              fontSize: 11,
+              color: Colors.white.withOpacity(0.48),
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           RichText(
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -599,7 +2808,7 @@ class _HeroStat extends StatelessWidget {
                     style: TextStyle(
                       color: unit == '高'
                           ? const Color(0xFFE34CFF)
-                          : Colors.white.withValues(alpha: 0.62),
+                          : Colors.white.withOpacity(0.62),
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
@@ -613,438 +2822,143 @@ class _HeroStat extends StatelessWidget {
   }
 }
 
-class _DesignMetricGrid extends StatelessWidget {
-  const _DesignMetricGrid({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final spacing = 6.0;
-        final columns = constraints.maxWidth < 360 ? 2 : 3;
-        final width =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
-
-        return Obx(
-          () {
-            final speed = controller.avgSpeedKmh.value > 0
-                ? controller.avgSpeedKmh.value.toStringAsFixed(1)
-                : '27.3';
-            final climb = controller.totalClimbM.value > 0
-                ? controller.totalClimbM.value.toStringAsFixed(0)
-                : '1268';
-
-            final cards = [
-              _DesignMetricCard(
-                icon: Icons.speed,
-                color: const Color(0xFF2088FF),
-                title: '平均速度',
-                value: speed,
-                unit: 'km/h',
-                footnote: '最高 52.6 km/h',
-              ),
-              const _DesignMetricCard(
-                icon: Icons.bolt,
-                color: Color(0xFF62D729),
-                title: '平均功率',
-                value: '186',
-                unit: 'w',
-                footnote: '最大 562 w',
-              ),
-              const _DesignMetricCard(
-                icon: Icons.favorite,
-                color: Color(0xFFFF385E),
-                title: '平均心率',
-                value: '156',
-                unit: 'bpm',
-                footnote: '最大 188 bpm',
-              ),
-              const _DesignMetricCard(
-                icon: Icons.track_changes,
-                color: Color(0xFFFFC400),
-                title: '平均踏频',
-                value: '87',
-                unit: 'rpm',
-                footnote: '最高 118 rpm',
-              ),
-              _DesignMetricCard(
-                icon: Icons.terrain,
-                color: const Color(0xFFA533FF),
-                title: '累计爬升',
-                value: climb,
-                unit: 'm',
-                footnote: '总上升 $climb m',
-              ),
-              const _DesignMetricCard(
-                icon: Icons.thermostat,
-                color: Color(0xFF42D8E6),
-                title: '平均温度',
-                value: '22.4',
-                unit: '°C',
-                footnote: '最高 28.6 °C',
-              ),
-            ];
-
-            return Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
-              children: [
-                for (final card in cards) SizedBox(width: width, child: card),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _DesignMetricCard extends StatelessWidget {
-  const _DesignMetricCard({
-    required this.icon,
-    required this.color,
-    required this.title,
+class _LegendText extends StatelessWidget {
+  const _LegendText({
+    required this.label,
     required this.value,
-    required this.unit,
-    required this.footnote,
+    required this.color,
   });
 
-  final IconData icon;
-  final Color color;
-  final String title;
+  final String label;
   final String value;
-  final String unit;
-  final String footnote;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 132,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _RideColors.panel,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 22),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
+    return Row(
+      children: [
+        Text(
+          '$label ',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.54),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
           ),
-          const Spacer(),
-          RichText(
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.8,
-                  ),
-                ),
-                TextSpan(
-                  text: ' $unit',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            footnote,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.46),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 5),
-          SizedBox(
-            height: 22,
-            child: CustomPaint(
-              painter: _SparklinePainter(color: color),
-              child: const SizedBox.expand(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SpeedAltitudeCard extends StatelessWidget {
-  const _SpeedAltitudeCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final speed = controller.avgSpeedKmh.value > 0
-          ? controller.avgSpeedKmh.value.toStringAsFixed(1)
-          : '27.3';
-      final climb = controller.totalClimbM.value > 0
-          ? controller.totalClimbM.value.toStringAsFixed(0)
-          : '1268';
-
-      return _Panel(
-        title: '速度 & 海拔',
-        height: 218,
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const Spacer(),
-                Text(
-                  '平均 ',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.54),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  '$speed km/h',
-                  style: const TextStyle(
-                    color: Color(0xFF2A9CFF),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(width: 18),
-                Text(
-                  '累计爬升 ',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.54),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  '$climb m',
-                  style: const TextStyle(
-                    color: Color(0xFFA533FF),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: CustomPaint(
-                painter: _DualLineChartPainter(),
-                child: const SizedBox.expand(),
-              ),
-            ),
-          ],
         ),
-      );
-    });
-  }
-}
-
-class _DistributionCards extends StatelessWidget {
-  const _DistributionCards({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 390;
-        final children = [
-          const _ZoneDistributionCard(
-            title: '功率分布',
-            summary: '平均功率 186 w',
-            colors: [
-              Color(0xFFFF3158),
-              Color(0xFFFF7A1A),
-              Color(0xFFFFD21A),
-              Color(0xFF4AD14A),
-              Color(0xFF268DFF),
-            ],
-            labels: ['Z5 > 350 w', 'Z4 250 - 350 w', 'Z3 180 - 250 w', 'Z2 120 - 180 w', 'Z1 < 120 w'],
-            values: ['12:15  11%', '28:47  26%', '40:21  36%', '32:16  18%', '12:09  9%'],
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
           ),
-          const _ZoneDistributionCard(
-            title: '心率分布',
-            summary: '平均心率 156 bpm',
-            colors: [
-              Color(0xFFFF3158),
-              Color(0xFFFF7A1A),
-              Color(0xFFFFD21A),
-              Color(0xFF4AD14A),
-              Color(0xFF268DFF),
-            ],
-            labels: ['Z5 > 178 bpm', 'Z4 160 - 178 bpm', 'Z3 140 - 160 bpm', 'Z2 120 - 140 bpm', 'Z1 < 120 bpm'],
-            values: ['08:36  6%', '26:18  17%', '55:21  36%', '48:23  31%', '11:10  10%'],
-          ),
-        ];
-
-        if (compact) {
-          return Column(
-            children: [
-              children[0],
-              const SizedBox(height: 6),
-              children[1],
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(child: children[0]),
-            const SizedBox(width: 6),
-            Expanded(child: children[1]),
-          ],
-        );
-      },
+        ),
+      ],
     );
   }
 }
 
-class _ZoneDistributionCard extends StatelessWidget {
-  const _ZoneDistributionCard({
-    required this.title,
-    required this.summary,
-    required this.colors,
-    required this.labels,
-    required this.values,
+class _RideSample {
+  const _RideSample({
+    required this.distanceText,
+    required this.durationText,
+    required this.avgSpeedText,
+    required this.maxSpeedText,
+    required this.climbText,
   });
 
-  final String title;
-  final String summary;
-  final List<Color> colors;
-  final List<String> labels;
-  final List<String> values;
+  final String distanceText;
+  final String durationText;
+  final String avgSpeedText;
+  final String maxSpeedText;
+  final String climbText;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 164,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _RideColors.panel,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                summary,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.64),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 76,
-                  height: 76,
-                  child: CustomPaint(
-                    painter: _DonutPainter(colors: colors),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      for (var i = 0; i < labels.length; i++)
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: colors[i],
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text(
-                                labels[i],
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.70),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              values[i],
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.76),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+  factory _RideSample.from(RideController controller) {
+    final hasLiveRide = controller.distanceKm.value > 0 ||
+        controller.elapsed.value > Duration.zero ||
+        controller.isRecording.value;
+    return _RideSample(
+      distanceText: hasLiveRide
+          ? controller.distanceKm.value.toStringAsFixed(2)
+          : '102.63',
+      durationText: hasLiveRide
+          ? _formatDuration(controller.elapsed.value)
+          : '03:45:28',
+      avgSpeedText: hasLiveRide && controller.avgSpeedKmh.value > 0
+          ? controller.avgSpeedKmh.value.toStringAsFixed(1)
+          : '27.3',
+      maxSpeedText: hasLiveRide && controller.maxSpeedKmh.value > 0
+          ? controller.maxSpeedKmh.value.toStringAsFixed(1)
+          : '52.6',
+      climbText: hasLiveRide && controller.totalClimbM.value > 0
+          ? controller.totalClimbM.value.toStringAsFixed(0)
+          : '1268',
     );
   }
 }
 
-class _RoutePreviewPainter extends CustomPainter {
+class _RideStats {
+  const _RideStats({
+    required this.rideCount,
+    required this.totalDistance,
+    required this.totalDuration,
+    required this.totalClimb,
+    required this.calories,
+    required this.avgSpeed,
+  });
+
+  final String rideCount;
+  final String totalDistance;
+  final String totalDuration;
+  final String totalClimb;
+  final String calories;
+  final String avgSpeed;
+
+  factory _RideStats.from(RideController controller) {
+    final rides = controller.recentRides.toList();
+    final hasHistory = rides.isNotEmpty;
+    final totalDistance = hasHistory
+        ? rides.fold<double>(0, (sum, ride) => sum + ride.distanceKm)
+        : 1026.3;
+    final totalSeconds = hasHistory
+        ? rides.fold<int>(0, (sum, ride) => sum + ride.durationSeconds)
+        : const Duration(hours: 45, minutes: 32, seconds: 18).inSeconds;
+    final totalClimb = hasHistory
+        ? rides.fold<double>(0, (sum, ride) => sum + ride.totalClimbM)
+        : 12868.0;
+    final avgSpeed = totalSeconds > 0 ? totalDistance / totalSeconds * 3600 : 0;
+
+    return _RideStats(
+      rideCount: hasHistory ? rides.length.toString() : '27',
+      totalDistance: totalDistance.toStringAsFixed(1),
+      totalDuration: _formatSeconds(totalSeconds),
+      totalClimb: totalClimb.toStringAsFixed(0),
+      calories: (totalDistance * 31.73).round().toString(),
+      avgSpeed: (avgSpeed > 0 ? avgSpeed : 22.5).toStringAsFixed(1),
+    );
+  }
+}
+
+String _formatDuration(Duration duration) {
+  return _formatSeconds(duration.inSeconds);
+}
+
+String _formatSeconds(int seconds) {
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final secs = seconds % 60;
+  return [
+    hours.toString().padLeft(2, '0'),
+    minutes.toString().padLeft(2, '0'),
+    secs.toString().padLeft(2, '0'),
+  ].join(':');
+}
+
+class _RouteMapPainter extends CustomPainter {
+  const _RouteMapPainter({this.variant = 0});
+
+  final int variant;
+
   @override
   void paint(Canvas canvas, Size size) {
     final bgPaint = Paint()
@@ -1052,58 +2966,64 @@ class _RoutePreviewPainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          const Color(0xFF161B28).withValues(alpha: 0.92),
-          const Color(0xFF10141E).withValues(alpha: 0.92),
+          const Color(0xFF1F2833).withOpacity(0.92),
+          const Color(0xFF10161F).withOpacity(0.98),
         ],
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, bgPaint);
 
+    _drawMapLines(canvas, size);
+    _drawRoute(canvas, size);
+  }
+
+  void _drawMapLines(Canvas canvas, Size size) {
     final roadPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.045)
-      ..strokeWidth = 2.2
+      ..color = Colors.white.withOpacity(0.045)
+      ..strokeWidth = 2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
     final thinRoadPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.026)
+      ..color = Colors.white.withOpacity(0.028)
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    for (var i = 0; i < 5; i++) {
-      final y = size.height * (0.18 + i * 0.18);
+    for (var i = 0; i < 6; i++) {
+      final y = size.height * (0.12 + i * 0.17);
       final path = Path()
-        ..moveTo(-20, y)
+        ..moveTo(-20, y + variant * 4)
         ..cubicTo(
-          size.width * 0.25,
+          size.width * 0.26,
           y - 24,
-          size.width * 0.55,
-          y + 26,
+          size.width * 0.58,
+          y + 30,
           size.width + 20,
-          y - 10,
+          y - 8,
         );
       canvas.drawPath(path, i.isEven ? roadPaint : thinRoadPaint);
     }
 
-    final route = [
-      Offset(size.width * 0.62, size.height * 0.08),
-      Offset(size.width * 0.50, size.height * 0.20),
-      Offset(size.width * 0.42, size.height * 0.34),
-      Offset(size.width * 0.31, size.height * 0.40),
-      Offset(size.width * 0.42, size.height * 0.56),
-      Offset(size.width * 0.56, size.height * 0.52),
-      Offset(size.width * 0.72, size.height * 0.62),
-      Offset(size.width * 0.64, size.height * 0.78),
-      Offset(size.width * 0.48, size.height * 0.88),
-      Offset(size.width * 0.39, size.height * 0.70),
-      Offset(size.width * 0.24, size.height * 0.58),
-      Offset(size.width * 0.28, size.height * 0.38),
-      Offset(size.width * 0.46, size.height * 0.28),
-      Offset(size.width * 0.62, size.height * 0.08),
-    ];
+    for (var i = 0; i < 4; i++) {
+      final x = size.width * (0.18 + i * 0.24);
+      final path = Path()
+        ..moveTo(x, -16)
+        ..cubicTo(
+          x + 30,
+          size.height * 0.26,
+          x - 30,
+          size.height * 0.60,
+          x + 14,
+          size.height + 16,
+        );
+      canvas.drawPath(path, thinRoadPaint);
+    }
+  }
 
+  void _drawRoute(Canvas canvas, Size size) {
+    final route = _routePoints(size);
     final shadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.32)
-      ..strokeWidth = 10
+      ..color = Colors.black.withOpacity(0.34)
+      ..strokeWidth = 11
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
@@ -1119,7 +3039,7 @@ class _RoutePreviewPainter extends CustomPainter {
         ..lineTo(route[i + 1].dx, route[i + 1].dy);
       final t = i / (route.length - 2);
       final color = Color.lerp(
-        const Color(0xFF48D84B),
+        const Color(0xFF57DF43),
         const Color(0xFFFF4B24),
         t,
       )!;
@@ -1127,51 +3047,67 @@ class _RoutePreviewPainter extends CustomPainter {
         segmentPath,
         Paint()
           ..color = color
-          ..strokeWidth = 5.2
+          ..strokeWidth = 5.8
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round,
       );
     }
 
-    canvas.drawCircle(
-      route.first,
-      8,
-      Paint()..color = const Color(0xFF5AE353),
-    );
-    canvas.drawCircle(
-      route.first,
-      4,
-      Paint()..color = Colors.white,
-    );
-    canvas.drawCircle(
-      route[8],
-      7,
-      Paint()..color = Colors.white,
-    );
-    canvas.drawCircle(
-      route[8],
-      4,
-      Paint()..color = Colors.black.withValues(alpha: 0.78),
-    );
+    canvas.drawCircle(route.first, 9, Paint()..color = const Color(0xFF5FE052));
+    canvas.drawCircle(route.first, 4, Paint()..color = Colors.white);
+    final finish = route[math.max(0, route.length - 3)];
+    canvas.drawCircle(finish, 8, Paint()..color = Colors.white);
+    canvas.drawCircle(finish, 4, Paint()..color = Colors.black.withOpacity(0.78));
+  }
+
+  List<Offset> _routePoints(Size size) {
+    final dx = (variant % 2) * size.width * 0.04;
+    final dy = (variant % 3) * size.height * 0.025;
+    return [
+      Offset(size.width * 0.62 - dx, size.height * 0.10 + dy),
+      Offset(size.width * 0.50 - dx, size.height * 0.20 + dy),
+      Offset(size.width * 0.42 - dx, size.height * 0.34 + dy),
+      Offset(size.width * 0.31 - dx, size.height * 0.41 + dy),
+      Offset(size.width * 0.42 + dx, size.height * 0.56),
+      Offset(size.width * 0.56 + dx, size.height * 0.52),
+      Offset(size.width * 0.72 + dx, size.height * 0.63),
+      Offset(size.width * 0.64 + dx, size.height * 0.79),
+      Offset(size.width * 0.48, size.height * 0.88 - dy),
+      Offset(size.width * 0.39 - dx, size.height * 0.70 - dy),
+      Offset(size.width * 0.24 - dx, size.height * 0.58 - dy),
+      Offset(size.width * 0.28 - dx, size.height * 0.38),
+      Offset(size.width * 0.46, size.height * 0.28),
+      Offset(size.width * 0.62 - dx, size.height * 0.10 + dy),
+    ];
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RouteMapPainter oldDelegate) {
+    return oldDelegate.variant != variant;
+  }
 }
 
 class _SparklinePainter extends CustomPainter {
-  const _SparklinePainter({required this.color});
+  const _SparklinePainter({
+    required this.values,
+    required this.color,
+  });
 
+  final List<double> values;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final data = [0.18, 0.2, 0.19, 0.24, 0.27, 0.34, 0.30, 0.36, 0.42, 0.38, 0.44, 0.41];
+    if (values.length < 2) return;
+    final minValue = values.reduce(math.min);
+    final maxValue = values.reduce(math.max);
+    final range = math.max(1, maxValue - minValue);
     final path = Path();
-    for (var i = 0; i < data.length; i++) {
-      final x = size.width * i / (data.length - 1);
-      final y = size.height - data[i] * size.height;
+    for (var i = 0; i < values.length; i++) {
+      final x = size.width * i / (values.length - 1);
+      final normalized = (values[i] - minValue) / range;
+      final y = size.height - normalized * size.height * 0.82 - 3;
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -1188,14 +3124,14 @@ class _SparklinePainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0.38), color.withValues(alpha: 0.0)],
+          colors: [color.withOpacity(0.42), color.withOpacity(0.0)],
         ).createShader(Offset.zero & size),
     );
     canvas.drawPath(
       path,
       Paint()
         ..color = color
-        ..strokeWidth = 1.5
+        ..strokeWidth = 1.6
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
@@ -1204,75 +3140,38 @@ class _SparklinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SparklinePainter oldDelegate) {
-    return oldDelegate.color != color;
+    return oldDelegate.values != values || oldDelegate.color != color;
   }
 }
 
 class _DualLineChartPainter extends CustomPainter {
+  const _DualLineChartPainter({
+    required this.speed,
+    required this.altitude,
+  });
+
+  final List<double> speed;
+  final List<double> altitude;
+
   @override
   void paint(Canvas canvas, Size size) {
     final grid = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
+      ..color = Colors.white.withOpacity(0.08)
       ..strokeWidth = 1;
     for (var i = 1; i < 4; i++) {
       final y = size.height * i / 4;
-      canvas.drawLine(Offset(20, y), Offset(size.width - 16, y), grid);
+      canvas.drawLine(Offset(26, y), Offset(size.width - 22, y), grid);
     }
 
-    final speed = <double>[
-      18,
-      34,
-      22,
-      36,
-      29,
-      32,
-      38,
-      24,
-      31,
-      33,
-      28,
-      37,
-      35,
-      26,
-      30,
-      34,
-    ];
-    final altitude = <double>[
-      2,
-      4,
-      8,
-      12,
-      20,
-      30,
-      44,
-      56,
-      70,
-      80,
-      92,
-      76,
-      66,
-      58,
-      42,
-      30,
-    ];
+    _drawAxisText(canvas, 'km/h', Offset(0, 0));
+    _drawAxisText(canvas, 'm', Offset(size.width - 10, 0));
+    _drawSeries(canvas, size, altitude, const Color(0xFFA533FF), 1500);
     _drawSeries(canvas, size, speed, const Color(0xFF2B9DFF), 60);
-    _drawSeries(canvas, size, altitude, const Color(0xFFA533FF), 100);
 
-    final labels = ['0:00', '45:00', '1:30:00', '2:15:00', '3:00:00', '3:45:28'];
+    const labels = ['0:00', '45:00', '1:30:00', '2:15:00', '3:00:00', '3:45:28'];
     for (var i = 0; i < labels.length; i++) {
-      final text = TextPainter(
-        text: TextSpan(
-          text: labels[i],
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.46),
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final x = 20 + (size.width - 44) * i / (labels.length - 1);
-      text.paint(canvas, Offset(x - text.width / 2, size.height - 14));
+      final x = 26 + (size.width - 52) * i / (labels.length - 1);
+      _drawChartLabel(canvas, labels[i], Offset(x, size.height - 15), center: true);
     }
   }
 
@@ -1283,11 +3182,13 @@ class _DualLineChartPainter extends CustomPainter {
     Color color,
     double maxValue,
   ) {
-    final chartRect = Rect.fromLTWH(20, 6, size.width - 44, size.height - 28);
+    if (data.length < 2) return;
+    final chartRect = Rect.fromLTWH(26, 16, size.width - 52, size.height - 38);
     final path = Path();
     for (var i = 0; i < data.length; i++) {
       final x = chartRect.left + chartRect.width * i / (data.length - 1);
-      final y = chartRect.bottom - chartRect.height * (data[i] / maxValue);
+      final value = data[i].clamp(0, maxValue);
+      final y = chartRect.bottom - chartRect.height * (value / maxValue);
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -1304,7 +3205,7 @@ class _DualLineChartPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [color.withValues(alpha: 0.32), color.withValues(alpha: 0.02)],
+          colors: [color.withOpacity(0.34), color.withOpacity(0.02)],
         ).createShader(chartRect),
     );
     canvas.drawPath(
@@ -1318,1996 +3219,271 @@ class _DualLineChartPainter extends CustomPainter {
     );
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _DonutPainter extends CustomPainter {
-  const _DonutPainter({required this.colors});
-
-  final List<Color> colors;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) * 0.38;
-    const values = [0.11, 0.26, 0.36, 0.18, 0.09];
-    var start = -math.pi / 2;
-    for (var i = 0; i < values.length; i++) {
-      final sweep = values[i] * math.pi * 2;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        start,
-        sweep - 0.035,
-        false,
-        Paint()
-          ..color = colors[i]
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 13
-          ..strokeCap = StrokeCap.butt,
-      );
-      start += sweep;
-    }
-    canvas.drawCircle(
-      center,
-      radius - 12,
-      Paint()..color = _RideColors.panel,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _DonutPainter oldDelegate) {
-    return oldDelegate.colors != colors;
-  }
-}
-
-class _BuildBadge extends StatelessWidget {
-  const _BuildBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFF28E363).withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: const Color(0xFF28E363).withValues(alpha: 0.28),
-          ),
-        ),
-        child: const Text(
-          'Trace 1.0.2+20',
-          style: TextStyle(
-            color: Color(0xFF65F466),
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final now = DateTime.now();
-      final gpsStatus = controller.gpsStatus.value.startsWith('GPS')
-          ? controller.gpsStatus.value
-          : 'GPS ${controller.gpsStatus.value}';
-
-      return Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFBFE7FF), Color(0xFF4AD66D)],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-            ),
-            child: const Icon(Icons.directions_bike, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Text(
-                      '户外骑行',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    SizedBox(width: 4),
-                    Icon(Icons.chevron_right, color: Colors.white, size: 24),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        '${now.month}月${now.day}日 '
-                        '${_two(now.hour)}:${_two(now.minute)} · 晴 25°C · ',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.68),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      gpsStatus,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF39EF68),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    const Icon(
-                      Icons.signal_cellular_alt,
-                      color: Color(0xFF39EF68),
-                      size: 14,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: controller.loadRideHistory,
-            icon: const Icon(Icons.open_in_new, color: Colors.white),
-          ),
-          IconButton(
-            onPressed: controller.loadRideHistory,
-            icon: const Icon(Icons.more_horiz, color: Colors.white),
-          ),
-        ],
-      );
-    });
-  }
-}
-
-class _RideStatusBanner extends StatelessWidget {
-  const _RideStatusBanner({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final recording = controller.isRecording.value;
-      final paused = controller.isPaused.value;
-      final elapsed = _formatDuration(controller.elapsed.value);
-      final title = recording ? (paused ? '骑行已暂停' : '正在记录骑行') : '码表待命';
-      final detail = recording
-          ? '$elapsed · ${controller.gpsStatus.value}'
-          : '点击开始后会立即计时；静止或 GPS 未出点时速度/距离保持 0。';
-
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: (recording ? const Color(0xFF1C5F35) : _RideColors.panel)
-              .withValues(alpha: 0.84),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              recording
-                  ? (paused ? Icons.pause_circle : Icons.radio_button_checked)
-                  : Icons.info_outline,
-              color: recording ? const Color(0xFF70FF89) : _RideColors.muted,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    detail,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.66),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-}
-
-class _TabIntroCard extends StatelessWidget {
-  const _TabIntroCard({required this.index});
-
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final data = switch (index) {
-      1 => (
-          icon: Icons.analytics_outlined,
-          title: '分析',
-          detail: '查看速度趋势、周里程和月度目标，判断最近骑行状态。',
-        ),
-      2 => (
-          icon: Icons.article_outlined,
-          title: '保存',
-          detail: '保存当前骑行，或刷新并查看本机历史骑行记录。',
-        ),
-      3 => (
-          icon: Icons.person_outline,
-          title: '我的',
-          detail: '汇总本月里程、历史次数和当前 GPS 精度。',
-        ),
-      _ => (
-          icon: Icons.dashboard_outlined,
-          title: '仪表盘',
-          detail: '实时速度、里程、轨迹和骑行指标会集中显示在这里。',
-        ),
-    };
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF183042).withValues(alpha: 0.98),
-            const Color(0xFF10231B).withValues(alpha: 0.98),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF28E363).withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(data.icon, color: const Color(0xFF65F466)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  data.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  data.detail,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.64),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashboardOverview extends StatelessWidget {
-  const _DashboardOverview({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () => _Panel(
-        title: '仪表盘',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '实时速度',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.62),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: controller.currentSpeedKmh.value
-                                  .toStringAsFixed(1),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 58,
-                                fontWeight: FontWeight.w900,
-                                height: 0.98,
-                                letterSpacing: -1.6,
-                              ),
-                            ),
-                            TextSpan(
-                              text: ' km/h',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.68),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF28E363).withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    controller.isRecording.value
-                        ? (controller.isPaused.value ? '已暂停' : '记录中')
-                        : '待命',
-                    style: const TextStyle(
-                      color: Color(0xFF65F466),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: '里程',
-                    value: controller.distanceKm.value.toStringAsFixed(2),
-                    unit: 'km',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: '均速',
-                    value: controller.avgSpeedKmh.value.toStringAsFixed(1),
-                    unit: 'km/h',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: '时长',
-                    value: _formatDuration(controller.elapsed.value),
-                    unit: '',
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RideQuickActions extends StatelessWidget {
-  const _RideQuickActions({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      title: '操作说明',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '底部中间按钮用于开始、暂停和继续；进入“保存”页后可以保存当前骑行或刷新历史记录。',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.66),
-              fontSize: 13,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: controller.start,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('开始记录'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF65F466),
-                    side: BorderSide(
-                      color: const Color(0xFF65F466).withValues(alpha: 0.46),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => controller.selectTab(2),
-                  icon: const Icon(Icons.article_outlined),
-                  label: const Text('查看记录'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white.withValues(alpha: 0.76),
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.14),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AnalysisSummaryCard extends StatelessWidget {
-  const _AnalysisSummaryCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () => _Panel(
-        title: '分析概览',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '这里先展示稳定的基础统计；确认页面正常后再逐步恢复曲线和网格图表。',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.66),
-                fontSize: 13,
-                height: 1.45,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: '最高速度',
-                    value: controller.maxSpeedKmh.value.toStringAsFixed(1),
-                    unit: 'km/h',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: '爬升',
-                    value: controller.totalClimbM.value.toStringAsFixed(0),
-                    unit: 'm',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: '卡路里',
-                    value: controller.caloriesKcal.value.toString(),
-                    unit: 'kcal',
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroSection extends StatelessWidget {
-  const _HeroSection({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 330;
-        final metrics = Obx(
-          () {
-            final hasData = _hasRideData(controller);
-            return GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: compact ? 1.45 : 0.82,
-              children: [
-                _ValueCard(
-                  label: '平均速度',
-                  value: hasData
-                      ? controller.avgSpeedKmh.value.toStringAsFixed(1)
-                      : '28.4',
-                  unit: 'km/h',
-                ),
-                _ValueCard(
-                  label: '最大速度',
-                  value: hasData
-                      ? controller.maxSpeedKmh.value.toStringAsFixed(1)
-                      : '46.7',
-                  unit: 'km/h',
-                ),
-                _ValueCard(
-                  label: '骑行距离',
-                  value: hasData
-                      ? controller.distanceKm.value.toStringAsFixed(2)
-                      : '68.72',
-                  unit: 'km',
-                ),
-                _ValueCard(
-                  label: '骑行时长',
-                  value: hasData
-                      ? _formatDuration(controller.elapsed.value)
-                      : '02:35:48',
-                  unit: 'h:m:s',
-                ),
-              ],
-            );
-          },
-        );
-
-        if (compact) {
-          return Column(
-            children: [
-              _SpeedGauge(controller: controller),
-              const SizedBox(height: 10),
-              metrics,
-            ],
-          );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 11, child: _SpeedGauge(controller: controller)),
-            const SizedBox(width: 8),
-            Expanded(flex: 9, child: metrics),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SpeedGauge extends StatelessWidget {
-  const _SpeedGauge({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final hasData = _hasRideData(controller);
-      final speed = hasData ? controller.currentSpeedKmh.value : 32.6;
-      return _Panel(
-        padding: const EdgeInsets.all(14),
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: CustomPaint(
-            painter: _GaugePainter(
-              value: (speed / 60).clamp(0.0, 1.0).toDouble(),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        '实时速度',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.64),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        speed.toStringAsFixed(1),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 52,
-                          fontWeight: FontWeight.w900,
-                          height: 0.98,
-                          letterSpacing: -1.5,
-                        ),
-                      ),
-                      Text(
-                        'km/h',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.72),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: 45,
-                  bottom: 17,
-                  child: Text(
-                    '0',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 34,
-                  bottom: 17,
-                  child: Text(
-                    '60',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    });
-  }
-}
-
-class _MetricGrid extends StatelessWidget {
-  const _MetricGrid({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 330;
-        return Obx(
-          () {
-            final hasData = _hasRideData(controller);
-            return GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: compact ? 2 : 3,
-              childAspectRatio: compact ? 1.78 : 1.42,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              children: [
-                _IconMetric(
-                  icon: Icons.timer,
-                  color: const Color(0xFF6FA8FF),
-                  label: '配速',
-                  value: hasData
-                      ? _formatPace(controller.currentPaceSecondsPerKm.value)
-                      : '02:48',
-                  unit: 'min/km',
-                ),
-                _IconMetric(
-                  icon: Icons.landscape,
-                  color: const Color(0xFF31D56B),
-                  label: '海拔爬升',
-                  value: hasData
-                      ? controller.totalClimbM.value.toStringAsFixed(0)
-                      : '867',
-                  unit: 'm',
-                ),
-                _IconMetric(
-                  icon: Icons.local_fire_department,
-                  color: const Color(0xFFFF8C35),
-                  label: '卡路里',
-                  value:
-                      hasData ? controller.caloriesKcal.value.toString() : '1627',
-                  unit: 'kcal',
-                ),
-                const _IconMetric(
-                  icon: Icons.favorite,
-                  color: Color(0xFFFF5C5C),
-                  label: '心率',
-                  value: '152',
-                  unit: 'bpm',
-                ),
-                const _IconMetric(
-                  icon: Icons.speed,
-                  color: Color(0xFFB65CFF),
-                  label: '踏频',
-                  value: '82',
-                  unit: 'rpm',
-                ),
-                const _IconMetric(
-                  icon: Icons.bolt,
-                  color: Color(0xFFFFD43B),
-                  label: '功率',
-                  value: '210',
-                  unit: 'W',
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _TrackCard extends StatelessWidget {
-  const _TrackCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () => _Panel(
-        title: 'GPS 轨迹',
-        height: 152,
-        child: CustomPaint(
-          painter: _TrackPainter(points: List<RidePoint>.of(controller.points)),
-          child: const SizedBox.expand(),
-        ),
-      ),
-    );
-  }
-}
-
-class _AltitudeCard extends StatelessWidget {
-  const _AltitudeCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () => _Panel(
-        title: '海拔曲线',
-        height: 152,
-        child: _LineChart(
-          values: List<double>.of(controller.altitudeTrendM),
-          stroke: const Color(0xFF60F050),
-          fill: const Color(0xFF39DF52),
-          suffix: 'm',
-        ),
-      ),
-    );
-  }
-}
-
-class _SpeedTrendCard extends StatelessWidget {
-  const _SpeedTrendCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () => _Panel(
-        title: '速度变化',
-        subtitle: 'km/h',
-        height: 154,
-        child: _LineChart(
-          values: List<double>.of(controller.speedTrendKmh),
-          stroke: const Color(0xFF2E78FF),
-          fill: const Color(0xFF2758DB),
-          suffix: 'km/h',
-        ),
-      ),
-    );
-  }
-}
-
-class _WeeklyDistanceCard extends StatelessWidget {
-  const _WeeklyDistanceCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () => _Panel(
-        title: '里程统计',
-        subtitle: 'km',
-        height: 168,
-        child: _BarChart(values: List<double>.of(controller.weeklyDistancesKm)),
-      ),
-    );
-  }
-}
-
-class _MonthlyGoalCard extends StatelessWidget {
-  const _MonthlyGoalCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final distance = controller.monthlyDistanceKm.value;
-      final goal = controller.monthGoalKm.value;
-      final progress = goal <= 0 ? 0.0 : (distance / goal).clamp(0.0, 1.0);
-      return _Panel(
-        height: 168,
-        child: Center(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              SizedBox(
-                width: 118,
-                height: 118,
-                child: CustomPaint(
-                  painter: _RingPainter(
-                    progress: progress.toDouble(),
-                  ),
-                ),
-              ),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    '本月骑行',
-                    style: TextStyle(
-                      color: Color(0xFFB9C5CF),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    distance.toStringAsFixed(1),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  Text(
-                    '目标 ${goal.toStringAsFixed(0)} km',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.65),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    });
-  }
-}
-
-class _SaveRideCard extends StatelessWidget {
-  const _SaveRideCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final recording = controller.isRecording.value;
-      final paused = controller.isPaused.value;
-      return _Panel(
-        title: '保存',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              recording
-                  ? (paused ? '当前骑行已暂停，可以继续或保存记录。' : '当前骑行正在记录，可以随时保存。')
-                  : '当前没有正在记录的骑行，点击中间开始按钮记录新骑行。',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.66),
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: '里程',
-                    value: controller.distanceKm.value.toStringAsFixed(2),
-                    unit: 'km',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: '时长',
-                    value: _formatDuration(controller.elapsed.value),
-                    unit: '',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: '均速',
-                    value: controller.avgSpeedKmh.value.toStringAsFixed(1),
-                    unit: 'km/h',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: recording
-                    ? () => controller.saveCurrentRide()
-                    : controller.loadRideHistory,
-                icon: Icon(recording ? Icons.save_outlined : Icons.refresh),
-                label: Text(recording ? '保存本次骑行' : '刷新历史记录'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF28E363),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-}
-
-class _ProfileSummaryCard extends StatelessWidget {
-  const _ProfileSummaryCard({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () => _Panel(
-        title: '我的',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '骑行数据会保存在本机，用于仪表盘、趋势分析和历史记录。',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.66),
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _MiniStat(
-                    label: '本月里程',
-                    value: controller.monthlyDistanceKm.value.toStringAsFixed(1),
-                    unit: 'km',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: '历史记录',
-                    value: controller.recentRides.length.toString(),
-                    unit: '次',
-                  ),
-                ),
-                Expanded(
-                  child: _MiniStat(
-                    label: 'GPS 精度',
-                    value: controller.gpsAccuracyM.value.toStringAsFixed(0),
-                    unit: 'm',
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({
-    required this.label,
-    required this.value,
-    required this.unit,
-  });
-
-  final String label;
-  final String value;
-  final String unit;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.56),
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 5),
-        RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              if (unit.isNotEmpty)
-                TextSpan(
-                  text: ' $unit',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.58),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RecentRides extends StatelessWidget {
-  const _RecentRides({required this.controller});
-
-  final RideController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () {
-        final rides = controller.recentRides.take(3).toList();
-        return _Panel(
-          title: '骑行记录',
-          child: rides.isEmpty
-              ? Text(
-                  '暂无历史骑行，点击底部开始按钮记录第一段轨迹。',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.62),
-                    fontSize: 13,
-                  ),
-                )
-              : Column(
-                  children: [
-                    for (final ride in rides) _RideRow(ride: ride),
-                  ],
-                ),
-        );
-      },
-    );
-  }
-}
-
-class _RideRow extends StatelessWidget {
-  const _RideRow({required this.ride});
-
-  final RideSession ride;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: const Color(0xFF27E363).withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.route, color: Color(0xFF36F26C), size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${ride.startTime.month}/${ride.startTime.day} 户外骑行',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(
-                  '${ride.avgSpeedKmh.toStringAsFixed(1)} km/h · '
-                  '${_formatDuration(Duration(seconds: ride.durationSeconds))}',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '${ride.distanceKm.toStringAsFixed(2)} km',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RideTabBar extends StatelessWidget {
-  const _RideTabBar({
-    required this.controller,
-    required this.onSelect,
-  });
-
-  final RideController controller;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(
-      () {
-        final selectedIndex = controller.activeTabIndex.value;
-        return Container(
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF111A21).withValues(alpha: 0.96),
-            border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Row(
-              children: [
-                _BottomAction(
-                  icon: Icons.speed,
-                  label: '仪表盘',
-                  selected: selectedIndex == 0,
-                  onTap: () => onSelect(0),
-                ),
-                _BottomAction(
-                  icon: Icons.pie_chart_outline,
-                  label: '分析',
-                  selected: selectedIndex == 1,
-                  onTap: () {
-                    controller.loadRideHistory();
-                    onSelect(1);
-                  },
-                ),
-                Expanded(
-                  child: Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        if (controller.isRecording.value) {
-                          controller.pauseResume();
-                        } else {
-                          controller.start();
-                        }
-                      },
-                      child: Container(
-                        width: 68,
-                        height: 68,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF5DFF70), Color(0xFF21CF55)],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF24E461)
-                                  .withValues(alpha: 0.35),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              controller.isRecording.value &&
-                                      !controller.isPaused.value
-                                  ? Icons.pause
-                                  : Icons.directions_bike,
-                              color: Colors.white,
-                              size: 27,
-                            ),
-                            Text(
-                              controller.isRecording.value
-                                  ? (controller.isPaused.value ? '继续' : '暂停')
-                                  : '开始',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                _BottomAction(
-                  icon: Icons.history,
-                  label: '记录',
-                  selected: selectedIndex == 2,
-                  onTap: () => onSelect(2),
-                ),
-                _BottomAction(
-                  icon: Icons.person_outline,
-                  label: '我的',
-                  selected: selectedIndex == 3,
-                  onTap: () {
-                    controller.loadRideHistory();
-                    onSelect(3);
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _BottomAction extends StatelessWidget {
-  const _BottomAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.selected = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? _RideColors.green : const Color(0xFF98A4AD);
-    return Expanded(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 3),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 25),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Panel extends StatelessWidget {
-  const _Panel({
-    required this.child,
-    this.title,
-    this.subtitle,
-    this.height,
-    this.padding = const EdgeInsets.all(14),
-  });
-
-  final Widget child;
-  final String? title;
-  final String? subtitle;
-  final double? height;
-  final EdgeInsetsGeometry padding;
-
-  @override
-  Widget build(BuildContext context) {
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (title != null)
-          Row(
-            children: [
-              Text(
-                title!,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(width: 6),
-                Text(
-                  subtitle!,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.58),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        if (title != null) const SizedBox(height: 10),
-        if (height == null) child else Expanded(child: child),
-      ],
-    );
-
-    return Container(
-      height: height,
-      padding: padding,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF18212B), Color(0xFF101923)],
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: title == null && height == null ? child : content,
-    );
-  }
-}
-
-class _ValueCard extends StatelessWidget {
-  const _ValueCard({
-    required this.label,
-    required this.value,
-    required this.unit,
-  });
-
-  final String label;
-  final String value;
-  final String unit;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFFB8C2CA),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              maxLines: 1,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.8,
-              ),
-            ),
-          ),
-          Text(
-            unit,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.62),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _IconMetric extends StatelessWidget {
-  const _IconMetric({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.value,
-    required this.unit,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String value;
-  final String unit;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 21),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.62),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(
-                  unit,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.56),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GaugePainter extends CustomPainter {
-  const _GaugePainter({required this.value});
-
-  final double value;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final center = rect.center;
-    final radius = math.min(size.width, size.height) * 0.39;
-    final basePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..color = const Color(0xFF54616C);
-    final progressPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..shader = const SweepGradient(
-        startAngle: math.pi * 0.76,
-        endAngle: math.pi * 2.24,
-        colors: [Color(0xFF22C7F4), Color(0xFF31F478), Color(0xFF31F478)],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-    const start = math.pi * 0.78;
-    const sweep = math.pi * 1.46;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      start,
-      sweep,
-      false,
-      basePaint,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      start,
-      sweep * value,
-      false,
-      progressPaint,
-    );
-
-    final tickPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.16)
-      ..strokeWidth = 2;
-    for (var i = 0; i <= 28; i++) {
-      final angle = start + sweep * i / 28;
-      final p1 =
-          center + Offset(math.cos(angle), math.sin(angle)) * (radius - 26);
-      final p2 =
-          center + Offset(math.cos(angle), math.sin(angle)) * (radius - 16);
-      canvas.drawLine(p1, p2, tickPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GaugePainter oldDelegate) {
-    return oldDelegate.value != value;
-  }
-}
-
-class _LineChart extends StatelessWidget {
-  const _LineChart({
-    required this.values,
-    required this.stroke,
-    required this.fill,
-    required this.suffix,
-  });
-
-  final List<double> values;
-  final Color stroke;
-  final Color fill;
-  final String suffix;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _LineChartPainter(
-        values: values,
-        stroke: stroke,
-        fill: fill,
-        suffix: suffix,
-      ),
-      child: const SizedBox.expand(),
-    );
-  }
-}
-
-class _LineChartPainter extends CustomPainter {
-  const _LineChartPainter({
-    required this.values,
-    required this.stroke,
-    required this.fill,
-    required this.suffix,
-  });
-
-  final List<double> values;
-  final Color stroke;
-  final Color fill;
-  final String suffix;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.09)
-      ..strokeWidth = 1;
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
-    }
-
-    final data = values.isEmpty ? _demoLine() : values;
-    final minValue = data.reduce((a, b) => a < b ? a : b);
-    final maxValue = data.reduce((a, b) => a > b ? a : b);
-    final span = math.max(maxValue - minValue, 1.0);
-    final points = <Offset>[];
-    for (var i = 0; i < data.length; i++) {
-      final x = data.length == 1 ? 0.0 : size.width * i / (data.length - 1);
-      final normalized = (data[i] - minValue) / span;
-      final y = size.height - normalized * (size.height - 16) - 8;
-      points.add(Offset(x, y));
-    }
-
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (final point in points.skip(1)) {
-      path.lineTo(point.dx, point.dy);
-    }
-    final fillPath = Path.from(path)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-
-    canvas.drawPath(
-      fillPath,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [fill.withValues(alpha: 0.5), fill.withValues(alpha: 0.04)],
-        ).createShader(Offset.zero & size),
-    );
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = stroke
-        ..strokeWidth = 2.4
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    final labelPainter = TextPainter(
+  void _drawAxisText(Canvas canvas, String text, Offset offset) {
+    final painter = TextPainter(
       text: TextSpan(
-        text: '${maxValue.toStringAsFixed(maxValue >= 100 ? 0 : 1)} $suffix',
+        text: text,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.66),
+          color: Colors.white.withOpacity(0.52),
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    labelPainter.paint(canvas, Offset(size.width - labelPainter.width, 2));
+    painter.paint(canvas, offset);
   }
 
-  List<double> _demoLine() {
-    return [4, 8, 7, 14, 11, 18, 12, 20, 16, 24, 22, 18, 28, 20, 26];
+  void _drawChartLabel(
+    Canvas canvas,
+    String text,
+    Offset offset, {
+    bool center = false,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.46),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, Offset(offset.dx - (center ? painter.width / 2 : 0), offset.dy));
   }
 
   @override
-  bool shouldRepaint(covariant _LineChartPainter oldDelegate) {
-    return oldDelegate.values != values ||
-        oldDelegate.stroke != stroke ||
-        oldDelegate.fill != fill;
-  }
-}
-
-class _BarChart extends StatelessWidget {
-  const _BarChart({required this.values});
-
-  final List<double> values;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _BarChartPainter(values: values),
-      child: const SizedBox.expand(),
-    );
+  bool shouldRepaint(covariant _DualLineChartPainter oldDelegate) {
+    return oldDelegate.speed != speed || oldDelegate.altitude != altitude;
   }
 }
 
 class _BarChartPainter extends CustomPainter {
-  const _BarChartPainter({required this.values});
+  const _BarChartPainter({
+    required this.values,
+    required this.labels,
+    required this.color,
+    required this.maxValue,
+    required this.tooltipIndex,
+    required this.tooltipTitle,
+    required this.tooltipValue,
+  });
 
   final List<double> values;
+  final List<String> labels;
+  final Color color;
+  final double maxValue;
+  final int tooltipIndex;
+  final String tooltipTitle;
+  final String tooltipValue;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final data = values.length == 7 ? values : [42, 70, 54, 90, 66, 80, 118];
-    final maxValue = data
-        .reduce((a, b) => a > b ? a : b)
-        .clamp(1.0, double.infinity)
-        .toDouble();
-    final barWidth = size.width / 10;
-    final gap = (size.width - barWidth * 7) / 6;
-    final paint = Paint();
-    final labels = _lastSevenLabels();
-
-    for (var i = 0; i < data.length; i++) {
-      final x = i * (barWidth + gap);
-      final h = (size.height - 22) * data[i] / maxValue;
-      final rect = Rect.fromLTWH(x, size.height - 22 - h, barWidth, h);
-      paint.shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: i == data.length - 1
-            ? [const Color(0xFF9A73FF), const Color(0xFF3678FF)]
-            : [const Color(0xFF4D83FF), const Color(0xFF2E6BFF)],
-      ).createShader(rect);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(5)),
-        paint,
-      );
-
-      final label = TextPainter(
-        text: TextSpan(
-          text: labels[i],
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.58),
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      label.paint(
+    final chartRect = Rect.fromLTWH(34, 26, size.width - 54, size.height - 52);
+    final grid = Paint()
+      ..color = Colors.white.withOpacity(0.07)
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 4; i++) {
+      final y = chartRect.bottom - chartRect.height * i / 4;
+      canvas.drawLine(Offset(chartRect.left, y), Offset(chartRect.right, y), grid);
+      _drawText(
         canvas,
-        Offset(x + barWidth / 2 - label.width / 2, size.height - 16),
+        (maxValue * i / 4).round().toString(),
+        Offset(0, y - 7),
+        color: Colors.white.withOpacity(0.46),
+        size: 11,
       );
     }
+
+    final barWidth = math.max(4.0, chartRect.width / values.length * 0.34);
+    for (var i = 0; i < values.length; i++) {
+      final value = values[i].clamp(0, maxValue);
+      final x = chartRect.left + chartRect.width * (i + 0.5) / values.length;
+      final height = chartRect.height * value / maxValue;
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x - barWidth / 2, chartRect.bottom - height, barWidth, height),
+        const Radius.circular(3),
+      );
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [color, color.withOpacity(0.70)],
+          ).createShader(rect.outerRect),
+      );
+    }
+
+    for (var i = 0; i < labels.length; i++) {
+      final x = chartRect.left + chartRect.width * i / (labels.length - 1);
+      _drawText(
+        canvas,
+        labels[i],
+        Offset(x, size.height - 20),
+        color: Colors.white.withOpacity(0.48),
+        size: 12,
+        center: true,
+      );
+    }
+
+    final markerX = chartRect.left +
+        chartRect.width * (tooltipIndex + 0.5) / values.length;
+    final markerY = chartRect.bottom -
+        chartRect.height * values[tooltipIndex].clamp(0, maxValue) / maxValue;
+    _drawTooltip(canvas, Offset(markerX, markerY - 10));
   }
 
-  List<String> _lastSevenLabels() {
-    final now = DateTime.now();
-    return List.generate(7, (index) {
-      final day = now.subtract(Duration(days: 6 - index));
-      return '${day.month}/${day.day}';
-    });
+  void _drawTooltip(Canvas canvas, Offset anchor) {
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: anchor.translate(0, -36), width: 86, height: 58),
+      const Radius.circular(10),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()..color = const Color(0xFF303744).withOpacity(0.96),
+    );
+    final pointer = Path()
+      ..moveTo(anchor.dx - 8, anchor.dy - 8)
+      ..lineTo(anchor.dx + 8, anchor.dy - 8)
+      ..lineTo(anchor.dx, anchor.dy + 1)
+      ..close();
+    canvas.drawPath(
+      pointer,
+      Paint()..color = const Color(0xFF303744).withOpacity(0.96),
+    );
+    _drawText(canvas, tooltipTitle, Offset(anchor.dx, anchor.dy - 61),
+        color: Colors.white.withOpacity(0.82), size: 12, center: true);
+    _drawText(canvas, tooltipValue, Offset(anchor.dx, anchor.dy - 40),
+        color: Colors.white, size: 14, center: true, bold: true);
+  }
+
+  void _drawText(
+    Canvas canvas,
+    String text,
+    Offset offset, {
+    required Color color,
+    required double size,
+    bool center = false,
+    bool bold = false,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: size,
+          fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(
+      canvas,
+      Offset(offset.dx - (center ? painter.width / 2 : 0), offset.dy),
+    );
   }
 
   @override
   bool shouldRepaint(covariant _BarChartPainter oldDelegate) {
-    return oldDelegate.values != values;
+    return oldDelegate.values != values ||
+        oldDelegate.color != color ||
+        oldDelegate.maxValue != maxValue;
   }
 }
 
-class _TrackPainter extends CustomPainter {
-  const _TrackPainter({required this.points});
+class _DonutPainter extends CustomPainter {
+  const _DonutPainter({
+    required this.colors,
+    required this.values,
+    required this.backgroundColor,
+    this.strokeWidth = 16,
+  });
 
-  final List<RidePoint> points;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final bg = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF0D2630), Color(0xFF111B29)],
-      ).createShader(Offset.zero & size);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(10)),
-      bg,
-    );
-
-    final gridPaint = Paint()
-      ..color = const Color(0xFF17F3B3).withValues(alpha: 0.08)
-      ..strokeWidth = 1;
-    for (var i = 0; i < 7; i++) {
-      final y = size.height * i / 6;
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width, y + math.sin(i) * 18),
-        gridPaint,
-      );
-    }
-
-    final routePoints = points.length >= 2 ? _mapPoints(size) : _demoRoute(size);
-    final route = Path()..moveTo(routePoints.first.dx, routePoints.first.dy);
-    for (final point in routePoints.skip(1)) {
-      route.lineTo(point.dx, point.dy);
-    }
-
-    canvas.drawPath(
-      route,
-      Paint()
-        ..shader = const LinearGradient(
-          colors: [Color(0xFF21EBD0), Color(0xFF5AF15E), Color(0xFFFF922E)],
-        ).createShader(Offset.zero & size)
-        ..strokeWidth = 4
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    _drawPin(canvas, routePoints.first, const Color(0xFF25E2B7));
-    _drawPin(canvas, routePoints.last, const Color(0xFFFF563A));
-  }
-
-  List<Offset> _mapPoints(Size size) {
-    final minLat =
-        points.map((p) => p.latitude).reduce((a, b) => a < b ? a : b);
-    final maxLat =
-        points.map((p) => p.latitude).reduce((a, b) => a > b ? a : b);
-    final minLng =
-        points.map((p) => p.longitude).reduce((a, b) => a < b ? a : b);
-    final maxLng =
-        points.map((p) => p.longitude).reduce((a, b) => a > b ? a : b);
-    final latSpan = math.max(maxLat - minLat, 0.0001);
-    final lngSpan = math.max(maxLng - minLng, 0.0001);
-
-    return points.map((point) {
-      final x = (point.longitude - minLng) / lngSpan * (size.width - 22) + 11;
-      final y = size.height -
-          ((point.latitude - minLat) / latSpan * (size.height - 22) + 11);
-      return Offset(x, y);
-    }).toList();
-  }
-
-  List<Offset> _demoRoute(Size size) {
-    return [
-      Offset(size.width * 0.12, size.height * 0.78),
-      Offset(size.width * 0.25, size.height * 0.58),
-      Offset(size.width * 0.34, size.height * 0.42),
-      Offset(size.width * 0.48, size.height * 0.55),
-      Offset(size.width * 0.58, size.height * 0.37),
-      Offset(size.width * 0.74, size.height * 0.62),
-      Offset(size.width * 0.88, size.height * 0.34),
-    ];
-  }
-
-  void _drawPin(Canvas canvas, Offset point, Color color) {
-    canvas.drawCircle(point, 8, Paint()..color = color);
-    canvas.drawCircle(point, 3.5, Paint()..color = Colors.white);
-  }
-
-  @override
-  bool shouldRepaint(covariant _TrackPainter oldDelegate) {
-    return oldDelegate.points != points;
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  const _RingPainter({required this.progress});
-
-  final double progress;
+  final List<Color> colors;
+  final List<double> values;
+  final Color backgroundColor;
+  final double strokeWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 9;
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    final base = Paint()
+    final radius = math.min(size.width, size.height) * 0.38;
+    var start = -math.pi / 2;
+    for (var i = 0; i < values.length; i++) {
+      final sweep = values[i] * math.pi * 2;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        start,
+        math.max(0.0, sweep - 0.035),
+        false,
+        Paint()
+          ..color = colors[i]
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.butt,
+      );
+      start += sweep;
+    }
+    canvas.drawCircle(center, radius - strokeWidth / 1.9, Paint()..color = backgroundColor);
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutPainter oldDelegate) {
+    return oldDelegate.colors != colors ||
+        oldDelegate.values != values ||
+        oldDelegate.strokeWidth != strokeWidth;
+  }
+}
+
+class _RadarPainter extends CustomPainter {
+  const _RadarPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) * 0.46;
+    final ring = Paint()
+      ..color = Colors.white.withOpacity(0.10)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round
-      ..color = const Color(0xFF52616B);
-    final active = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10
-      ..strokeCap = StrokeCap.round
-      ..shader = const SweepGradient(
-        colors: [Color(0xFF5AF55C), Color(0xFF28D9F5), Color(0xFF5AF55C)],
-      ).createShader(rect);
-    canvas.drawArc(rect, math.pi * 0.8, math.pi * 1.6, false, base);
+      ..strokeWidth = 1;
+    for (var i = 1; i <= 4; i++) {
+      canvas.drawCircle(center, radius * i / 4, ring);
+    }
+    canvas.drawLine(
+      Offset(center.dx - radius, center.dy),
+      Offset(center.dx + radius, center.dy),
+      ring,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - radius),
+      Offset(center.dx, center.dy + radius),
+      ring,
+    );
+
     canvas.drawArc(
-      rect,
-      math.pi * 0.8,
-      math.pi * 1.6 * progress,
-      false,
-      active,
+      Rect.fromCircle(center: center, radius: radius),
+      0,
+      math.pi / 2,
+      true,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFF42E343).withOpacity(0.08),
+            const Color(0xFF42E343).withOpacity(0.52),
+          ],
+        ).createShader(Rect.fromCircle(center: center, radius: radius)),
     );
   }
 
   @override
-  bool shouldRepaint(covariant _RingPainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _RideColors {
-  static const background = Color(0xFF08111A);
-  static const panel = Color(0xFF141F28);
-  static const green = Color(0xFF65F466);
-  static const orange = Color(0xFFFF5B2E);
-  static const muted = Color(0xFF98A4AD);
+  static const background = Color(0xFF070D14);
+  static const panel = Color(0xFF171D27);
+  static const orange = Color(0xFFFF4B1F);
 }
-
-bool _hasRideData(RideController controller) {
-  return controller.isRecording.value ||
-      controller.elapsed.value > Duration.zero ||
-      controller.distanceKm.value > 0 ||
-      controller.points.isNotEmpty;
-}
-
-String _formatDuration(Duration duration) {
-  final hours = duration.inHours;
-  final minutes = duration.inMinutes.remainder(60);
-  final seconds = duration.inSeconds.remainder(60);
-  return '${_two(hours)}:${_two(minutes)}:${_two(seconds)}';
-}
-
-String _formatPace(double secondsPerKm) {
-  if (secondsPerKm <= 0 || !secondsPerKm.isFinite) return '--:--';
-  final minutes = secondsPerKm ~/ 60;
-  final seconds = secondsPerKm.round().remainder(60);
-  return '$minutes:${_two(seconds)}';
-}
-
-String _two(int value) => value.toString().padLeft(2, '0');
