@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -183,7 +184,7 @@ class _TopChrome extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () => _showUiMessage('数据同步', '正在准备同步码表数据'),
                   icon: const Icon(
                     Icons.cloud_sync_outlined,
                     color: Colors.white,
@@ -191,7 +192,7 @@ class _TopChrome extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () => _showUiMessage('更多操作', '码表更多操作入口已激活'),
                   icon: const Icon(
                     Icons.more_horiz,
                     color: Colors.white,
@@ -262,9 +263,15 @@ class _ActivityHeroCard extends StatelessWidget {
                   top: 18,
                   child: Column(
                     children: [
-                      _RoundIconButton(icon: Icons.fullscreen, onTap: () {}),
+                      _RoundIconButton(
+                        icon: Icons.fullscreen,
+                        onTap: () => _showUiMessage('地图全屏', '已聚焦路线预览'),
+                      ),
                       const SizedBox(height: 16),
-                      _RoundIconButton(icon: Icons.share_outlined, onTap: () {}),
+                      _RoundIconButton(
+                        icon: Icons.share_outlined,
+                        onTap: () => _showUiMessage('分享路线', '路线分享入口已激活'),
+                      ),
                     ],
                   ),
                 ),
@@ -409,7 +416,7 @@ class _ActivityHeroCard extends StatelessWidget {
                 ),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () => _showUiMessage('骑行详情', '点击图表可查看对应数据'),
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.white.withOpacity(0.82),
                   textStyle: const TextStyle(fontWeight: FontWeight.w800),
@@ -595,6 +602,8 @@ class _MetricTile extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             RichText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               text: TextSpan(
                 children: [
                   TextSpan(
@@ -694,7 +703,10 @@ class _SpeedAltitudePanel extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
         child: Column(
         children: [
-          Row(
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               const Text(
                 '速度 & 海拔',
@@ -704,13 +716,11 @@ class _SpeedAltitudePanel extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const Spacer(),
               _LegendText(
                 label: '平均',
                 value: '${sample.avgSpeedText} km/h',
                 color: const Color(0xFF2B9DFF),
               ),
-              const SizedBox(width: 16),
               _LegendText(
                 label: '累计爬升',
                 value: '${sample.climbText} m',
@@ -743,7 +753,7 @@ class _DistributionGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 460;
+        final compact = constraints.maxWidth < 720;
         final panels = [
           const _ZoneDistributionPanel(
             title: '功率分布',
@@ -869,40 +879,31 @@ class _ZoneDistributionPanel extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 104,
-                    height: 104,
-                    child: Stack(
-                      alignment: Alignment.center,
+                  _InteractiveDonutChart(
+                    size: 104,
+                    colors: colors,
+                    values: distribution,
+                    labels: labels,
+                    details: values,
+                    backgroundColor: _RideColors.panel,
+                    center: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        CustomPaint(
-                          painter: _DonutPainter(
-                            colors: colors,
-                            values: distribution,
-                            backgroundColor: _RideColors.panel,
+                        Text(
+                          centerText,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
                           ),
-                          child: const SizedBox.expand(),
                         ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              centerText,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            Text(
-                              centerSubtext,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.50),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          centerSubtext,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.50),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ],
                     ),
@@ -959,20 +960,30 @@ class _ZoneDistributionPanel extends StatelessWidget {
   }
 }
 
-class _StatisticsPage extends StatelessWidget {
+class _StatisticsPage extends StatefulWidget {
   const _StatisticsPage({required this.controller});
 
   final RideController controller;
 
   @override
+  State<_StatisticsPage> createState() => _StatisticsPageState();
+}
+
+class _StatisticsPageState extends State<_StatisticsPage> {
+  var _periodIndex = 1;
+
+  @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final stats = _RideStats.from(controller);
+      final stats = _RideStats.from(widget.controller);
 
       return _OuterFrame(
         child: Column(
         children: [
-          const _PeriodSegment(selectedIndex: 1),
+          _PeriodSegment(
+            selectedIndex: _periodIndex,
+            onSelect: (index) => setState(() => _periodIndex = index),
+          ),
           const SizedBox(height: 18),
           const _MonthSelector(label: '2024年5月'),
           const SizedBox(height: 18),
@@ -1009,9 +1020,13 @@ class _StatisticsPage extends StatelessWidget {
 }
 
 class _PeriodSegment extends StatelessWidget {
-  const _PeriodSegment({required this.selectedIndex});
+  const _PeriodSegment({
+    required this.selectedIndex,
+    required this.onSelect,
+  });
 
   final int selectedIndex;
+  final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -1027,22 +1042,26 @@ class _PeriodSegment extends StatelessWidget {
         children: [
           for (var i = 0; i < labels.length; i++)
             Expanded(
-              child: Container(
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: i == selectedIndex
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Text(
-                  labels[i],
-                  style: TextStyle(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => onSelect(i),
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
                     color: i == selectedIndex
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.62),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                        ? Colors.white.withOpacity(0.08)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    labels[i],
+                    style: TextStyle(
+                      color: i == selectedIndex
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.62),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
@@ -1101,21 +1120,50 @@ class _StatsOverview extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            childAspectRatio: 1.34,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 10,
-            children: [
-              _OverviewMetric(label: '活动次数', value: stats.rideCount, unit: '次'),
-              _OverviewMetric(label: '总里程', value: stats.totalDistance, unit: 'km'),
-              _OverviewMetric(label: '总时间', value: stats.totalDuration, unit: ''),
-              _OverviewMetric(label: '总爬升', value: stats.totalClimb, unit: 'm'),
-              _OverviewMetric(label: '总消耗', value: stats.calories, unit: 'kcal'),
-              _OverviewMetric(label: '平均速度', value: stats.avgSpeed, unit: 'km/h'),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth < 360 ? 2 : 3;
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: columns,
+                childAspectRatio: columns == 2 ? 1.72 : 1.34,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 10,
+                children: [
+                  _OverviewMetric(
+                    label: '活动次数',
+                    value: stats.rideCount,
+                    unit: '次',
+                  ),
+                  _OverviewMetric(
+                    label: '总里程',
+                    value: stats.totalDistance,
+                    unit: 'km',
+                  ),
+                  _OverviewMetric(
+                    label: '总时间',
+                    value: stats.totalDuration,
+                    unit: '',
+                  ),
+                  _OverviewMetric(
+                    label: '总爬升',
+                    value: stats.totalClimb,
+                    unit: 'm',
+                  ),
+                  _OverviewMetric(
+                    label: '总消耗',
+                    value: stats.calories,
+                    unit: 'kcal',
+                  ),
+                  _OverviewMetric(
+                    label: '平均速度',
+                    value: stats.avgSpeed,
+                    unit: 'km/h',
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -1185,7 +1233,7 @@ class _OverviewMetric extends StatelessWidget {
   }
 }
 
-class _BarTrendPanel extends StatelessWidget {
+class _BarTrendPanel extends StatefulWidget {
   const _BarTrendPanel({
     required this.title,
     required this.unit,
@@ -1207,6 +1255,60 @@ class _BarTrendPanel extends StatelessWidget {
   final double maxValue;
 
   @override
+  State<_BarTrendPanel> createState() => _BarTrendPanelState();
+}
+
+class _BarTrendPanelState extends State<_BarTrendPanel> {
+  Timer? _hideTimer;
+  int? _tooltipIndex;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showTooltip(int index) {
+    _hideTimer?.cancel();
+    setState(() => _tooltipIndex = index);
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _tooltipIndex = null);
+    });
+  }
+
+  int? _indexForTap(Offset local, Size size) {
+    if (widget.values.isEmpty || size.width <= 54 || size.height <= 52) {
+      return null;
+    }
+    final chartRect = Rect.fromLTWH(34, 26, size.width - 54, size.height - 52);
+    if (!chartRect.inflate(18).contains(local)) return null;
+    final raw =
+        ((local.dx - chartRect.left) / chartRect.width * widget.values.length)
+            .floor();
+    if (raw < 0) return 0;
+    if (raw >= widget.values.length) return widget.values.length - 1;
+    return raw;
+  }
+
+  String _tooltipTitleFor(int index) {
+    if (widget.title.contains('趋势')) {
+      final day = math.min(31, index * 2 + 1);
+      return '5月$day日';
+    }
+    return widget.tooltipTitle;
+  }
+
+  String _tooltipValueFor(int index) {
+    final value = widget.values[index];
+    if (widget.unit.contains('小时')) {
+      return value >= 1
+          ? '${value.toStringAsFixed(1)} 小时'
+          : '${(value * 60).round()} 分钟';
+    }
+    return '${value.toStringAsFixed(1)} km';
+  }
+
+  @override
   Widget build(BuildContext context) {
     return _GlassPanel(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -1215,7 +1317,7 @@ class _BarTrendPanel extends StatelessWidget {
           Row(
             children: [
               Text(
-                title,
+                widget.title,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -1224,7 +1326,7 @@ class _BarTrendPanel extends StatelessWidget {
               ),
               const Spacer(),
               Text(
-                unit,
+                widget.unit,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.54),
                   fontSize: 13,
@@ -1236,17 +1338,34 @@ class _BarTrendPanel extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             height: 210,
-            child: CustomPaint(
-              painter: _BarChartPainter(
-                values: values,
-                labels: labels,
-                color: color,
-                maxValue: maxValue,
-                tooltipIndex: values.length > 16 ? 15 : values.length - 1,
-                tooltipTitle: tooltipTitle,
-                tooltipValue: tooltipValue,
-              ),
-              child: const SizedBox.expand(),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = Size(constraints.maxWidth, constraints.maxHeight);
+                final selectedIndex = _tooltipIndex;
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    final index = _indexForTap(details.localPosition, size);
+                    if (index != null) _showTooltip(index);
+                  },
+                  child: CustomPaint(
+                    painter: _BarChartPainter(
+                      values: widget.values,
+                      labels: widget.labels,
+                      color: widget.color,
+                      maxValue: widget.maxValue,
+                      tooltipIndex: selectedIndex,
+                      tooltipTitle: selectedIndex == null
+                          ? widget.tooltipTitle
+                          : _tooltipTitleFor(selectedIndex),
+                      tooltipValue: selectedIndex == null
+                          ? widget.tooltipValue
+                          : _tooltipValueFor(selectedIndex),
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -1260,6 +1379,15 @@ class _AnnualDistributionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const colors = [
+      _RideColors.orange,
+      Color(0xFF268DFF),
+      Color(0xFF62D729),
+    ];
+    const distribution = [0.85, 0.10, 0.05];
+    const labels = ['户外骑行', '室内骑行', '其他运动'];
+    const details = ['872.3 km  85%', '102.4 km  10%', '51.6 km  5%'];
+
     return _GlassPanel(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1286,79 +1414,81 @@ class _AnnualDistributionPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  children: const [
-                    _DistributionRow(
-                      color: _RideColors.orange,
-                      label: '户外骑行',
-                      value: '872.3 km',
-                      ratio: '85%',
-                    ),
-                    SizedBox(height: 24),
-                    _DistributionRow(
-                      color: Color(0xFF268DFF),
-                      label: '室内骑行',
-                      value: '102.4 km',
-                      ratio: '10%',
-                    ),
-                    SizedBox(height: 24),
-                    _DistributionRow(
-                      color: Color(0xFF62D729),
-                      label: '其他运动',
-                      value: '51.6 km',
-                      ratio: '5%',
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 20),
-              SizedBox(
-                width: 148,
-                height: 148,
-                child: Stack(
-                  alignment: Alignment.center,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 400;
+              final legend = Column(
+                children: const [
+                  _DistributionRow(
+                    color: _RideColors.orange,
+                    label: '户外骑行',
+                    value: '872.3 km',
+                    ratio: '85%',
+                  ),
+                  SizedBox(height: 18),
+                  _DistributionRow(
+                    color: Color(0xFF268DFF),
+                    label: '室内骑行',
+                    value: '102.4 km',
+                    ratio: '10%',
+                  ),
+                  SizedBox(height: 18),
+                  _DistributionRow(
+                    color: Color(0xFF62D729),
+                    label: '其他运动',
+                    value: '51.6 km',
+                    ratio: '5%',
+                  ),
+                ],
+              );
+              final donut = _InteractiveDonutChart(
+                size: compact ? 136 : 148,
+                strokeWidth: 25,
+                colors: colors,
+                values: distribution,
+                labels: labels,
+                details: details,
+                backgroundColor: _RideColors.panel,
+                center: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    CustomPaint(
-                      painter: const _DonutPainter(
-                        colors: [
-                          _RideColors.orange,
-                          Color(0xFF268DFF),
-                          Color(0xFF62D729),
-                        ],
-                        values: [0.85, 0.10, 0.05],
-                        backgroundColor: _RideColors.panel,
-                        strokeWidth: 25,
+                    const Text(
+                      '1026.3',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
                       ),
-                      child: const SizedBox.expand(),
                     ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text(
-                          '1026.3',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          '总里程 (km)',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.54),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      '总里程 (km)',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.54),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
-              ),
-            ],
+              );
+
+              if (compact) {
+                return Column(
+                  children: [
+                    legend,
+                    const SizedBox(height: 16),
+                    donut,
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: legend),
+                  const SizedBox(width: 20),
+                  donut,
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -1421,21 +1551,178 @@ class _DistributionRow extends StatelessWidget {
   }
 }
 
-class _RoutesPage extends StatelessWidget {
-  const _RoutesPage();
+class _InteractiveDonutChart extends StatefulWidget {
+  const _InteractiveDonutChart({
+    required this.size,
+    required this.colors,
+    required this.values,
+    required this.labels,
+    required this.details,
+    required this.backgroundColor,
+    required this.center,
+    this.strokeWidth = 16,
+  });
+
+  final double size;
+  final List<Color> colors;
+  final List<double> values;
+  final List<String> labels;
+  final List<String> details;
+  final Color backgroundColor;
+  final Widget center;
+  final double strokeWidth;
+
+  @override
+  State<_InteractiveDonutChart> createState() => _InteractiveDonutChartState();
+}
+
+class _InteractiveDonutChartState extends State<_InteractiveDonutChart> {
+  Timer? _hideTimer;
+  int? _selectedIndex;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleTap(TapDownDetails details) {
+    final index = _segmentForTap(details.localPosition);
+    if (index == null) return;
+    _hideTimer?.cancel();
+    setState(() => _selectedIndex = index);
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _selectedIndex = null);
+    });
+  }
+
+  int? _segmentForTap(Offset local) {
+    if (widget.values.isEmpty) return null;
+    final center = Offset(widget.size / 2, widget.size / 2);
+    final delta = local - center;
+    final distance = delta.distance;
+    final radius = widget.size * 0.38;
+    if (distance > radius + widget.strokeWidth) return null;
+
+    var angle = math.atan2(delta.dy, delta.dx) + math.pi / 2;
+    while (angle < 0) {
+      angle += math.pi * 2;
+    }
+    while (angle >= math.pi * 2) {
+      angle -= math.pi * 2;
+    }
+
+    final total = widget.values.fold<double>(0, (sum, value) => sum + value);
+    if (total <= 0) return null;
+    final target = angle / (math.pi * 2) * total;
+    var cursor = 0.0;
+    for (var i = 0; i < widget.values.length; i++) {
+      cursor += widget.values[i];
+      if (target <= cursor) return i;
+    }
+    return widget.values.length - 1;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final selected = _selectedIndex;
+    final tooltip = selected == null
+        ? null
+        : '${widget.labels[selected]}\n${widget.details[selected]}';
+
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: _handleTap,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            CustomPaint(
+              painter: _DonutPainter(
+                colors: widget.colors,
+                values: widget.values,
+                backgroundColor: widget.backgroundColor,
+                strokeWidth: widget.strokeWidth,
+                selectedIndex: selected,
+              ),
+              child: const SizedBox.expand(),
+            ),
+            widget.center,
+            Positioned(
+              top: -8,
+              left: -24,
+              right: -24,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 160),
+                  opacity: tooltip == null ? 0 : 1,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF303744).withOpacity(0.96),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: Text(
+                        tooltip ?? '',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          height: 1.25,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutesPage extends StatefulWidget {
+  const _RoutesPage();
+
+  @override
+  State<_RoutesPage> createState() => _RoutesPageState();
+}
+
+class _RoutesPageState extends State<_RoutesPage> {
+  var _modeIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final routeCountLabel = switch (_modeIndex) {
+      1 => '收藏路线（6）',
+      2 => '导入路线（3）',
+      _ => '路线（18）',
+    };
+
     return Column(
       children: [
-        const _RouteModeTabs(),
+        _RouteModeTabs(
+          selectedIndex: _modeIndex,
+          onSelect: (index) => setState(() => _modeIndex = index),
+        ),
         const SizedBox(height: 12),
         const _RouteSearchBar(),
         const SizedBox(height: 14),
         Align(
           alignment: Alignment.centerLeft,
           child: Text(
-            '路线（18）',
+            routeCountLabel,
             style: TextStyle(
               color: Colors.white.withOpacity(0.72),
               fontSize: 16,
@@ -1493,7 +1780,13 @@ class _RoutesPage extends StatelessWidget {
 }
 
 class _RouteModeTabs extends StatelessWidget {
-  const _RouteModeTabs();
+  const _RouteModeTabs({
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -1504,26 +1797,32 @@ class _RouteModeTabs extends StatelessWidget {
         children: [
           for (var i = 0; i < labels.length; i++)
             Expanded(
-              child: Container(
-                height: 48,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: i == 0
-                      ? _RideColors.orange.withOpacity(0.13)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                  border: i == 0
-                      ? Border.all(color: _RideColors.orange.withOpacity(0.85))
-                      : null,
-                ),
-                child: Text(
-                  labels[i],
-                  style: TextStyle(
-                    color: i == 0
-                        ? _RideColors.orange
-                        : Colors.white.withOpacity(0.70),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => onSelect(i),
+                child: Container(
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: i == selectedIndex
+                        ? _RideColors.orange.withOpacity(0.13)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                    border: i == selectedIndex
+                        ? Border.all(
+                            color: _RideColors.orange.withOpacity(0.85),
+                          )
+                        : null,
+                  ),
+                  child: Text(
+                    labels[i],
+                    style: TextStyle(
+                      color: i == selectedIndex
+                          ? _RideColors.orange
+                          : Colors.white.withOpacity(0.70),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ),
@@ -1553,12 +1852,16 @@ class _RouteSearchBar extends StatelessWidget {
               children: [
                 Icon(Icons.search, color: Colors.white.withOpacity(0.64), size: 23),
                 const SizedBox(width: 8),
-                Text(
-                  '搜索路线名称或地点',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.48),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                Expanded(
+                  child: Text(
+                    '搜索路线名称或地点',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.48),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -1621,88 +1924,114 @@ class _RouteListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _GlassPanel(
       padding: EdgeInsets.zero,
-      child: SizedBox(
-        height: 176,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 148,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(14),
-                ),
-                child: CustomPaint(
-                  painter: _RouteMapPainter(variant: variant),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 360;
+          final cardHeight = compact ? 194.0 : 176.0;
+          final mapWidth = compact ? 118.0 : 148.0;
+          final titleSize = compact ? 18.0 : 20.0;
+
+          return SizedBox(
+            height: cardHeight,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: mapWidth,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(14),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      date,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.60),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: CustomPaint(
+                      painter: _RouteMapPainter(variant: variant),
+                      child: const SizedBox.expand(),
                     ),
-                    const SizedBox(height: 10),
-                    Row(
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 12 : 16,
+                      16,
+                      12,
+                      12,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _RouteBadge(
-                          label: '公路',
-                          color: _RideColors.orange,
+                        Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: titleSize,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        _RouteBadge(
-                          label: '难度 $difficulty',
-                          color: difficultyColor,
+                        const SizedBox(height: 6),
+                        Text(
+                          date,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.60),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            _RouteBadge(
+                              label: '公路',
+                              color: _RideColors.orange,
+                            ),
+                            const SizedBox(width: 8),
+                            _RouteBadge(
+                              label: '难度 $difficulty',
+                              color: difficultyColor,
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Wrap(
+                          spacing: compact ? 10 : 14,
+                          runSpacing: 4,
+                          children: [
+                            _RouteMetric(value: distance, unit: 'km'),
+                            _RouteMetric(value: climb, unit: 'm'),
+                            _RouteMetric(value: duration, unit: ''),
+                          ],
+                        ),
+                        Divider(
+                          color: Colors.white.withOpacity(0.08),
+                          height: 18,
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Icon(
+                              Icons.star_border,
+                              color: Colors.white.withOpacity(0.68),
+                            ),
+                            const SizedBox(width: 28),
+                            Icon(
+                              Icons.share_outlined,
+                              color: Colors.white.withOpacity(0.68),
+                            ),
+                            const SizedBox(width: 28),
+                            Icon(
+                              Icons.more_horiz,
+                              color: Colors.white.withOpacity(0.68),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    Wrap(
-                      spacing: 14,
-                      runSpacing: 4,
-                      children: [
-                        _RouteMetric(value: distance, unit: 'km'),
-                        _RouteMetric(value: climb, unit: 'm'),
-                        _RouteMetric(value: duration, unit: ''),
-                      ],
-                    ),
-                    Divider(color: Colors.white.withOpacity(0.08), height: 18),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Icon(Icons.star_border, color: Colors.white.withOpacity(0.68)),
-                        const SizedBox(width: 28),
-                        Icon(Icons.share_outlined, color: Colors.white.withOpacity(0.68)),
-                        const SizedBox(width: 28),
-                        Icon(Icons.more_horiz, color: Colors.white.withOpacity(0.68)),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -1993,7 +2322,7 @@ class _DeviceRow extends StatelessWidget {
           _SignalBars(value: bars),
           const SizedBox(width: 16),
           OutlinedButton(
-            onPressed: () {},
+            onPressed: () => _showUiMessage('连接设备', '$title 正在连接...'),
             style: OutlinedButton.styleFrom(
               foregroundColor: _RideColors.orange,
               side: const BorderSide(color: _RideColors.orange),
@@ -2324,7 +2653,7 @@ class _ConnectedDevicePanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           OutlinedButton(
-            onPressed: () {},
+            onPressed: () => _showUiMessage('解除绑定', '已打开设备解绑确认'),
             style: OutlinedButton.styleFrom(
               foregroundColor: _RideColors.orange,
               minimumSize: const Size(double.infinity, 52),
@@ -2547,12 +2876,6 @@ class _RideTabBar extends StatelessWidget {
                   selected: selectedIndex == 1,
                   onTap: () => onSelect(1),
                 ),
-                _BottomAction(
-                  icon: Icons.explore,
-                  label: '路线',
-                  selected: selectedIndex == 2,
-                  onTap: () => onSelect(2),
-                ),
                 _BottomRecordAction(
                   isRecording: isRecording,
                   isPaused: isPaused,
@@ -2563,6 +2886,12 @@ class _RideTabBar extends StatelessWidget {
                       controller.start();
                     }
                   },
+                ),
+                _BottomAction(
+                  icon: Icons.explore,
+                  label: '路线',
+                  selected: selectedIndex == 2,
+                  onTap: () => onSelect(2),
                 ),
                 _BottomAction(
                   icon: Icons.devices_other,
@@ -3292,7 +3621,7 @@ class _BarChartPainter extends CustomPainter {
   final List<String> labels;
   final Color color;
   final double maxValue;
-  final int tooltipIndex;
+  final int? tooltipIndex;
   final String tooltipTitle;
   final String tooltipValue;
 
@@ -3346,16 +3675,28 @@ class _BarChartPainter extends CustomPainter {
       );
     }
 
-    final markerX = chartRect.left +
-        chartRect.width * (tooltipIndex + 0.5) / values.length;
+    final selectedIndex = tooltipIndex;
+    if (selectedIndex == null) return;
+    final markerX =
+        chartRect.left + chartRect.width * (selectedIndex + 0.5) / values.length;
     final markerY = chartRect.bottom -
-        chartRect.height * values[tooltipIndex].clamp(0, maxValue) / maxValue;
-    _drawTooltip(canvas, Offset(markerX, markerY - 10));
+        chartRect.height * values[selectedIndex].clamp(0, maxValue) / maxValue;
+    _drawTooltip(canvas, Offset(markerX, markerY - 10), size);
   }
 
-  void _drawTooltip(Canvas canvas, Offset anchor) {
+  void _drawTooltip(Canvas canvas, Offset anchor, Size size) {
+    final centerX = math.min(
+      math.max(anchor.dx, 43.0),
+      math.max(43.0, size.width - 43.0),
+    );
+    final centerY = math.max(anchor.dy, 70.0);
+    final adjustedAnchor = Offset(centerX, centerY);
     final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: anchor.translate(0, -36), width: 86, height: 58),
+      Rect.fromCenter(
+        center: adjustedAnchor.translate(0, -36),
+        width: 86,
+        height: 58,
+      ),
       const Radius.circular(10),
     );
     canvas.drawRRect(
@@ -3363,17 +3704,17 @@ class _BarChartPainter extends CustomPainter {
       Paint()..color = const Color(0xFF303744).withOpacity(0.96),
     );
     final pointer = Path()
-      ..moveTo(anchor.dx - 8, anchor.dy - 8)
-      ..lineTo(anchor.dx + 8, anchor.dy - 8)
-      ..lineTo(anchor.dx, anchor.dy + 1)
+      ..moveTo(adjustedAnchor.dx - 8, adjustedAnchor.dy - 8)
+      ..lineTo(adjustedAnchor.dx + 8, adjustedAnchor.dy - 8)
+      ..lineTo(adjustedAnchor.dx, adjustedAnchor.dy + 1)
       ..close();
     canvas.drawPath(
       pointer,
       Paint()..color = const Color(0xFF303744).withOpacity(0.96),
     );
-    _drawText(canvas, tooltipTitle, Offset(anchor.dx, anchor.dy - 61),
+    _drawText(canvas, tooltipTitle, Offset(adjustedAnchor.dx, adjustedAnchor.dy - 61),
         color: Colors.white.withOpacity(0.82), size: 12, center: true);
-    _drawText(canvas, tooltipValue, Offset(anchor.dx, anchor.dy - 40),
+    _drawText(canvas, tooltipValue, Offset(adjustedAnchor.dx, adjustedAnchor.dy - 40),
         color: Colors.white, size: 14, center: true, bold: true);
   }
 
@@ -3407,7 +3748,10 @@ class _BarChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _BarChartPainter oldDelegate) {
     return oldDelegate.values != values ||
         oldDelegate.color != color ||
-        oldDelegate.maxValue != maxValue;
+        oldDelegate.maxValue != maxValue ||
+        oldDelegate.tooltipIndex != tooltipIndex ||
+        oldDelegate.tooltipTitle != tooltipTitle ||
+        oldDelegate.tooltipValue != tooltipValue;
   }
 }
 
@@ -3417,29 +3761,35 @@ class _DonutPainter extends CustomPainter {
     required this.values,
     required this.backgroundColor,
     this.strokeWidth = 16,
+    this.selectedIndex,
   });
 
   final List<Color> colors;
   final List<double> values;
   final Color backgroundColor;
   final double strokeWidth;
+  final int? selectedIndex;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) * 0.38;
     var start = -math.pi / 2;
+    final hasSelection = selectedIndex != null;
     for (var i = 0; i < values.length; i++) {
       final sweep = values[i] * math.pi * 2;
+      final isSelected = selectedIndex == i;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         start,
         math.max(0.0, sweep - 0.035),
         false,
         Paint()
-          ..color = colors[i]
+          ..color = hasSelection && !isSelected
+              ? colors[i].withOpacity(0.42)
+              : colors[i]
           ..style = PaintingStyle.stroke
-          ..strokeWidth = strokeWidth
+          ..strokeWidth = isSelected ? strokeWidth + 3 : strokeWidth
           ..strokeCap = StrokeCap.butt,
       );
       start += sweep;
@@ -3451,7 +3801,8 @@ class _DonutPainter extends CustomPainter {
   bool shouldRepaint(covariant _DonutPainter oldDelegate) {
     return oldDelegate.colors != colors ||
         oldDelegate.values != values ||
-        oldDelegate.strokeWidth != strokeWidth;
+        oldDelegate.strokeWidth != strokeWidth ||
+        oldDelegate.selectedIndex != selectedIndex;
   }
 }
 
@@ -3497,6 +3848,15 @@ class _RadarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+void _showUiMessage(String title, String message) {
+  Get.snackbar(
+    title,
+    message,
+    snackPosition: SnackPosition.BOTTOM,
+    duration: const Duration(seconds: 2),
+  );
 }
 
 class _RideColors {
