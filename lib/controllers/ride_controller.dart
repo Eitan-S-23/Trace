@@ -82,8 +82,13 @@ class RideController extends GetxController {
       return false;
     }
 
-    return permission == LocationPermission.whileInUse ||
+    final allowed = permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always;
+    if (!allowed) {
+      Get.snackbar('定位权限未授予', '无法开始记录骑行',
+          snackPosition: SnackPosition.BOTTOM);
+    }
+    return allowed;
   }
 
   Future<void> start() async {
@@ -114,15 +119,39 @@ class RideController extends GetxController {
       _onPosition,
       onError: (Object error) {
         gpsStatus.value = 'GPS 异常';
+        Get.snackbar('GPS 异常', '无法读取定位数据，计时仍在继续',
+            snackPosition: SnackPosition.BOTTOM);
         debugPrint('Position stream error: $error');
       },
     );
+
+    Get.snackbar('开始记录', '正在记录骑行，静止时速度和距离会保持 0',
+        snackPosition: SnackPosition.BOTTOM);
+    unawaited(_seedCurrentPosition());
   }
 
   void pauseResume() {
     if (!isRecording.value) return;
     isPaused.value = !isPaused.value;
     gpsStatus.value = isPaused.value ? '已暂停' : 'GPS 记录中';
+  }
+
+  Future<void> saveCurrentRide() async {
+    if (!isRecording.value) {
+      await loadRideHistory();
+      Get.snackbar('暂无可保存骑行', '请先点击开始记录，再点击保存',
+          snackPosition: SnackPosition.BOTTOM);
+      return;
+    }
+
+    final ride = await stopAndSave();
+    if (ride != null &&
+        ride.durationSeconds == 0 &&
+        ride.distanceKm == 0 &&
+        _points.isEmpty) {
+      Get.snackbar('未保存', '本次没有有效时长或 GPS 轨迹',
+          snackPosition: SnackPosition.BOTTOM);
+    }
   }
 
   Future<RideSession?> stopAndSave({
@@ -184,6 +213,22 @@ class RideController extends GetxController {
     _lastPositionTime = null;
     _lastAltitudeM = null;
     _points.clear();
+  }
+
+  Future<void> _seedCurrentPosition() async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+        ),
+      ).timeout(const Duration(seconds: 8));
+      _onPosition(position);
+    } on TimeoutException {
+      gpsStatus.value = '等待 GPS 数据';
+    } catch (e) {
+      gpsStatus.value = '等待 GPS 数据';
+      debugPrint('Initial position failed: $e');
+    }
   }
 
   void _onPosition(Position position) {

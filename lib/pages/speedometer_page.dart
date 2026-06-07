@@ -6,8 +6,20 @@ import 'package:get/get.dart';
 import '../controllers/ride_controller.dart';
 import '../models/ride_models.dart';
 
-class SpeedometerPage extends StatelessWidget {
+class SpeedometerPage extends StatefulWidget {
   const SpeedometerPage({super.key});
+
+  @override
+  State<SpeedometerPage> createState() => _SpeedometerPageState();
+}
+
+class _SpeedometerPageState extends State<SpeedometerPage> {
+  int _selectedIndex = 0;
+
+  void _selectTab(int index) {
+    if (_selectedIndex == index) return;
+    setState(() => _selectedIndex = index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,45 +37,109 @@ class SpeedometerPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
               sliver: SliverList(
                 delegate: SliverChildListDelegate(
-                  [
-                    _Header(controller: controller),
-                    const SizedBox(height: 14),
-                    _HeroSection(controller: controller),
-                    const SizedBox(height: 10),
-                    _MetricGrid(controller: controller),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: _TrackCard(controller: controller)),
-                        const SizedBox(width: 10),
-                        Expanded(child: _AltitudeCard(controller: controller)),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    _SpeedTrendCard(controller: controller),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _WeeklyDistanceCard(controller: controller),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _MonthlyGoalCard(controller: controller),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    _RecentRides(controller: controller),
-                  ],
+                  _buildPageChildren(controller),
                 ),
               ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _BottomRideBar(controller: controller),
+      bottomNavigationBar: _RideTabBar(
+        controller: controller,
+        selectedIndex: _selectedIndex,
+        onSelect: _selectTab,
+      ),
     );
+  }
+
+  List<Widget> _buildPageChildren(RideController controller) {
+    final children = <Widget>[
+      _Header(controller: controller),
+      const SizedBox(height: 14),
+      _RideStatusBanner(controller: controller),
+      const SizedBox(height: 10),
+    ];
+
+    switch (_selectedIndex) {
+      case 1:
+        children.addAll(_buildAnalysisContent(controller));
+        break;
+      case 2:
+        children.addAll(_buildSavedContent(controller));
+        break;
+      case 3:
+        children.addAll(_buildProfileContent(controller));
+        break;
+      case 0:
+      default:
+        children.addAll(_buildDashboardContent(controller));
+    }
+
+    return children;
+  }
+
+  List<Widget> _buildDashboardContent(RideController controller) {
+    return [
+      _HeroSection(controller: controller),
+      const SizedBox(height: 10),
+      _MetricGrid(controller: controller),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(child: _TrackCard(controller: controller)),
+          const SizedBox(width: 10),
+          Expanded(child: _AltitudeCard(controller: controller)),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _SpeedTrendCard(controller: controller),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(child: _WeeklyDistanceCard(controller: controller)),
+          const SizedBox(width: 10),
+          Expanded(child: _MonthlyGoalCard(controller: controller)),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _RecentRides(controller: controller),
+    ];
+  }
+
+  List<Widget> _buildAnalysisContent(RideController controller) {
+    return [
+      _MetricGrid(controller: controller),
+      const SizedBox(height: 10),
+      _SpeedTrendCard(controller: controller),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(child: _WeeklyDistanceCard(controller: controller)),
+          const SizedBox(width: 10),
+          Expanded(child: _MonthlyGoalCard(controller: controller)),
+        ],
+      ),
+      const SizedBox(height: 10),
+      _RecentRides(controller: controller),
+    ];
+  }
+
+  List<Widget> _buildSavedContent(RideController controller) {
+    return [
+      _SaveRideCard(controller: controller),
+      const SizedBox(height: 10),
+      _RecentRides(controller: controller),
+    ];
+  }
+
+  List<Widget> _buildProfileContent(RideController controller) {
+    return [
+      _ProfileSummaryCard(controller: controller),
+      const SizedBox(height: 10),
+      _MonthlyGoalCard(controller: controller),
+      const SizedBox(height: 10),
+      _RecentRides(controller: controller),
+    ];
   }
 }
 
@@ -137,6 +213,70 @@ class _Header extends StatelessWidget {
   }
 }
 
+class _RideStatusBanner extends StatelessWidget {
+  const _RideStatusBanner({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final recording = controller.isRecording.value;
+      final paused = controller.isPaused.value;
+      final elapsed = _formatDuration(controller.elapsed.value);
+      final title = recording ? (paused ? '骑行已暂停' : '正在记录骑行') : '码表待命';
+      final detail = recording
+          ? '$elapsed · ${controller.gpsStatus.value}'
+          : '点击开始后会立即计时；静止或 GPS 未出点时速度/距离保持 0。';
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: (recording ? const Color(0xFF1C5F35) : _RideColors.panel)
+              .withValues(alpha: 0.84),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              recording
+                  ? (paused ? Icons.pause_circle : Icons.radio_button_checked)
+                  : Icons.info_outline,
+              color: recording ? const Color(0xFF70FF89) : _RideColors.muted,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detail,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.66),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
 class _HeroSection extends StatelessWidget {
   const _HeroSection({required this.controller});
 
@@ -144,11 +284,11 @@ class _HeroSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 380;
-          final metrics = GridView.count(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 380;
+        final metrics = Obx(
+          () => GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: 2,
@@ -177,28 +317,28 @@ class _HeroSection extends StatelessWidget {
                 unit: 'h:m:s',
               ),
             ],
-          );
+          ),
+        );
 
-          if (compact) {
-            return Column(
-              children: [
-                _SpeedGauge(controller: controller),
-                const SizedBox(height: 10),
-                metrics,
-              ],
-            );
-          }
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        if (compact) {
+          return Column(
             children: [
-              Expanded(flex: 11, child: _SpeedGauge(controller: controller)),
-              const SizedBox(width: 10),
-              Expanded(flex: 9, child: metrics),
+              _SpeedGauge(controller: controller),
+              const SizedBox(height: 10),
+              metrics,
             ],
           );
-        },
-      ),
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(flex: 11, child: _SpeedGauge(controller: controller)),
+            const SizedBox(width: 10),
+            Expanded(flex: 9, child: metrics),
+          ],
+        );
+      },
     );
   }
 }
@@ -268,11 +408,11 @@ class _MetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => LayoutBuilder(
-        builder: (context, constraints) {
-          final compact = constraints.maxWidth < 390;
-          return GridView.count(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 390;
+        return Obx(
+          () => GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: compact ? 2 : 3,
@@ -323,9 +463,9 @@ class _MetricGrid extends StatelessWidget {
                 unit: 'W',
               ),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -476,6 +616,190 @@ class _MonthlyGoalCard extends StatelessWidget {
   }
 }
 
+class _SaveRideCard extends StatelessWidget {
+  const _SaveRideCard({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final recording = controller.isRecording.value;
+      final paused = controller.isPaused.value;
+      return _Panel(
+        title: '保存',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              recording
+                  ? (paused ? '当前骑行已暂停，可以继续或保存记录。' : '当前骑行正在记录，可以随时保存。')
+                  : '当前没有正在记录的骑行，点击中间开始按钮记录新骑行。',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.66),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    label: '里程',
+                    value: controller.distanceKm.value.toStringAsFixed(2),
+                    unit: 'km',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: '时长',
+                    value: _formatDuration(controller.elapsed.value),
+                    unit: '',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: '均速',
+                    value: controller.avgSpeedKmh.value.toStringAsFixed(1),
+                    unit: 'km/h',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: recording
+                    ? () => controller.saveCurrentRide()
+                    : controller.loadRideHistory,
+                icon: Icon(recording ? Icons.save_outlined : Icons.refresh),
+                label: Text(recording ? '保存本次骑行' : '刷新历史记录'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF28E363),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+class _ProfileSummaryCard extends StatelessWidget {
+  const _ProfileSummaryCard({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(
+      () => _Panel(
+        title: '我的',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '骑行数据会保存在本机，用于仪表盘、趋势分析和历史记录。',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.66),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    label: '本月里程',
+                    value: controller.monthlyDistanceKm.value.toStringAsFixed(1),
+                    unit: 'km',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: '历史记录',
+                    value: controller.recentRides.length.toString(),
+                    unit: '次',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: 'GPS 精度',
+                    value: controller.gpsAccuracyM.value.toStringAsFixed(0),
+                    unit: 'm',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final String label;
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.56),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 5),
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (unit.isNotEmpty)
+                TextSpan(
+                  text: ' $unit',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.58),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _RecentRides extends StatelessWidget {
   const _RecentRides({required this.controller});
 
@@ -563,10 +887,16 @@ class _RideRow extends StatelessWidget {
   }
 }
 
-class _BottomRideBar extends StatelessWidget {
-  const _BottomRideBar({required this.controller});
+class _RideTabBar extends StatelessWidget {
+  const _RideTabBar({
+    required this.controller,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
 
   final RideController controller;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -586,20 +916,28 @@ class _BottomRideBar extends StatelessWidget {
               _BottomAction(
                 icon: Icons.dashboard,
                 label: '仪表盘',
-                selected: true,
-                onTap: controller.loadRideHistory,
+                selected: selectedIndex == 0,
+                onTap: () => onSelect(0),
               ),
               _BottomAction(
                 icon: Icons.analytics_outlined,
                 label: '分析',
-                onTap: controller.loadRideHistory,
+                selected: selectedIndex == 1,
+                onTap: () {
+                  controller.loadRideHistory();
+                  onSelect(1);
+                },
               ),
               Expanded(
                 child: Center(
                   child: GestureDetector(
-                    onTap: controller.isRecording.value
-                        ? controller.pauseResume
-                        : controller.start,
+                    onTap: () {
+                      if (controller.isRecording.value) {
+                        controller.pauseResume();
+                      } else {
+                        controller.start();
+                      }
+                    },
                     child: Container(
                       width: 72,
                       height: 72,
@@ -649,12 +987,20 @@ class _BottomRideBar extends StatelessWidget {
               _BottomAction(
                 icon: Icons.save_outlined,
                 label: '保存',
-                onTap: () => controller.stopAndSave(),
+                selected: selectedIndex == 2,
+                onTap: () {
+                  onSelect(2);
+                  controller.saveCurrentRide();
+                },
               ),
               _BottomAction(
                 icon: Icons.person_outline,
                 label: '我的',
-                onTap: controller.loadRideHistory,
+                selected: selectedIndex == 3,
+                onTap: () {
+                  controller.loadRideHistory();
+                  onSelect(3);
+                },
               ),
             ],
           ),
@@ -1291,6 +1637,7 @@ class _RingPainter extends CustomPainter {
 class _RideColors {
   static const background = Color(0xFF071018);
   static const panel = Color(0xFF141F28);
+  static const muted = Color(0xFF98A4AD);
 }
 
 String _formatDuration(Duration duration) {
