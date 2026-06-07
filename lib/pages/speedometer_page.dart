@@ -564,6 +564,61 @@ class _RideQuickActions extends StatelessWidget {
   }
 }
 
+class _AnalysisSummaryCard extends StatelessWidget {
+  const _AnalysisSummaryCard({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(
+      () => _Panel(
+        title: '分析概览',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '这里先展示稳定的基础统计；确认页面正常后再逐步恢复曲线和网格图表。',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.66),
+                fontSize: 13,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    label: '最高速度',
+                    value: controller.maxSpeedKmh.value.toStringAsFixed(1),
+                    unit: 'km/h',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: '爬升',
+                    value: controller.totalClimbM.value.toStringAsFixed(0),
+                    unit: 'm',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: '卡路里',
+                    value: controller.caloriesKcal.value.toString(),
+                    unit: 'kcal',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _HeroSection extends StatelessWidget {
   const _HeroSection({required this.controller});
 
