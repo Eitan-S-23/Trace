@@ -144,11 +144,11 @@ class _HeroSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 380;
-        final metrics = Obx(
-          () => GridView.count(
+    return Obx(
+      () => LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 380;
+          final metrics = GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: 2,
@@ -177,28 +177,28 @@ class _HeroSection extends StatelessWidget {
                 unit: 'h:m:s',
               ),
             ],
-          ),
-        );
+          );
 
-        if (compact) {
-          return Column(
+          if (compact) {
+            return Column(
+              children: [
+                _SpeedGauge(controller: controller),
+                const SizedBox(height: 10),
+                metrics,
+              ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SpeedGauge(controller: controller),
-              const SizedBox(height: 10),
-              metrics,
+              Expanded(flex: 11, child: _SpeedGauge(controller: controller)),
+              const SizedBox(width: 10),
+              Expanded(flex: 9, child: metrics),
             ],
           );
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(flex: 11, child: _SpeedGauge(controller: controller)),
-            const SizedBox(width: 10),
-            Expanded(flex: 9, child: metrics),
-          ],
-        );
-      },
+        },
+      ),
     );
   }
 }
@@ -268,11 +268,11 @@ class _MetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 390;
-        return Obx(
-          () => GridView.count(
+    return Obx(
+      () => LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 390;
+          return GridView.count(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             crossAxisCount: compact ? 2 : 3,
@@ -323,9 +323,9 @@ class _MetricGrid extends StatelessWidget {
                 unit: 'W',
               ),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
