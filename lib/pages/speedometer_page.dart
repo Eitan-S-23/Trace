@@ -14,11 +14,22 @@ class SpeedometerPage extends StatefulWidget {
 }
 
 class _SpeedometerPageState extends State<SpeedometerPage> {
-  int _selectedIndex = 0;
+  final _scrollController = ScrollController();
 
-  void _selectTab(int index) {
-    if (_selectedIndex == index) return;
-    setState(() => _selectedIndex = index);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _selectTab(RideController controller, int index) {
+    controller.selectTab(index);
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   @override
@@ -30,37 +41,48 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
     return Scaffold(
       backgroundColor: _RideColors.background,
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate(
-                  _buildPageChildren(controller),
+        child: Obx(
+          () {
+            final selectedIndex = controller.activeTabIndex.value;
+            return CustomScrollView(
+              key: PageStorageKey<String>('ride-tab-$selectedIndex'),
+              controller: _scrollController,
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate(
+                      _buildPageChildren(controller, selectedIndex),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
       bottomNavigationBar: _RideTabBar(
         controller: controller,
-        selectedIndex: _selectedIndex,
-        onSelect: _selectTab,
+        onSelect: (index) => _selectTab(controller, index),
       ),
     );
   }
 
-  List<Widget> _buildPageChildren(RideController controller) {
+  List<Widget> _buildPageChildren(
+    RideController controller,
+    int selectedIndex,
+  ) {
     final children = <Widget>[
       _Header(controller: controller),
       const SizedBox(height: 14),
       _RideStatusBanner(controller: controller),
       const SizedBox(height: 10),
+      _TabIntroCard(index: selectedIndex),
+      const SizedBox(height: 10),
     ];
 
-    switch (_selectedIndex) {
+    switch (selectedIndex) {
       case 1:
         children.addAll(_buildAnalysisContent(controller));
         break;
@@ -274,6 +296,92 @@ class _RideStatusBanner extends StatelessWidget {
         ),
       );
     });
+  }
+}
+
+class _TabIntroCard extends StatelessWidget {
+  const _TabIntroCard({required this.index});
+
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = switch (index) {
+      1 => (
+          icon: Icons.analytics_outlined,
+          title: '分析',
+          detail: '查看速度趋势、周里程和月度目标，判断最近骑行状态。',
+        ),
+      2 => (
+          icon: Icons.article_outlined,
+          title: '记录',
+          detail: '保存当前骑行，或刷新并查看本机历史骑行记录。',
+        ),
+      3 => (
+          icon: Icons.person_outline,
+          title: '我的',
+          detail: '汇总本月里程、历史次数和当前 GPS 精度。',
+        ),
+      _ => (
+          icon: Icons.dashboard_outlined,
+          title: '仪表盘',
+          detail: '实时速度、里程、轨迹和骑行指标会集中显示在这里。',
+        ),
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF183042).withValues(alpha: 0.98),
+            const Color(0xFF10231B).withValues(alpha: 0.98),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFF28E363).withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(data.icon, color: const Color(0xFF65F466)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  data.detail,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.64),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -890,122 +998,120 @@ class _RideRow extends StatelessWidget {
 class _RideTabBar extends StatelessWidget {
   const _RideTabBar({
     required this.controller,
-    required this.selectedIndex,
     required this.onSelect,
   });
 
   final RideController controller;
-  final int selectedIndex;
   final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
     return Obx(
-      () => Container(
-        padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111A21).withValues(alpha: 0.96),
-          border: Border(
-            top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      () {
+        final selectedIndex = controller.activeTabIndex.value;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111A21).withValues(alpha: 0.96),
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+            ),
           ),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Row(
-            children: [
-              _BottomAction(
-                icon: Icons.dashboard,
-                label: '仪表盘',
-                selected: selectedIndex == 0,
-                onTap: () => onSelect(0),
-              ),
-              _BottomAction(
-                icon: Icons.analytics_outlined,
-                label: '分析',
-                selected: selectedIndex == 1,
-                onTap: () {
-                  controller.loadRideHistory();
-                  onSelect(1);
-                },
-              ),
-              Expanded(
-                child: Center(
-                  child: GestureDetector(
-                    onTap: () {
-                      if (controller.isRecording.value) {
-                        controller.pauseResume();
-                      } else {
-                        controller.start();
-                      }
-                    },
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF5DFF70), Color(0xFF21CF55)],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF24E461)
-                                .withValues(alpha: 0.35),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
+          child: SafeArea(
+            top: false,
+            child: Row(
+              children: [
+                _BottomAction(
+                  icon: Icons.dashboard,
+                  label: '仪表盘',
+                  selected: selectedIndex == 0,
+                  onTap: () => onSelect(0),
+                ),
+                _BottomAction(
+                  icon: Icons.analytics_outlined,
+                  label: '分析',
+                  selected: selectedIndex == 1,
+                  onTap: () {
+                    controller.loadRideHistory();
+                    onSelect(1);
+                  },
+                ),
+                Expanded(
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (controller.isRecording.value) {
+                          controller.pauseResume();
+                        } else {
+                          controller.start();
+                        }
+                      },
+                      child: Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF5DFF70), Color(0xFF21CF55)],
                           ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            controller.isRecording.value &&
-                                    !controller.isPaused.value
-                                ? Icons.pause
-                                : Icons.directions_bike,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          Text(
-                            controller.isRecording.value
-                                ? (controller.isPaused.value ? '继续' : '暂停')
-                                : '开始',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF24E461)
+                                  .withValues(alpha: 0.35),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              controller.isRecording.value &&
+                                      !controller.isPaused.value
+                                  ? Icons.pause
+                                  : Icons.directions_bike,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            Text(
+                              controller.isRecording.value
+                                  ? (controller.isPaused.value ? '继续' : '暂停')
+                                  : '开始',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              _BottomAction(
-                icon: Icons.save_outlined,
-                label: '保存',
-                selected: selectedIndex == 2,
-                onTap: () {
-                  onSelect(2);
-                  controller.saveCurrentRide();
-                },
-              ),
-              _BottomAction(
-                icon: Icons.person_outline,
-                label: '我的',
-                selected: selectedIndex == 3,
-                onTap: () {
-                  controller.loadRideHistory();
-                  onSelect(3);
-                },
-              ),
-            ],
+                _BottomAction(
+                  icon: Icons.save_outlined,
+                  label: '记录',
+                  selected: selectedIndex == 2,
+                  onTap: () => onSelect(2),
+                ),
+                _BottomAction(
+                  icon: Icons.person_outline,
+                  label: '我的',
+                  selected: selectedIndex == 3,
+                  onTap: () {
+                    controller.loadRideHistory();
+                    onSelect(3);
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

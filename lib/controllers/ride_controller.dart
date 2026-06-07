@@ -31,6 +31,7 @@ class RideController extends GetxController {
   final monthGoalKm = 500.0.obs;
   final speedTrendKmh = <double>[].obs;
   final altitudeTrendM = <double>[].obs;
+  final activeTabIndex = 0.obs;
 
   StreamSubscription<Position>? _positionSub;
   Timer? _timer;
@@ -44,6 +45,11 @@ class RideController extends GetxController {
   final _points = <RidePoint>[].obs;
 
   List<RidePoint> get points => List.unmodifiable(_points);
+
+  void selectTab(int index) {
+    if (index < 0 || index > 3) return;
+    activeTabIndex.value = index;
+  }
 
   @override
   void onInit() {
