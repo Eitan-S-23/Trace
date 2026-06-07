@@ -653,12 +653,27 @@ class _SpeedAltitudePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final sample = _RideSample.from(controller);
-      final speedData = controller.speedTrendKmh.isEmpty
-          ? const [32.0, 28, 35, 20, 34, 30, 38, 27, 31, 34, 25, 36, 33, 29]
+      final List<double> speedData = controller.speedTrendKmh.isEmpty
+          ? const <double>[
+              32,
+              28,
+              35,
+              20,
+              34,
+              30,
+              38,
+              27,
+              31,
+              34,
+              25,
+              36,
+              33,
+              29,
+            ]
           : controller.speedTrendKmh.toList();
-      final altitudeData = controller.altitudeTrendM.isEmpty
-          ? const [
-              0.0,
+      final List<double> altitudeData = controller.altitudeTrendM.isEmpty
+          ? const <double>[
+              0,
               35,
               70,
               180,
@@ -2398,55 +2413,57 @@ class _DeviceRowBase extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      minHeight: 70,
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withOpacity(0.08)),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.11),
-              shape: BoxShape.circle,
-              border: Border.all(color: color, width: 2),
-            ),
-            child: Icon(icon, color: color, size: 21),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 70),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: Colors.white.withOpacity(0.08)),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.11),
+                shape: BoxShape.circle,
+                border: Border.all(color: color, width: 2),
+              ),
+              child: Icon(icon, color: color, size: 21),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    subtitle!,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.56),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle!,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.56),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-          trailing,
-        ],
+            trailing,
+          ],
+        ),
       ),
     );
   }
