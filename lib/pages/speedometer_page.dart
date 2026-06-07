@@ -1219,8 +1219,42 @@ class _DualLineChartPainter extends CustomPainter {
       canvas.drawLine(Offset(20, y), Offset(size.width - 16, y), grid);
     }
 
-    final speed = [18, 34, 22, 36, 29, 32, 38, 24, 31, 33, 28, 37, 35, 26, 30, 34];
-    final altitude = [2, 4, 8, 12, 20, 30, 44, 56, 70, 80, 92, 76, 66, 58, 42, 30];
+    final speed = <double>[
+      18,
+      34,
+      22,
+      36,
+      29,
+      32,
+      38,
+      24,
+      31,
+      33,
+      28,
+      37,
+      35,
+      26,
+      30,
+      34,
+    ];
+    final altitude = <double>[
+      2,
+      4,
+      8,
+      12,
+      20,
+      30,
+      44,
+      56,
+      70,
+      80,
+      92,
+      76,
+      66,
+      58,
+      42,
+      30,
+    ];
     _drawSeries(canvas, size, speed, const Color(0xFF2B9DFF), 60);
     _drawSeries(canvas, size, altitude, const Color(0xFFA533FF), 100);
 
