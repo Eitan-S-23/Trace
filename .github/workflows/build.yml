@@ -72,7 +72,24 @@ jobs:
         run: flutter analyze
 
       - name: Build release APK
-        run: flutter build apk --release
+        shell: bash
+        run: |
+          set +e
+          flutter build apk --release 2>&1 | tee android-build.log
+          status=${PIPESTATUS[0]}
+
+          if [[ "$status" -ne 0 ]]; then
+            summary="$(grep -Ei "FAILURE|Exception|error|Could not|Execution failed|AAPT|R8|D8|Gradle task|Target .* failed|What went wrong" android-build.log | tail -n 30)"
+            if [[ -z "$summary" ]]; then
+              summary="$(tail -n 40 android-build.log)"
+            fi
+            summary="${summary//'%'/'%25'}"
+            summary="${summary//$'\n'/'%0A'}"
+            summary="${summary//$'\r'/'%0D'}"
+            echo "::error title=Android release build failed::${summary}"
+          fi
+
+          exit "$status"
 
       - name: Prepare Android release asset
         shell: bash
