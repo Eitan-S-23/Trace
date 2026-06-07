@@ -41,30 +41,29 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
     return Scaffold(
       backgroundColor: _RideColors.background,
       body: SafeArea(
-        child: Obx(
-          () {
-            final selectedIndex = controller.activeTabIndex.value;
-            return CustomScrollView(
-              key: PageStorageKey<String>('ride-tab-$selectedIndex'),
-              controller: _scrollController,
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate(
-                      _buildPageChildren(controller, selectedIndex),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+        bottom: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: Obx(
+                () {
+                  final selectedIndex = controller.activeTabIndex.value;
+                  return ListView(
+                    key: PageStorageKey<String>('ride-tab-$selectedIndex'),
+                    controller: _scrollController,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                    children: _buildPageChildren(controller, selectedIndex),
+                  );
+                },
+              ),
+            ),
+            _RideTabBar(
+              controller: controller,
+              onSelect: (index) => _selectTab(controller, index),
+            ),
+          ],
         ),
-      ),
-      bottomNavigationBar: _RideTabBar(
-        controller: controller,
-        onSelect: (index) => _selectTab(controller, index),
       ),
     );
   }
@@ -74,6 +73,8 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
     int selectedIndex,
   ) {
     final children = <Widget>[
+      const _BuildBadge(),
+      const SizedBox(height: 10),
       _Header(controller: controller),
       const SizedBox(height: 14),
       _RideStatusBanner(controller: controller),
@@ -102,27 +103,9 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
 
   List<Widget> _buildDashboardContent(RideController controller) {
     return [
-      _HeroSection(controller: controller),
+      _DashboardOverview(controller: controller),
       const SizedBox(height: 10),
-      _MetricGrid(controller: controller),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _TrackCard(controller: controller)),
-          const SizedBox(width: 10),
-          Expanded(child: _AltitudeCard(controller: controller)),
-        ],
-      ),
-      const SizedBox(height: 10),
-      _SpeedTrendCard(controller: controller),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _WeeklyDistanceCard(controller: controller)),
-          const SizedBox(width: 10),
-          Expanded(child: _MonthlyGoalCard(controller: controller)),
-        ],
-      ),
+      _RideQuickActions(controller: controller),
       const SizedBox(height: 10),
       _RecentRides(controller: controller),
     ];
@@ -130,17 +113,7 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
 
   List<Widget> _buildAnalysisContent(RideController controller) {
     return [
-      _MetricGrid(controller: controller),
-      const SizedBox(height: 10),
-      _SpeedTrendCard(controller: controller),
-      const SizedBox(height: 10),
-      Row(
-        children: [
-          Expanded(child: _WeeklyDistanceCard(controller: controller)),
-          const SizedBox(width: 10),
-          Expanded(child: _MonthlyGoalCard(controller: controller)),
-        ],
-      ),
+      _AnalysisSummaryCard(controller: controller),
       const SizedBox(height: 10),
       _RecentRides(controller: controller),
     ];
@@ -162,6 +135,35 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
       const SizedBox(height: 10),
       _RecentRides(controller: controller),
     ];
+  }
+}
+
+class _BuildBadge extends StatelessWidget {
+  const _BuildBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF28E363).withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: const Color(0xFF28E363).withValues(alpha: 0.28),
+          ),
+        ),
+        child: const Text(
+          'Trace 1.0.1+19',
+          style: TextStyle(
+            color: Color(0xFF65F466),
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -314,7 +316,7 @@ class _TabIntroCard extends StatelessWidget {
         ),
       2 => (
           icon: Icons.article_outlined,
-          title: '记录',
+          title: '保存',
           detail: '保存当前骑行，或刷新并查看本机历史骑行记录。',
         ),
       3 => (
@@ -378,6 +380,183 @@ class _TabIntroCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardOverview extends StatelessWidget {
+  const _DashboardOverview({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(
+      () => _Panel(
+        title: '仪表盘',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '实时速度',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.62),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: controller.currentSpeedKmh.value
+                                  .toStringAsFixed(1),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 58,
+                                fontWeight: FontWeight.w900,
+                                height: 0.98,
+                                letterSpacing: -1.6,
+                              ),
+                            ),
+                            TextSpan(
+                              text: ' km/h',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.68),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF28E363).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    controller.isRecording.value
+                        ? (controller.isPaused.value ? '已暂停' : '记录中')
+                        : '待命',
+                    style: const TextStyle(
+                      color: Color(0xFF65F466),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStat(
+                    label: '里程',
+                    value: controller.distanceKm.value.toStringAsFixed(2),
+                    unit: 'km',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: '均速',
+                    value: controller.avgSpeedKmh.value.toStringAsFixed(1),
+                    unit: 'km/h',
+                  ),
+                ),
+                Expanded(
+                  child: _MiniStat(
+                    label: '时长',
+                    value: _formatDuration(controller.elapsed.value),
+                    unit: '',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RideQuickActions extends StatelessWidget {
+  const _RideQuickActions({required this.controller});
+
+  final RideController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      title: '操作说明',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '底部中间按钮用于开始、暂停和继续；进入“保存”页后可以保存当前骑行或刷新历史记录。',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.66),
+              fontSize: 13,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: controller.start,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('开始记录'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF65F466),
+                    side: BorderSide(
+                      color: const Color(0xFF65F466).withValues(alpha: 0.46),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => controller.selectTab(2),
+                  icon: const Icon(Icons.article_outlined),
+                  label: const Text('查看记录'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white.withValues(alpha: 0.76),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1094,7 +1273,7 @@ class _RideTabBar extends StatelessWidget {
                 ),
                 _BottomAction(
                   icon: Icons.save_outlined,
-                  label: '记录',
+                  label: '保存',
                   selected: selectedIndex == 2,
                   onTap: () => onSelect(2),
                 ),
