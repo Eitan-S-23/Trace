@@ -57,13 +57,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install Android SDK platform
-        shell: bash
-        run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses || true
-          "$SDKMANAGER" --install "platforms;android-35"
-
       - name: Install dependencies
         run: flutter pub get
 
