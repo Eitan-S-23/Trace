@@ -1195,6 +1195,8 @@ class _OverviewMetric extends StatelessWidget {
         children: [
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Colors.white.withOpacity(0.56),
               fontSize: 13,
@@ -1202,29 +1204,34 @@ class _OverviewMetric extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    height: 1,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.6,
-                  ),
-                ),
-                if (unit.isNotEmpty)
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: RichText(
+              maxLines: 1,
+              text: TextSpan(
+                children: [
                   TextSpan(
-                    text: ' $unit',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.58),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                    text: value,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.6,
                     ),
                   ),
-              ],
+                  if (unit.isNotEmpty)
+                    TextSpan(
+                      text: ' $unit',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.58),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ],
