@@ -71,6 +71,12 @@ jobs:
         continue-on-error: true
         run: flutter analyze
 
+      - name: Clear cached Flutter Android artifacts
+        shell: bash
+        run: |
+          rm -rf "$HOME/.gradle/caches/modules-2/files-2.1/io.flutter"
+          rm -rf "$HOME/.gradle/caches"/transforms-*
+
       - name: Build release APK
         shell: bash
         run: |
