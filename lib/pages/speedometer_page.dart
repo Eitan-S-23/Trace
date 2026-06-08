@@ -212,11 +212,11 @@ class _DashboardPage extends StatelessWidget {
             child: Column(
               children: [
                 _ActivityHeroCard(controller: controller),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 _DesignMetricGrid(controller: controller),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 _SpeedAltitudePanel(controller: controller),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 const _DistributionGrid(),
               ],
             ),
@@ -243,7 +243,7 @@ class _ActivityHeroCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            height: 236,
+            height: 168,
             child: Stack(
               children: [
                 // 地图垫底
@@ -293,7 +293,7 @@ class _ActivityHeroCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 8),
                       RichText(
                         text: TextSpan(
                           children: [
@@ -301,10 +301,10 @@ class _ActivityHeroCard extends StatelessWidget {
                               text: sample.distanceText,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 56,
+                                fontSize: 44,
                                 height: 0.96,
                                 fontWeight: FontWeight.w900,
-                                letterSpacing: -2.4,
+                                letterSpacing: -1.8,
                               ),
                             ),
                             TextSpan(
@@ -368,76 +368,6 @@ class _ActivityHeroCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-          Divider(color: Colors.white.withOpacity(0.08), height: 1),
-          const SizedBox(height: 13),
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFCB2D),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFCB2D).withOpacity(0.25),
-                      blurRadius: 18,
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Text(
-                    'PR',
-                    style: TextStyle(
-                      color: Color(0xFF1C1B17),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '个人新纪录!',
-                      style: TextStyle(
-                        color: Color(0xFFFFD74A),
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '最长距离  ${sample.distanceText}km',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.68),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton(
-                onPressed: () => _showUiMessage('骑行详情', '点击图表可查看对应数据'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white.withOpacity(0.82),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('查看详情'),
-                    SizedBox(width: 3),
-                    Icon(Icons.chevron_right, size: 20),
-                  ],
-                ),
-              ),
-            ],
           ),
         ],
         ),
@@ -533,7 +463,7 @@ class _DesignMetricGrid extends StatelessWidget {
 
       return LayoutBuilder(
         builder: (context, constraints) {
-          final columns = constraints.maxWidth < 420 ? 2 : 3;
+          const columns = 3;
           const spacing = 8.0;
           final width =
               (constraints.maxWidth - spacing * (columns - 1)) / columns;
@@ -574,25 +504,25 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _GlassPanel(
-      padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: SizedBox(
-        height: 150,
+        height: 104,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  width: 34,
-                  height: 34,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.13),
                     shape: BoxShape.circle,
                     border: Border.all(color: color.withOpacity(0.90), width: 2),
                   ),
-                  child: Icon(icon, color: color, size: 18),
+                  child: Icon(icon, color: color, size: 15),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     title,
@@ -600,14 +530,14 @@ class _MetricTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             RichText(
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -617,37 +547,37 @@ class _MetricTile extends StatelessWidget {
                     text: value,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 32,
+                      fontSize: 23,
                       height: 1,
                       fontWeight: FontWeight.w900,
-                      letterSpacing: -0.8,
+                      letterSpacing: -0.6,
                     ),
                   ),
                   TextSpan(
                     text: ' $unit',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.72),
-                      fontSize: 13,
+                      fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 9),
+            const SizedBox(height: 3),
             Text(
               footnote,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.58),
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const Spacer(),
             SizedBox(
-              height: 34,
+              height: 16,
               child: CustomPaint(
                 painter: _SparklinePainter(values: values, color: sparkColor),
                 child: const SizedBox.expand(),
@@ -735,9 +665,9 @@ class _SpeedAltitudePanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           SizedBox(
-            height: 194,
+            height: 140,
             child: CustomPaint(
               painter: _DualLineChartPainter(
                 speed: speedData,
@@ -859,7 +789,7 @@ class _ZoneDistributionPanel extends StatelessWidget {
     return _GlassPanel(
       padding: const EdgeInsets.all(14),
       child: SizedBox(
-        height: 186,
+        height: 150,
         child: Column(
           children: [
             Row(
@@ -887,7 +817,7 @@ class _ZoneDistributionPanel extends StatelessWidget {
               child: Row(
                 children: [
                   _InteractiveDonutChart(
-                    size: 104,
+                    size: 86,
                     colors: colors,
                     values: distribution,
                     labels: labels,
@@ -1491,32 +1421,40 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 210,
+            height: 150,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final size = Size(constraints.maxWidth, constraints.maxHeight);
                 final selectedIndex = _tooltipIndex;
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (details) {
-                    final index = _indexForTap(details.localPosition, size);
-                    if (index != null) _showTooltip(index);
+                return TapRegion(
+                  onTapOutside: (_) {
+                    if (_tooltipIndex != null) {
+                      _hideTimer?.cancel();
+                      setState(() => _tooltipIndex = null);
+                    }
                   },
-                  child: CustomPaint(
-                    painter: _BarChartPainter(
-                      values: widget.values,
-                      labels: widget.labels,
-                      color: widget.color,
-                      maxValue: widget.maxValue,
-                      tooltipIndex: selectedIndex,
-                      tooltipTitle: selectedIndex == null
-                          ? widget.tooltipTitle
-                          : _tooltipTitleFor(selectedIndex),
-                      tooltipValue: selectedIndex == null
-                          ? widget.tooltipValue
-                          : _tooltipValueFor(selectedIndex),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (details) {
+                      final index = _indexForTap(details.localPosition, size);
+                      if (index != null) _showTooltip(index);
+                    },
+                    child: CustomPaint(
+                      painter: _BarChartPainter(
+                        values: widget.values,
+                        labels: widget.labels,
+                        color: widget.color,
+                        maxValue: widget.maxValue,
+                        tooltipIndex: selectedIndex,
+                        tooltipTitle: selectedIndex == null
+                            ? widget.tooltipTitle
+                            : _tooltipTitleFor(selectedIndex),
+                        tooltipValue: selectedIndex == null
+                            ? widget.tooltipValue
+                            : _tooltipValueFor(selectedIndex),
+                      ),
+                      child: const SizedBox.expand(),
                     ),
-                    child: const SizedBox.expand(),
                   ),
                 );
               },
@@ -1784,62 +1722,70 @@ class _InteractiveDonutChartState extends State<_InteractiveDonutChart> {
         ? null
         : '${widget.labels[selected]}\n${widget.details[selected]}';
 
-    return SizedBox(
-      width: widget.size,
-      height: widget.size,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: _handleTap,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
-          children: [
-            CustomPaint(
-              painter: _DonutPainter(
-                colors: widget.colors,
-                values: widget.values,
-                backgroundColor: widget.backgroundColor,
-                strokeWidth: widget.strokeWidth,
-                selectedIndex: selected,
+    return TapRegion(
+      onTapOutside: (_) {
+        if (_selectedIndex != null) {
+          _hideTimer?.cancel();
+          setState(() => _selectedIndex = null);
+        }
+      },
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: _handleTap,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                painter: _DonutPainter(
+                  colors: widget.colors,
+                  values: widget.values,
+                  backgroundColor: widget.backgroundColor,
+                  strokeWidth: widget.strokeWidth,
+                  selectedIndex: selected,
+                ),
+                child: const SizedBox.expand(),
               ),
-              child: const SizedBox.expand(),
-            ),
-            widget.center,
-            Positioned(
-              top: -8,
-              left: -24,
-              right: -24,
-              child: IgnorePointer(
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 160),
-                  opacity: tooltip == null ? 0 : 1,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF303744).withOpacity(0.96),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white.withOpacity(0.08)),
-                      ),
-                      child: Text(
-                        tooltip ?? '',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          height: 1.25,
-                          fontWeight: FontWeight.w800,
+              widget.center,
+              Positioned(
+                top: -8,
+                left: -24,
+                right: -24,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 160),
+                    opacity: tooltip == null ? 0 : 1,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF303744).withOpacity(0.96),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        ),
+                        child: Text(
+                          tooltip ?? '',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            height: 1.25,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2700,35 +2646,35 @@ class _ScanPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _GlassPanel(
-      padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
       child: Column(
         children: [
           const Text(
             '正在扫描设备...',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 22,
+              fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
           Text(
             '请确保设备已开机并靠近手机',
             style: TextStyle(
               color: Colors.white.withOpacity(0.66),
-              fontSize: 15,
+              fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
           SizedBox(
-            height: 210,
+            height: 104,
             child: CustomPaint(
               painter: const _RadarPainter(),
               child: Center(
                 child: Container(
-                  width: 64,
-                  height: 64,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: const Color(0xFF3BE23E).withOpacity(0.18),
@@ -2736,7 +2682,7 @@ class _ScanPanel extends StatelessWidget {
                   child: const Icon(
                     Icons.bluetooth,
                     color: Color(0xFF3BE23E),
-                    size: 36,
+                    size: 22,
                   ),
                 ),
               ),
@@ -2748,14 +2694,14 @@ class _ScanPanel extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               foregroundColor: _RideColors.orange,
               side: BorderSide(color: Colors.white.withOpacity(0.14)),
-              minimumSize: const Size(260, 50),
+              minimumSize: const Size(200, 44),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(22),
               ),
             ),
             child: const Text(
               '停止扫描',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
             ),
           ),
         ],
