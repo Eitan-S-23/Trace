@@ -1943,7 +1943,25 @@ class _RoutesPageState extends State<_RoutesPage> {
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
             itemCount: _cards.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) => _cards[index],
+            itemBuilder: (context, index) {
+              final c = _cards[index];
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Get.to(
+                  () => _RideRouteDetailPage(
+                    title: c.title,
+                    date: c.date,
+                    distance: c.distance,
+                    climb: c.climb,
+                    duration: c.duration,
+                    difficulty: c.difficulty,
+                    difficultyColor: c.difficultyColor,
+                    variant: c.variant,
+                  ),
+                ),
+                child: c,
+              );
+            },
           ),
         ),
       ],
@@ -2276,6 +2294,376 @@ class _RouteMetric extends StatelessWidget {
   }
 }
 
+class _DetailTopBar extends StatelessWidget {
+  const _DetailTopBar({required this.title, this.actions = const []});
+
+  final String title;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 6, 8, 4),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Get.back<void>(),
+            icon: const Icon(Icons.chevron_left, color: Colors.white, size: 30),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 19,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          if (actions.isEmpty) const SizedBox(width: 48) else ...actions,
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailInfoRow extends StatelessWidget {
+  const _DetailInfoRow({
+    required this.label,
+    required this.value,
+    this.last = false,
+  });
+
+  final String label;
+  final String value;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 13),
+      decoration: BoxDecoration(
+        border: last
+            ? null
+            : Border(bottom: BorderSide(color: Colors.white.withOpacity(0.07))),
+      ),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RideRouteDetailPage extends StatelessWidget {
+  const _RideRouteDetailPage({
+    required this.title,
+    required this.date,
+    required this.distance,
+    required this.climb,
+    required this.duration,
+    required this.difficulty,
+    required this.difficultyColor,
+    required this.variant,
+  });
+
+  final String title;
+  final String date;
+  final String distance;
+  final String climb;
+  final String duration;
+  final String difficulty;
+  final Color difficultyColor;
+  final int variant;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _RideColors.background,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _DetailTopBar(
+              title: '路线详情',
+              actions: [
+                IconButton(
+                  onPressed: () => _showUiMessage('收藏', '已收藏该路线'),
+                  icon: Icon(Icons.star_border, color: Colors.white.withOpacity(0.9)),
+                ),
+                IconButton(
+                  onPressed: () => _showUiMessage('更多', '更多操作入口已激活'),
+                  icon: Icon(Icons.more_horiz, color: Colors.white.withOpacity(0.9)),
+                ),
+              ],
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _GlassPanel(
+                      padding: EdgeInsets.zero,
+                      child: SizedBox(
+                        height: 230,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: CustomPaint(
+                                  painter: _RouteMapPainter(variant: variant),
+                                  child: const SizedBox.expand(),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 10,
+                              top: 10,
+                              child: _RoundIconButton(
+                                icon: Icons.fullscreen,
+                                onTap: () =>
+                                    _showUiMessage('地图全屏', '已聚焦路线预览'),
+                              ),
+                            ),
+                            Positioned(
+                              right: 10,
+                              bottom: 10,
+                              child: _RoundIconButton(
+                                icon: Icons.share_outlined,
+                                onTap: () =>
+                                    _showUiMessage('分享路线', '路线分享入口已激活'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3BE23E).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF3BE23E)),
+                          ),
+                          child: const Text(
+                            '公开',
+                            style: TextStyle(
+                              color: Color(0xFF3BE23E),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      date,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        _RouteMetric(value: distance, unit: 'km'),
+                        const SizedBox(width: 34),
+                        _RouteMetric(value: climb, unit: 'm'),
+                        const SizedBox(width: 34),
+                        _RouteMetric(value: duration, unit: ''),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        _RouteBadge(label: '公路', color: _RideColors.orange),
+                        const SizedBox(width: 8),
+                        _RouteBadge(
+                            label: '难度 $difficulty', color: difficultyColor),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _GlassPanel(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '路线简介',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '这是一条经典的环山路线，适合有一定经验的骑友。路线包含平路、爬坡与下坡，沿途风景优美，建议早晨出发，注意补给和防晒。',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.68),
+                              fontSize: 14,
+                              height: 1.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _GlassPanel(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text(
+                                '海拔图',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '累计爬升 $climb m',
+                                style: const TextStyle(
+                                  color: Color(0xFFA533FF),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 120,
+                            child: CustomPaint(
+                              painter: const _SparklinePainter(
+                                values: [
+                                  120, 180, 260, 420, 700, 980, 1180, 1268,
+                                  1040, 760, 520, 360, 240, 160,
+                                ],
+                                color: Color(0xFFA533FF),
+                              ),
+                              child: const SizedBox.expand(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _GlassPanel(
+                      child: Column(
+                        children: const [
+                          _DetailInfoRow(label: '起点', value: '杭州市 西湖区'),
+                          _DetailInfoRow(label: '终点', value: '杭州市 西湖区'),
+                          _DetailInfoRow(
+                              label: '最高海拔', value: '1268 m', last: true),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // 底部固定操作栏
+            Container(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF101720),
+                border: Border(
+                  top: BorderSide(color: Colors.white.withOpacity(0.08)),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => _showUiMessage('发送到设备', '已发送路线到设备'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 50),
+                          side: BorderSide(color: Colors.white.withOpacity(0.25)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          '发送到设备',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => _showUiMessage('导航', '开始导航'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _RideColors.orange,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 50),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          '导航',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DevicesPage extends StatelessWidget {
   const _DevicesPage({required this.controller});
 
@@ -2400,22 +2788,40 @@ class _AvailableDevicesPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          const _DeviceRow(
+          _DeviceRow(
             title: 'iGPSPORT BSC300_1234',
             type: '码表',
             bars: 4,
+            onTap: () => Get.to(
+              () => const _RideDeviceDetailPage(
+                name: 'iGPSPORT BSC300_1234',
+                type: '码表',
+              ),
+            ),
           ),
           const SizedBox(height: 10),
-          const _DeviceRow(
+          _DeviceRow(
             title: 'iGPSPORT SR30_5678',
             type: '雷达',
             bars: 4,
+            onTap: () => Get.to(
+              () => const _RideDeviceDetailPage(
+                name: 'iGPSPORT SR30_5678',
+                type: '雷达',
+              ),
+            ),
           ),
           const SizedBox(height: 10),
-          const _DeviceRow(
+          _DeviceRow(
             title: 'iGPSPORT HR40_9012',
             type: '心率带',
             bars: 3,
+            onTap: () => Get.to(
+              () => const _RideDeviceDetailPage(
+                name: 'iGPSPORT HR40_9012',
+                type: '心率带',
+              ),
+            ),
           ),
           const SizedBox(height: 18),
           Row(
@@ -2443,81 +2849,90 @@ class _DeviceRow extends StatelessWidget {
     required this.title,
     required this.type,
     required this.bars,
+    this.onTap,
   });
 
   final String title;
   final String type;
   final int bars;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 82,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.035),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
-      ),
-      child: Row(
-        children: [
-          _DeviceThumbnail(kind: type, compact: true),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.white.withOpacity(0.18)),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: 82,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.035),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.07)),
+        ),
+        child: Row(
+          children: [
+            _DeviceThumbnail(kind: type, compact: true),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
                     ),
-                    child: Text(
-                      type,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.78),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border:
+                            Border.all(color: Colors.white.withOpacity(0.18)),
+                      ),
+                      child: Text(
+                        type,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.78),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          _SignalBars(value: bars),
-          const SizedBox(width: 16),
-          OutlinedButton(
-            onPressed: () => _showUiMessage('连接设备', '$title 正在连接...'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _RideColors.orange,
-              side: const BorderSide(color: _RideColors.orange),
-              minimumSize: const Size(76, 38),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                ],
               ),
             ),
-            child: const Text(
-              '连接',
-              style: TextStyle(fontWeight: FontWeight.w900),
+            _SignalBars(value: bars),
+            const SizedBox(width: 16),
+            OutlinedButton(
+              onPressed:
+                  onTap ?? () => _showUiMessage('连接设备', '$title 正在连接...'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _RideColors.orange,
+                side: const BorderSide(color: _RideColors.orange),
+                minimumSize: const Size(76, 38),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: const Text(
+                '连接',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2734,7 +3149,13 @@ class _DeviceScreenLine extends StatelessWidget {
 }
 
 class _ConnectedDevicePanel extends StatelessWidget {
-  const _ConnectedDevicePanel();
+  const _ConnectedDevicePanel({
+    this.deviceName = 'iGPSPORT BSC300_1234',
+    this.deviceType = '码表',
+  });
+
+  final String deviceName;
+  final String deviceType;
 
   @override
   Widget build(BuildContext context) {
@@ -2745,15 +3166,15 @@ class _ConnectedDevicePanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const _DeviceThumbnail(kind: '码表'),
+              _DeviceThumbnail(kind: deviceType),
               const SizedBox(width: 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'iGPSPORT BSC300_1234',
-                      style: TextStyle(
+                    Text(
+                      deviceName,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
@@ -2832,23 +3253,100 @@ class _ConnectedDevicePanel extends StatelessWidget {
             title: '自动计圈',
             subtitle: '按距离自动生成计圈',
           ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => _showUiMessage('解除绑定', '已打开设备解绑确认'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _RideColors.orange,
-              minimumSize: const Size(double.infinity, 52),
-              side: BorderSide(color: Colors.white.withOpacity(0.12)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            child: const Text(
-              '解除绑定',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceInfoPanel extends StatelessWidget {
+  const _DeviceInfoPanel({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GlassPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '设备信息',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
             ),
           ),
+          const SizedBox(height: 4),
+          _DetailInfoRow(label: '设备名称', value: name),
+          const _DetailInfoRow(label: '序列号', value: 'SN1234567890'),
+          const _DetailInfoRow(label: '固件版本', value: 'v1.23.0'),
+          const _DetailInfoRow(label: '硬件版本', value: 'v1.0'),
+          const _DetailInfoRow(
+              label: 'MAC 地址', value: 'D0:55:3C:12:34:56', last: true),
         ],
+      ),
+    );
+  }
+}
+
+class _RideDeviceDetailPage extends StatelessWidget {
+  const _RideDeviceDetailPage({required this.name, required this.type});
+
+  final String name;
+  final String type;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _RideColors.background,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _DetailTopBar(
+              title: '设备',
+              actions: [
+                IconButton(
+                  onPressed: () => _showUiMessage('更多', '更多操作入口已激活'),
+                  icon:
+                      Icon(Icons.more_horiz, color: Colors.white.withOpacity(0.9)),
+                ),
+              ],
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+                child: Column(
+                  children: [
+                    _ConnectedDevicePanel(deviceName: name, deviceType: type),
+                    const SizedBox(height: 12),
+                    _DeviceInfoPanel(name: name),
+                    const SizedBox(height: 14),
+                    OutlinedButton(
+                      onPressed: () => _showUiMessage('解除绑定', '已打开设备解绑确认'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _RideColors.orange,
+                        minimumSize: const Size(double.infinity, 52),
+                        side: BorderSide(color: Colors.white.withOpacity(0.12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        '解除绑定',
+                        style:
+                            TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
