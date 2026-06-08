@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/ride_controller.dart';
+import '../models/ride_models.dart';
 
 class SpeedometerPage extends StatefulWidget {
   const SpeedometerPage({super.key});
@@ -14,24 +15,6 @@ class SpeedometerPage extends StatefulWidget {
 }
 
 class _SpeedometerPageState extends State<SpeedometerPage> {
-  final _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _selectTab(RideController controller, int index) {
-    controller.selectTab(index);
-    if (!_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = Get.isRegistered<RideController>()
@@ -42,36 +25,36 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
       backgroundColor: _RideColors.background,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: Obx(() {
-                final selectedIndex = controller.activeTabIndex.value;
-                return ListView(
-                  key: PageStorageKey<String>('speedometer-$selectedIndex'),
-                  controller: _scrollController,
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-                  children: [
-                    _TopChrome(
-                      selectedIndex: selectedIndex,
-                      isConnected: selectedIndex != 3,
-                    ),
-                    const SizedBox(height: 18),
-                    _SelectedPage(
-                      controller: controller,
-                      selectedIndex: selectedIndex,
-                    ),
-                  ],
-                );
-              }),
-            ),
-            _RideTabBar(
-              controller: controller,
-              onSelect: (index) => _selectTab(controller, index),
-            ),
-          ],
-        ),
+        child: Obx(() {
+          final selectedIndex = controller.activeTabIndex.value;
+          return Column(
+            children: [
+              // 固定顶部栏：永远可见、永远可点（不随内容滚动）
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+                child: _TopChrome(
+                  selectedIndex: selectedIndex,
+                  isConnected: selectedIndex != 3,
+                ),
+              ),
+              // 选中页占满中间剩余空间，由各页自行决定固定子头与单一滚动区
+              Expanded(
+                child: _SelectedPage(
+                  controller: controller,
+                  selectedIndex: selectedIndex,
+                ),
+              ),
+              // 记录中：可见的「结束并保存」入口（移动端与桌面均可点）
+              if (controller.isRecording.value)
+                _RecordingBar(controller: controller),
+              // 固定底栏
+              _RideTabBar(
+                controller: controller,
+                onSelect: controller.selectTab,
+              ),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -215,16 +198,31 @@ class _DashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _ActivityHeroCard(controller: controller),
-        const SizedBox(height: 12),
-        _DesignMetricGrid(controller: controller),
-        const SizedBox(height: 12),
-        _SpeedAltitudePanel(controller: controller),
-        const SizedBox(height: 12),
-        const _DistributionGrid(),
-      ],
+    // LayoutBuilder 置于有界根（由父级 Expanded 给出有限高度），不在滚动体内测高。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+          child: ConstrainedBox(
+            // 内容不足时填满视口、超出时可滚动，绝不溢出。
+            constraints: BoxConstraints(
+              minHeight: math.max(0.0, constraints.maxHeight - 28),
+            ),
+            child: Column(
+              children: [
+                _ActivityHeroCard(controller: controller),
+                const SizedBox(height: 12),
+                _DesignMetricGrid(controller: controller),
+                const SizedBox(height: 12),
+                _SpeedAltitudePanel(controller: controller),
+                const SizedBox(height: 12),
+                const _DistributionGrid(),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -248,16 +246,109 @@ class _ActivityHeroCard extends StatelessWidget {
             height: 236,
             child: Stack(
               children: [
+                // 地图垫底
                 Positioned.fill(
                   left: 120,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(14),
                     child: CustomPaint(
-                      painter: const _RouteMapPainter(),
+                      painter: _RouteMapPainter(track: controller.points),
                       child: const SizedBox.expand(),
                     ),
                   ),
                 ),
+                // 文字内容限定在左侧区域（right:58），绝不延伸到右侧圆钮下方
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  right: 58,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.directions_bike,
+                            color: _RideColors.orange,
+                            size: 24,
+                          ),
+                          const SizedBox(width: 9),
+                          Text(
+                            '户外骑行',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.96),
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 11),
+                      Text(
+                        '2024/05/18  08:32',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.62),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: sample.distanceText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 56,
+                                height: 0.96,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -2.4,
+                              ),
+                            ),
+                            TextSpan(
+                              text: ' km',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.92),
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Wrap(
+                        spacing: 22,
+                        runSpacing: 12,
+                        children: [
+                          _HeroStat(
+                            label: '运动时间',
+                            value: sample.durationText,
+                            unit: '',
+                          ),
+                          _HeroStat(
+                            label: '平均速度',
+                            value: sample.avgSpeedText,
+                            unit: 'km/h',
+                          ),
+                          _HeroStat(
+                            label: '累计爬升',
+                            value: sample.climbText,
+                            unit: 'm',
+                          ),
+                          const _HeroStat(
+                            label: '训练负荷',
+                            value: '187',
+                            unit: '高',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // 圆钮置于最顶层，永远可点
                 Positioned(
                   right: 6,
                   top: 18,
@@ -274,90 +365,6 @@ class _ActivityHeroCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.directions_bike,
-                          color: _RideColors.orange,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 9),
-                        Text(
-                          '户外骑行',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.96),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 11),
-                    Text(
-                      '2024/05/18  08:32',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.62),
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: sample.distanceText,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 56,
-                              height: 0.96,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -2.4,
-                            ),
-                          ),
-                          TextSpan(
-                            text: ' km',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.92),
-                              fontSize: 19,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    Wrap(
-                      spacing: 22,
-                      runSpacing: 12,
-                      children: [
-                        _HeroStat(
-                          label: '运动时间',
-                          value: sample.durationText,
-                          unit: '',
-                        ),
-                        _HeroStat(
-                          label: '平均速度',
-                          value: sample.avgSpeedText,
-                          unit: 'km/h',
-                        ),
-                        _HeroStat(
-                          label: '累计爬升',
-                          value: sample.climbText,
-                          unit: 'm',
-                        ),
-                        const _HeroStat(
-                          label: '训练负荷',
-                          value: '187',
-                          unit: '高',
-                        ),
-                      ],
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -970,52 +977,192 @@ class _StatisticsPage extends StatefulWidget {
 }
 
 class _StatisticsPageState extends State<_StatisticsPage> {
-  var _periodIndex = 1;
+  var _periodIndex = 1; // 0 周 / 1 月 / 2 年 / 3 全部
+
+  // 周/全部 的总览为示例数据（统计页定位为示例驱动的设计复刻）。
+  static const _weekStats = _RideStats(
+    rideCount: '5',
+    totalDistance: '128.7',
+    totalDuration: '05:32:18',
+    totalClimb: '1586',
+    calories: '4028',
+    avgSpeed: '23.2',
+  );
+  static const _allStats = _RideStats(
+    rideCount: '320',
+    totalDistance: '8564.7',
+    totalDuration: '360:15:42',
+    totalClimb: '95688',
+    calories: '245680',
+    avgSpeed: '23.8',
+  );
+
+  String get _dateLabel {
+    switch (_periodIndex) {
+      case 0:
+        return '2024/05/12 - 05/18';
+      case 2:
+        return '2024年';
+      case 3:
+        return '2023/01 - 2024/05';
+      case 1:
+      default:
+        return '2024年5月';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final stats = _RideStats.from(widget.controller);
-
-      return _OuterFrame(
-        child: Column(
+      final monthStats = _RideStats.from(widget.controller);
+      return Column(
         children: [
-          _PeriodSegment(
-            selectedIndex: _periodIndex,
-            onSelect: (index) => setState(() => _periodIndex = index),
+          // 固定子头：周期分段 + 日期选择器（无第二顶部栏）
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
+            child: Column(
+              children: [
+                _PeriodSegment(
+                  selectedIndex: _periodIndex,
+                  onSelect: (index) => setState(() => _periodIndex = index),
+                ),
+                const SizedBox(height: 14),
+                _MonthSelector(label: _dateLabel),
+              ],
+            ),
           ),
-          const SizedBox(height: 18),
-          const _MonthSelector(label: '2024年5月'),
-          const SizedBox(height: 18),
-          _StatsOverview(stats: stats),
-          const SizedBox(height: 12),
-          _BarTrendPanel(
-            title: '里程趋势',
-            unit: '单位：km',
-            values: const [82, 32, 74, 8, 41, 79, 11, 58, 44, 88, 99, 59, 14, 75, 80, 102, 66],
-            labels: const ['05/01', '05/08', '05/15', '05/22', '05/29'],
-            color: _RideColors.orange,
-            tooltipTitle: '5月18日',
-            tooltipValue: '102.6 km',
-            maxValue: 120,
+          // 单一滚动区：按周期切换面板
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+              child: Column(children: _panelsForPeriod(monthStats)),
+            ),
           ),
-          const SizedBox(height: 12),
-          _BarTrendPanel(
-            title: '运动时长趋势',
-            unit: '单位：小时',
-            values: const [5, 2, 5, 0.5, 2.5, 4.9, 0.7, 3.4, 2.7, 5.3, 6.0, 3.7, 0.9, 4.6, 5.0, 6.6, 4.2],
-            labels: const ['05/01', '05/08', '05/15', '05/22', '05/29'],
-            color: const Color(0xFF268DFF),
-            tooltipTitle: '5月18日',
-            tooltipValue: '3:45:28',
-            maxValue: 8,
-          ),
-          const SizedBox(height: 12),
-          const _AnnualDistributionPanel(),
         ],
-        ),
       );
     });
+  }
+
+  List<Widget> _panelsForPeriod(_RideStats monthStats) {
+    switch (_periodIndex) {
+      case 0:
+        return _trendPanels(_weekStats, isWeek: true);
+      case 2:
+        return _yearPanels();
+      case 3:
+        return _allPanels(_allStats);
+      case 1:
+      default:
+        return _trendPanels(monthStats, isWeek: false);
+    }
+  }
+
+  // 周/月：总览 + 里程趋势 + 运动时长趋势
+  List<Widget> _trendPanels(_RideStats stats, {required bool isWeek}) {
+    final labels = isWeek
+        ? const ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+        : const ['05/01', '05/08', '05/15', '05/22', '05/29'];
+    final mileage = isWeek
+        ? const <double>[18, 24, 0, 32, 27, 41, 36]
+        : const <double>[
+            82, 32, 74, 8, 41, 79, 11, 58, 44, 88, 99, 59, 14, 75, 80, 102, 66,
+          ];
+    final duration = isWeek
+        ? const <double>[0.9, 1.2, 0, 1.7, 1.4, 2.1, 1.8]
+        : const <double>[
+            5, 2, 5, 0.5, 2.5, 4.9, 0.7, 3.4, 2.7, 5.3, 6.0, 3.7, 0.9, 4.6, 5.0,
+            6.6, 4.2,
+          ];
+    return [
+      _StatsOverview(stats: stats),
+      const SizedBox(height: 12),
+      _BarTrendPanel(
+        title: '里程趋势',
+        unit: '单位：km',
+        values: mileage,
+        labels: labels,
+        color: _RideColors.orange,
+        tooltipTitle: isWeek ? '5月15日' : '5月18日',
+        tooltipValue: isWeek ? '32.4 km' : '102.6 km',
+        maxValue: isWeek ? 60.0 : 120.0,
+      ),
+      const SizedBox(height: 12),
+      _BarTrendPanel(
+        title: '运动时长趋势',
+        unit: '单位：小时',
+        values: duration,
+        labels: labels,
+        color: const Color(0xFF268DFF),
+        tooltipTitle: isWeek ? '5月15日' : '5月18日',
+        tooltipValue: isWeek ? '1:45:28' : '3:45:28',
+        maxValue: isWeek ? 3.0 : 8.0,
+      ),
+    ];
+  }
+
+  // 年：运动类型分布 + 月度统计 + 强度分布
+  List<Widget> _yearPanels() {
+    return [
+      const _AnnualDistributionPanel(),
+      const SizedBox(height: 12),
+      _BarTrendPanel(
+        title: '月度统计',
+        unit: '单位：km',
+        values: const <double>[320, 0, 410, 680, 920, 1026, 0, 0, 0, 0, 0, 0],
+        labels: const ['1月', '3月', '5月', '7月', '9月', '11月'],
+        color: _RideColors.orange,
+        tooltipTitle: '5月',
+        tooltipValue: '1026.3 km',
+        maxValue: 1500,
+      ),
+      const SizedBox(height: 12),
+      const _ZoneDistributionPanel(
+        title: '强度分布',
+        summaryLabel: '总时间',
+        summaryValue: '149:48:00',
+        centerText: '149:48',
+        centerSubtext: '总时间',
+        colors: [
+          Color(0xFFFF3158),
+          Color(0xFFFF7A1A),
+          Color(0xFFFFD21A),
+          Color(0xFF4AD14A),
+          Color(0xFF268DFF),
+        ],
+        labels: [
+          'Z5  > 178 bpm',
+          'Z4  162 - 178 bpm',
+          'Z3  140 - 160 bpm',
+          'Z2  120 - 140 bpm',
+          'Z1  < 120 bpm',
+        ],
+        values: ['08:36   6%', '26:18   17%', '55:21   36%', '48:23   31%', '11:10   10%'],
+        distribution: [0.06, 0.17, 0.36, 0.31, 0.10],
+      ),
+    ];
+  }
+
+  // 全部：总览 + 运动类型分布 + 月度里程趋势
+  List<Widget> _allPanels(_RideStats stats) {
+    return [
+      _StatsOverview(stats: stats),
+      const SizedBox(height: 12),
+      const _AnnualDistributionPanel(),
+      const SizedBox(height: 12),
+      _BarTrendPanel(
+        title: '月度里程趋势',
+        unit: '单位：km',
+        values: const <double>[
+          320, 280, 410, 680, 920, 1026, 760, 540, 620, 880, 700, 430,
+        ],
+        labels: const ['1月', '3月', '5月', '7月', '9月', '11月'],
+        color: _RideColors.orange,
+        tooltipTitle: '5月',
+        tooltipValue: '1026.3 km',
+        maxValue: 1500,
+      ),
+    ];
   }
 }
 
@@ -1709,6 +1856,49 @@ class _RoutesPage extends StatefulWidget {
 class _RoutesPageState extends State<_RoutesPage> {
   var _modeIndex = 0;
 
+  static const _cards = <_RouteListCard>[
+    _RouteListCard(
+      title: '周末环山路线',
+      date: '2024/05/18  08:32',
+      distance: '102.63',
+      climb: '1268',
+      duration: '03:45:28',
+      difficulty: '中等',
+      difficultyColor: Color(0xFFA46AFF),
+      variant: 0,
+    ),
+    _RouteListCard(
+      title: '滨海骑行路线',
+      date: '2024/05/12  07:15',
+      distance: '65.28',
+      climb: '512',
+      duration: '02:28:16',
+      difficulty: '简单',
+      difficultyColor: Color(0xFF62D729),
+      variant: 1,
+    ),
+    _RouteListCard(
+      title: '城市探索路线',
+      date: '2024/05/05  09:42',
+      distance: '88.47',
+      climb: '876',
+      duration: '03:12:45',
+      difficulty: '困难',
+      difficultyColor: Color(0xFFFF3B5F),
+      variant: 2,
+    ),
+    _RouteListCard(
+      title: '晨间训练路线',
+      date: '2024/04/28  06:30',
+      distance: '45.16',
+      climb: '321',
+      duration: '01:48:22',
+      difficulty: '简单',
+      difficultyColor: Color(0xFF62D729),
+      variant: 3,
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final routeCountLabel = switch (_modeIndex) {
@@ -1719,67 +1909,42 @@ class _RoutesPageState extends State<_RoutesPage> {
 
     return Column(
       children: [
-        _RouteModeTabs(
-          selectedIndex: _modeIndex,
-          onSelect: (index) => setState(() => _modeIndex = index),
-        ),
-        const SizedBox(height: 12),
-        const _RouteSearchBar(),
-        const SizedBox(height: 14),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            routeCountLabel,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
+        // 固定子头：模式分段 + 搜索 + 计数（无第二顶部栏）
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+          child: Column(
+            children: [
+              _RouteModeTabs(
+                selectedIndex: _modeIndex,
+                onSelect: (index) => setState(() => _modeIndex = index),
+              ),
+              const SizedBox(height: 12),
+              const _RouteSearchBar(),
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  routeCountLabel,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.72),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
-        const _RouteListCard(
-          title: '周末环山路线',
-          date: '2024/05/18  08:32',
-          distance: '102.63',
-          climb: '1268',
-          duration: '03:45:28',
-          difficulty: '中等',
-          difficultyColor: Color(0xFFA46AFF),
-          variant: 0,
-        ),
-        const SizedBox(height: 10),
-        const _RouteListCard(
-          title: '滨海骑行路线',
-          date: '2024/05/12  07:15',
-          distance: '65.28',
-          climb: '512',
-          duration: '02:28:16',
-          difficulty: '简单',
-          difficultyColor: Color(0xFF62D729),
-          variant: 1,
-        ),
-        const SizedBox(height: 10),
-        const _RouteListCard(
-          title: '城市探索路线',
-          date: '2024/05/05  09:42',
-          distance: '88.47',
-          climb: '876',
-          duration: '03:12:45',
-          difficulty: '困难',
-          difficultyColor: Color(0xFFFF3B5F),
-          variant: 2,
-        ),
-        const SizedBox(height: 10),
-        const _RouteListCard(
-          title: '晨间训练路线',
-          date: '2024/04/28  06:30',
-          distance: '45.16',
-          climb: '321',
-          duration: '01:48:22',
-          difficulty: '简单',
-          difficultyColor: Color(0xFF62D729),
-          variant: 3,
+        // 单一滚动区：路线卡片列表
+        Expanded(
+          child: ListView.separated(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+            itemCount: _cards.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, index) => _cards[index],
+          ),
         ),
       ],
     );
@@ -2120,11 +2285,20 @@ class _DevicesPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _ScanPanel(controller: controller),
+        // 固定子头：扫描雷达 + 停止扫描（本地视觉状态，不接真实 BleController）
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+          child: _ScanPanel(controller: controller),
+        ),
         const SizedBox(height: 12),
-        const _AvailableDevicesPanel(),
-        const SizedBox(height: 12),
-        const _ConnectedDevicePanel(),
+        // 单一滚动区：可用设备列表
+        Expanded(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+            child: const _AvailableDevicesPanel(),
+          ),
+        ),
       ],
     );
   }
@@ -2160,7 +2334,7 @@ class _ScanPanel extends StatelessWidget {
           ),
           const SizedBox(height: 22),
           SizedBox(
-            height: 304,
+            height: 210,
             child: CustomPaint(
               painter: const _RadarPainter(),
               child: Center(
@@ -2836,6 +3010,86 @@ class _SignalBars extends StatelessWidget {
   }
 }
 
+class _RecordingBar extends StatelessWidget {
+  const _RecordingBar({required this.controller});
+
+  final RideController controller;
+
+  void _confirmFinish() {
+    Get.defaultDialog(
+      title: '结束骑行',
+      middleText: '确定结束并保存本次骑行吗？',
+      textConfirm: '结束并保存',
+      textCancel: '继续骑行',
+      confirmTextColor: Colors.white,
+      buttonColor: _RideColors.orange,
+      onConfirm: () {
+        Get.back();
+        controller.saveCurrentRide();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final paused = controller.isPaused.value;
+      final elapsed = controller.elapsed.value;
+      return Container(
+        padding: const EdgeInsets.fromLTRB(18, 8, 10, 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF12181F),
+          border: Border(
+            top: BorderSide(color: Colors.white.withOpacity(0.06)),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: paused
+                    ? const Color(0xFFFFC400)
+                    : const Color(0xFF3BE23E),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              paused ? '已暂停' : '记录中',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.86),
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              _formatDuration(elapsed),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _confirmFinish,
+              style: TextButton.styleFrom(
+                foregroundColor: _RideColors.orange,
+                textStyle: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              icon: const Icon(Icons.stop_circle, size: 20),
+              label: const Text('结束并保存'),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
 class _RideTabBar extends StatelessWidget {
   const _RideTabBar({
     required this.controller,
@@ -3308,9 +3562,10 @@ String _formatSeconds(int seconds) {
 }
 
 class _RouteMapPainter extends CustomPainter {
-  const _RouteMapPainter({this.variant = 0});
+  const _RouteMapPainter({this.variant = 0, this.track = const []});
 
   final int variant;
+  final List<RidePoint> track;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3326,7 +3581,92 @@ class _RouteMapPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, bgPaint);
 
     _drawMapLines(canvas, size);
-    _drawRoute(canvas, size);
+    // 有有效真实轨迹则画真实轨迹，否则兜底示例环线
+    final projected = _projectTrack(size);
+    if (projected != null) {
+      _drawPolyline(canvas, projected);
+    } else {
+      _drawRoute(canvas, size);
+    }
+  }
+
+  // 将真实 GPS 轨迹等比投影到画布；点不足/坐标非法/跨度过小时返回 null（兜底）
+  List<Offset>? _projectTrack(Size size) {
+    if (track.length < 2) return null;
+    var minLat = double.infinity;
+    var maxLat = -double.infinity;
+    var minLon = double.infinity;
+    var maxLon = -double.infinity;
+    var valid = 0;
+    for (final p in track) {
+      final lat = p.latitude;
+      final lon = p.longitude;
+      if (!lat.isFinite || !lon.isFinite) continue;
+      if (lat == 0 && lon == 0) continue;
+      minLat = math.min(minLat, lat);
+      maxLat = math.max(maxLat, lat);
+      minLon = math.min(minLon, lon);
+      maxLon = math.max(maxLon, lon);
+      valid++;
+    }
+    if (valid < 2) return null;
+    final latSpan = maxLat - minLat;
+    final lonSpan = maxLon - minLon;
+    if (latSpan <= 1e-7 && lonSpan <= 1e-7) return null;
+    const pad = 16.0;
+    final w = size.width - pad * 2;
+    final h = size.height - pad * 2;
+    if (w <= 0 || h <= 0) return null;
+    final span = math.max(latSpan, lonSpan);
+    final scale = math.min(w, h) / span;
+    final offsetX = pad + (w - lonSpan * scale) / 2;
+    final offsetY = pad + (h - latSpan * scale) / 2;
+    final pts = <Offset>[];
+    for (final p in track) {
+      final lat = p.latitude;
+      final lon = p.longitude;
+      if (!lat.isFinite || !lon.isFinite) continue;
+      if (lat == 0 && lon == 0) continue;
+      final x = offsetX + (lon - minLon) * scale;
+      final y = offsetY + (maxLat - lat) * scale;
+      pts.add(Offset(x, y));
+    }
+    return pts.length >= 2 ? pts : null;
+  }
+
+  void _drawPolyline(Canvas canvas, List<Offset> pts) {
+    final shadow = Paint()
+      ..color = Colors.black.withOpacity(0.34)
+      ..strokeWidth = 11
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (final p in pts.skip(1)) {
+      path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(path, shadow);
+    for (var i = 0; i < pts.length - 1; i++) {
+      final t = pts.length <= 2 ? 0.0 : i / (pts.length - 2);
+      final color =
+          Color.lerp(const Color(0xFF57DF43), const Color(0xFFFF4B24), t)!;
+      canvas.drawPath(
+        Path()
+          ..moveTo(pts[i].dx, pts[i].dy)
+          ..lineTo(pts[i + 1].dx, pts[i + 1].dy),
+        Paint()
+          ..color = color
+          ..strokeWidth = 5.8
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+    canvas.drawCircle(pts.first, 9, Paint()..color = const Color(0xFF5FE052));
+    canvas.drawCircle(pts.first, 4, Paint()..color = Colors.white);
+    canvas.drawCircle(pts.last, 8, Paint()..color = Colors.white);
+    canvas.drawCircle(
+        pts.last, 4, Paint()..color = Colors.black.withOpacity(0.78));
   }
 
   void _drawMapLines(Canvas canvas, Size size) {
@@ -3437,7 +3777,7 @@ class _RouteMapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RouteMapPainter oldDelegate) {
-    return oldDelegate.variant != variant;
+    return oldDelegate.variant != variant || oldDelegate.track != track;
   }
 }
 
@@ -3535,7 +3875,7 @@ class _DualLineChartPainter extends CustomPainter {
     Color color,
     double maxValue,
   ) {
-    if (data.length < 2) return;
+    if (data.length < 2 || maxValue <= 0) return;
     final chartRect = Rect.fromLTWH(26, 16, size.width - 52, size.height - 38);
     final path = Path();
     for (var i = 0; i < data.length; i++) {
@@ -3634,6 +3974,7 @@ class _BarChartPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (values.isEmpty || maxValue <= 0) return;
     final chartRect = Rect.fromLTWH(34, 26, size.width - 54, size.height - 52);
     final grid = Paint()
       ..color = Colors.white.withOpacity(0.07)
@@ -3671,7 +4012,9 @@ class _BarChartPainter extends CustomPainter {
     }
 
     for (var i = 0; i < labels.length; i++) {
-      final x = chartRect.left + chartRect.width * i / (labels.length - 1);
+      final x = labels.length == 1
+          ? chartRect.center.dx
+          : chartRect.left + chartRect.width * i / (labels.length - 1);
       _drawText(
         canvas,
         labels[i],
@@ -3683,7 +4026,7 @@ class _BarChartPainter extends CustomPainter {
     }
 
     final selectedIndex = tooltipIndex;
-    if (selectedIndex == null) return;
+    if (selectedIndex == null || selectedIndex >= values.length) return;
     final markerX =
         chartRect.left + chartRect.width * (selectedIndex + 0.5) / values.length;
     final markerY = chartRect.bottom -
@@ -3779,6 +4122,7 @@ class _DonutPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) * 0.38;
     var start = -math.pi / 2;
