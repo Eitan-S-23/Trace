@@ -21,7 +21,9 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
         ? Get.find<RideController>()
         : Get.put(RideController());
 
-    return Scaffold(
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+      child: Scaffold(
       backgroundColor: _RideColors.background,
       body: SafeArea(
         bottom: false,
@@ -55,6 +57,7 @@ class _SpeedometerPageState extends State<SpeedometerPage> {
             ],
           );
         }),
+      ),
       ),
     );
   }
@@ -203,11 +206,11 @@ class _DashboardPage extends StatelessWidget {
       builder: (context, constraints) {
         return SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           child: ConstrainedBox(
             // 内容不足时填满视口、超出时可滚动，绝不溢出。
             constraints: BoxConstraints(
-              minHeight: math.max(0.0, constraints.maxHeight - 28),
+              minHeight: math.max(0.0, constraints.maxHeight - 24),
             ),
             child: Column(
               children: [
@@ -651,7 +654,7 @@ class _SpeedAltitudePanel extends StatelessWidget {
           : controller.altitudeTrendM.toList();
 
       return _GlassPanel(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        padding: const EdgeInsets.fromLTRB(8, 14, 8, 10),
         child: Column(
         children: [
           Wrap(
@@ -4306,7 +4309,7 @@ class _DualLineChartPainter extends CustomPainter {
   static const _altMax = 1500.0;
 
   Rect _chartRect(Size size) =>
-      Rect.fromLTRB(30, 20, size.width - 38, size.height - 18);
+      Rect.fromLTRB(26, 18, size.width - 30, size.height - 16);
 
   @override
   void paint(Canvas canvas, Size size) {
