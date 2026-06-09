@@ -243,7 +243,7 @@ class _ActivityHeroCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            height: 168,
+            height: 132,
             child: Stack(
               children: [
                 // 地图垫底
@@ -271,29 +271,29 @@ class _ActivityHeroCard extends StatelessWidget {
                           const Icon(
                             Icons.directions_bike,
                             color: _RideColors.orange,
-                            size: 24,
+                            size: 17,
                           ),
-                          const SizedBox(width: 9),
+                          const SizedBox(width: 7),
                           Text(
                             '户外骑行',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.96),
-                              fontSize: 22,
+                              fontSize: 16,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 11),
+                      const SizedBox(height: 6),
                       Text(
                         '2024/05/18  08:32',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.62),
-                          fontSize: 15,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 5),
                       RichText(
                         text: TextSpan(
                           children: [
@@ -301,17 +301,17 @@ class _ActivityHeroCard extends StatelessWidget {
                               text: sample.distanceText,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 44,
+                                fontSize: 32,
                                 height: 0.96,
                                 fontWeight: FontWeight.w900,
-                                letterSpacing: -1.8,
+                                letterSpacing: -1.2,
                               ),
                             ),
                             TextSpan(
                               text: ' km',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.92),
-                                fontSize: 19,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
@@ -319,29 +319,36 @@ class _ActivityHeroCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      Wrap(
-                        spacing: 22,
-                        runSpacing: 12,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _HeroStat(
-                            label: '运动时间',
-                            value: sample.durationText,
-                            unit: '',
+                          Expanded(
+                            child: _HeroStat(
+                              label: '运动时间',
+                              value: sample.durationText,
+                              unit: '',
+                            ),
                           ),
-                          _HeroStat(
-                            label: '平均速度',
-                            value: sample.avgSpeedText,
-                            unit: 'km/h',
+                          Expanded(
+                            child: _HeroStat(
+                              label: '平均速度',
+                              value: sample.avgSpeedText,
+                              unit: 'km/h',
+                            ),
                           ),
-                          _HeroStat(
-                            label: '累计爬升',
-                            value: sample.climbText,
-                            unit: 'm',
+                          Expanded(
+                            child: _HeroStat(
+                              label: '累计爬升',
+                              value: sample.climbText,
+                              unit: 'm',
+                            ),
                           ),
-                          const _HeroStat(
-                            label: '训练负荷',
-                            value: '187',
-                            unit: '高',
+                          const Expanded(
+                            child: _HeroStat(
+                              label: '训练负荷',
+                              value: '187',
+                              unit: '高',
+                            ),
                           ),
                         ],
                       ),
@@ -504,25 +511,25 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _GlassPanel(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
       child: SizedBox(
-        height: 104,
+        height: 80,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  width: 28,
-                  height: 28,
+                  width: 22,
+                  height: 22,
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.13),
                     shape: BoxShape.circle,
-                    border: Border.all(color: color.withOpacity(0.90), width: 2),
+                    border: Border.all(color: color.withOpacity(0.90), width: 1.6),
                   ),
-                  child: Icon(icon, color: color, size: 15),
+                  child: Icon(icon, color: color, size: 12),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     title,
@@ -530,14 +537,14 @@ class _MetricTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 13,
+                      fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             RichText(
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -547,37 +554,37 @@ class _MetricTile extends StatelessWidget {
                     text: value,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 23,
+                      fontSize: 17,
                       height: 1,
                       fontWeight: FontWeight.w900,
-                      letterSpacing: -0.6,
+                      letterSpacing: -0.4,
                     ),
                   ),
                   TextSpan(
                     text: ' $unit',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.72),
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 2),
             Text(
               footnote,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.58),
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const Spacer(),
             SizedBox(
-              height: 16,
+              height: 12,
               child: CustomPaint(
                 painter: _SparklinePainter(values: values, color: sparkColor),
                 child: const SizedBox.expand(),
@@ -649,7 +656,7 @@ class _SpeedAltitudePanel extends StatelessWidget {
                 '速度 & 海拔',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 16,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -667,7 +674,7 @@ class _SpeedAltitudePanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 140,
+            height: 116,
             child: CustomPaint(
               painter: _DualLineChartPainter(
                 speed: speedData,
@@ -789,7 +796,7 @@ class _ZoneDistributionPanel extends StatelessWidget {
     return _GlassPanel(
       padding: const EdgeInsets.all(14),
       child: SizedBox(
-        height: 150,
+        height: 124,
         child: Column(
           children: [
             Row(
@@ -798,7 +805,7 @@ class _ZoneDistributionPanel extends StatelessWidget {
                   title,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 19,
+                    fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -817,7 +824,7 @@ class _ZoneDistributionPanel extends StatelessWidget {
               child: Row(
                 children: [
                   _InteractiveDonutChart(
-                    size: 86,
+                    size: 70,
                     colors: colors,
                     values: distribution,
                     labels: labels,
@@ -1292,7 +1299,7 @@ class _OverviewMetric extends StatelessWidget {
                     text: value,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 28,
+                      fontSize: 22,
                       height: 1,
                       fontWeight: FontWeight.w900,
                       letterSpacing: -0.6,
@@ -1421,7 +1428,7 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 150,
+            height: 126,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -3824,51 +3831,49 @@ class _HeroStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 88,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.48),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.48),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
           ),
-          const SizedBox(height: 5),
-          RichText(
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            text: TextSpan(
-              children: [
+        ),
+        const SizedBox(height: 3),
+        RichText(
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (unit.isNotEmpty)
                 TextSpan(
-                  text: value,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                  text: ' $unit',
+                  style: TextStyle(
+                    color: unit == '高'
+                        ? const Color(0xFFE34CFF)
+                        : Colors.white.withOpacity(0.62),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                if (unit.isNotEmpty)
-                  TextSpan(
-                    text: ' $unit',
-                    style: TextStyle(
-                      color: unit == '高'
-                          ? const Color(0xFFE34CFF)
-                          : Colors.white.withOpacity(0.62),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
