@@ -222,7 +222,11 @@ class DeviceTabPage extends StatelessWidget {
                             subtitle: '骑行数据与导航',
                             icon: Icons.speed,
                             colors: [Color(0xFF11998e), Color(0xFF38ef7d)],
-                            onTap: () => Get.to(() => const SpeedometerPage()),
+                            onTap: () => Get.to(
+                              () => const SpeedometerPage(),
+                              transition: Transition.cupertino,
+                              duration: const Duration(milliseconds: 300),
+                            ),
                           )
                               .animate(delay: 800.ms)
                               .fadeIn(duration: 600.ms)

@@ -244,7 +244,7 @@ class _ActivityHeroCard extends StatelessWidget {
       // 全屏/分享圆钮为更内层 InkWell，点击时由最内层赢得手势，互不干扰。
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => Get.to(
+        onTap: () => _openRidePage(
           () => _RideRouteDetailPage(
             title: '户外骑行',
             date: '2024/05/18  08:32',
@@ -1927,7 +1927,7 @@ class _RoutesPageState extends State<_RoutesPage> {
               final c = _cards[index];
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => Get.to(
+                onTap: () => _openRidePage(
                   () => _RideRouteDetailPage(
                     title: c.title,
                     date: c.date,
@@ -2848,7 +2848,7 @@ class _AvailableDevicesPanel extends StatelessWidget {
             title: 'iGPSPORT BSC300_1234',
             type: '码表',
             bars: 4,
-            onTap: () => Get.to(
+            onTap: () => _openRidePage(
               () => const _RideDeviceDetailPage(
                 name: 'iGPSPORT BSC300_1234',
                 type: '码表',
@@ -2860,7 +2860,7 @@ class _AvailableDevicesPanel extends StatelessWidget {
             title: 'iGPSPORT SR30_5678',
             type: '雷达',
             bars: 4,
-            onTap: () => Get.to(
+            onTap: () => _openRidePage(
               () => const _RideDeviceDetailPage(
                 name: 'iGPSPORT SR30_5678',
                 type: '雷达',
@@ -2872,7 +2872,7 @@ class _AvailableDevicesPanel extends StatelessWidget {
             title: 'iGPSPORT HR40_9012',
             type: '心率带',
             bars: 3,
-            onTap: () => Get.to(
+            onTap: () => _openRidePage(
               () => const _RideDeviceDetailPage(
                 name: 'iGPSPORT HR40_9012',
                 type: '心率带',
@@ -4805,6 +4805,18 @@ void _showUiMessage(String title, String message) {
     message,
     snackPosition: SnackPosition.BOTTOM,
     duration: const Duration(seconds: 2),
+  );
+}
+
+// 码表模块统一页面跳转：强制使用 Cupertino 横向滑动转场。
+// 主题为浅色（Brightness.light）而码表全部页面为深色背景，若使用 Material3 默认的
+// Zoom 转场，动画期间会绘制一层主题 surface（浅色）填充背景，与深色页面反差即表现为
+// 进入/返回时的屏幕闪烁。横向滑动转场不绘制该浅色层，可彻底消除闪烁。
+void _openRidePage(Widget Function() page) {
+  Get.to<void>(
+    page,
+    transition: Transition.cupertino,
+    duration: const Duration(milliseconds: 300),
   );
 }
 
