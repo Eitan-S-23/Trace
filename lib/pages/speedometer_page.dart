@@ -243,12 +243,15 @@ class _ActivityHeroCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            height: 132,
+            height: 150,
             child: Stack(
               children: [
-                // 地图垫底
-                Positioned.fill(
-                  left: 120,
+                // 地图：右上区域（不占满高度，给底部统计留出干净空间）
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  width: 172,
+                  height: 92,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(14),
                     child: CustomPaint(
@@ -257,12 +260,29 @@ class _ActivityHeroCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // 文字内容限定在左侧区域（right:58），绝不延伸到右侧圆钮下方
+                // 圆钮：地图右上角，最顶层，永远可点
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Column(
+                    children: [
+                      _RoundIconButton(
+                        icon: Icons.fullscreen,
+                        onTap: () => _showUiMessage('地图全屏', '已聚焦路线预览'),
+                      ),
+                      const SizedBox(height: 10),
+                      _RoundIconButton(
+                        icon: Icons.share_outlined,
+                        onTap: () => _showUiMessage('分享路线', '路线分享入口已激活'),
+                      ),
+                    ],
+                  ),
+                ),
+                // 左上文字：户外骑行 + 日期 + 距离（限定在地图左侧）
                 Positioned(
                   left: 0,
-                  top: 0,
-                  bottom: 0,
-                  right: 58,
+                  top: 2,
+                  right: 184,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -293,7 +313,7 @@ class _ActivityHeroCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 6),
                       RichText(
                         text: TextSpan(
                           children: [
@@ -301,7 +321,7 @@ class _ActivityHeroCard extends StatelessWidget {
                               text: sample.distanceText,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 32,
+                                fontSize: 34,
                                 height: 0.96,
                                 fontWeight: FontWeight.w900,
                                 letterSpacing: -1.2,
@@ -318,57 +338,44 @@ class _ActivityHeroCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const Spacer(),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _HeroStat(
-                              label: '运动时间',
-                              value: sample.durationText,
-                              unit: '',
-                            ),
-                          ),
-                          Expanded(
-                            child: _HeroStat(
-                              label: '平均速度',
-                              value: sample.avgSpeedText,
-                              unit: 'km/h',
-                            ),
-                          ),
-                          Expanded(
-                            child: _HeroStat(
-                              label: '累计爬升',
-                              value: sample.climbText,
-                              unit: 'm',
-                            ),
-                          ),
-                          const Expanded(
-                            child: _HeroStat(
-                              label: '训练负荷',
-                              value: '187',
-                              unit: '高',
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
-                // 圆钮置于最顶层，永远可点
+                // 底部统计：全宽四列，位于地图下方，互不重叠
                 Positioned(
-                  right: 6,
-                  top: 18,
-                  child: Column(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _RoundIconButton(
-                        icon: Icons.fullscreen,
-                        onTap: () => _showUiMessage('地图全屏', '已聚焦路线预览'),
+                      Expanded(
+                        child: _HeroStat(
+                          label: '运动时间',
+                          value: sample.durationText,
+                          unit: '',
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      _RoundIconButton(
-                        icon: Icons.share_outlined,
-                        onTap: () => _showUiMessage('分享路线', '路线分享入口已激活'),
+                      Expanded(
+                        child: _HeroStat(
+                          label: '平均速度',
+                          value: sample.avgSpeedText,
+                          unit: 'km/h',
+                        ),
+                      ),
+                      Expanded(
+                        child: _HeroStat(
+                          label: '累计爬升',
+                          value: sample.climbText,
+                          unit: 'm',
+                        ),
+                      ),
+                      const Expanded(
+                        child: _HeroStat(
+                          label: '训练负荷',
+                          value: '187',
+                          unit: '高',
+                        ),
                       ),
                     ],
                   ),
@@ -4295,37 +4302,71 @@ class _DualLineChartPainter extends CustomPainter {
   final List<double> speed;
   final List<double> altitude;
 
+  static const _speedMax = 60.0;
+  static const _altMax = 1500.0;
+
+  Rect _chartRect(Size size) =>
+      Rect.fromLTRB(30, 20, size.width - 38, size.height - 18);
+
   @override
   void paint(Canvas canvas, Size size) {
+    final rect = _chartRect(size);
     final grid = Paint()
       ..color = Colors.white.withOpacity(0.08)
       ..strokeWidth = 1;
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(26, y), Offset(size.width - 22, y), grid);
+    // 4 条水平刻度线，左侧标速度刻度、右侧标海拔刻度（贴近设计图）
+    const levels = 4;
+    for (var i = 0; i < levels; i++) {
+      final t = i / (levels - 1);
+      final y = rect.bottom - rect.height * t;
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), grid);
+      _drawTick(canvas, (_speedMax * t).round().toString(),
+          Offset(rect.left - 4, y - 6), alignRight: true);
+      _drawTick(canvas, (_altMax * t).round().toString(),
+          Offset(rect.right + 4, y - 6), alignRight: false);
     }
 
-    _drawAxisText(canvas, 'km/h', Offset(0, 0));
-    _drawAxisText(canvas, 'm', Offset(size.width - 10, 0));
-    _drawSeries(canvas, size, altitude, const Color(0xFFA533FF), 1500);
-    _drawSeries(canvas, size, speed, const Color(0xFF2B9DFF), 60);
+    _drawAxisText(canvas, 'km/h', const Offset(2, 2));
+    _drawAxisText(canvas, 'm', Offset(size.width - 14, 2));
+    _drawSeries(canvas, rect, altitude, const Color(0xFFA533FF), _altMax);
+    _drawSeries(canvas, rect, speed, const Color(0xFF2B9DFF), _speedMax);
 
     const labels = ['0:00', '45:00', '1:30:00', '2:15:00', '3:00:00', '3:45:28'];
     for (var i = 0; i < labels.length; i++) {
-      final x = 26 + (size.width - 52) * i / (labels.length - 1);
-      _drawChartLabel(canvas, labels[i], Offset(x, size.height - 15), center: true);
+      final x = rect.left + rect.width * i / (labels.length - 1);
+      _drawChartLabel(canvas, labels[i], Offset(x, size.height - 13), center: true);
     }
+  }
+
+  void _drawTick(
+    Canvas canvas,
+    String text,
+    Offset anchor, {
+    required bool alignRight,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.40),
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final dx = alignRight ? anchor.dx - painter.width : anchor.dx;
+    painter.paint(canvas, Offset(dx, anchor.dy));
   }
 
   void _drawSeries(
     Canvas canvas,
-    Size size,
+    Rect chartRect,
     List<double> data,
     Color color,
     double maxValue,
   ) {
     if (data.length < 2 || maxValue <= 0) return;
-    final chartRect = Rect.fromLTWH(26, 16, size.width - 52, size.height - 38);
     final path = Path();
     for (var i = 0; i < data.length; i++) {
       final x = chartRect.left + chartRect.width * i / (data.length - 1);
