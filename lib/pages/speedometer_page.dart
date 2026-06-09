@@ -240,7 +240,23 @@ class _ActivityHeroCard extends StatelessWidget {
     return Obx(() {
       final sample = _RideSample.from(controller);
 
-      return _GlassPanel(
+      // 整张英雄卡可点击 → 进入路线详情（用当前骑行数据）；
+      // 全屏/分享圆钮为更内层 InkWell，点击时由最内层赢得手势，互不干扰。
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Get.to(
+          () => _RideRouteDetailPage(
+            title: '户外骑行',
+            date: '2024/05/18  08:32',
+            distance: sample.distanceText,
+            climb: sample.climbText,
+            duration: sample.durationText,
+            difficulty: '中等',
+            difficultyColor: const Color(0xFFA46AFF),
+            variant: 0,
+          ),
+        ),
+        child: _GlassPanel(
         padding: const EdgeInsets.all(16),
         child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,6 +403,7 @@ class _ActivityHeroCard extends StatelessWidget {
             ),
           ),
         ],
+        ),
         ),
       );
     });
@@ -2627,10 +2644,60 @@ class _RideRouteDetailPage extends StatelessWidget {
   }
 }
 
-class _DevicesPage extends StatelessWidget {
+class _DevicesPage extends StatefulWidget {
   const _DevicesPage({required this.controller});
 
   final RideController controller;
+
+  @override
+  State<_DevicesPage> createState() => _DevicesPageState();
+}
+
+class _DevicesPageState extends State<_DevicesPage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _radar;
+  bool _scanning = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // 雷达扫描旋转动画（纯本地视觉状态，不接真实 BleController）。
+    _radar = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _radar.dispose();
+    super.dispose();
+  }
+
+  void _toggleScan() {
+    setState(() {
+      _scanning = !_scanning;
+      if (_scanning) {
+        _radar.repeat();
+      } else {
+        _radar.stop();
+      }
+    });
+    _showUiMessage(
+      _scanning ? '开始扫描' : '停止扫描',
+      _scanning ? '正在扫描附近设备...' : '已停止扫描',
+    );
+  }
+
+  void _refreshDevices() {
+    if (!_scanning) {
+      setState(() {
+        _scanning = true;
+        _radar.repeat();
+      });
+    }
+    _showUiMessage('刷新设备', '正在重新扫描可用设备...');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2639,7 +2706,11 @@ class _DevicesPage extends StatelessWidget {
         // 固定子头：扫描雷达 + 停止扫描（本地视觉状态，不接真实 BleController）
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-          child: _ScanPanel(controller: controller),
+          child: _ScanPanel(
+            scanning: _scanning,
+            rotation: _radar,
+            onToggle: _toggleScan,
+          ),
         ),
         const SizedBox(height: 12),
         // 单一滚动区：可用设备列表
@@ -2647,7 +2718,7 @@ class _DevicesPage extends StatelessWidget {
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-            child: const _AvailableDevicesPanel(),
+            child: _AvailableDevicesPanel(onRefresh: _refreshDevices),
           ),
         ),
       ],
@@ -2656,9 +2727,15 @@ class _DevicesPage extends StatelessWidget {
 }
 
 class _ScanPanel extends StatelessWidget {
-  const _ScanPanel({required this.controller});
+  const _ScanPanel({
+    required this.scanning,
+    required this.rotation,
+    required this.onToggle,
+  });
 
-  final RideController controller;
+  final bool scanning;
+  final Animation<double> rotation;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -2666,9 +2743,9 @@ class _ScanPanel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
       child: Column(
         children: [
-          const Text(
-            '正在扫描设备...',
-            style: TextStyle(
+          Text(
+            scanning ? '正在扫描设备...' : '扫描已停止',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w900,
@@ -2676,7 +2753,7 @@ class _ScanPanel extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            '请确保设备已开机并靠近手机',
+            scanning ? '请确保设备已开机并靠近手机' : '点按下方按钮重新开始扫描',
             style: TextStyle(
               color: Colors.white.withOpacity(0.66),
               fontSize: 13,
@@ -2686,8 +2763,17 @@ class _ScanPanel extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             height: 104,
-            child: CustomPaint(
-              painter: const _RadarPainter(),
+            child: AnimatedBuilder(
+              animation: rotation,
+              builder: (context, child) {
+                return CustomPaint(
+                  painter: _RadarPainter(
+                    sweepStart: rotation.value * 2 * math.pi,
+                    active: scanning,
+                  ),
+                  child: child,
+                );
+              },
               child: Center(
                 child: Container(
                   width: 40,
@@ -2707,7 +2793,7 @@ class _ScanPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           OutlinedButton(
-            onPressed: controller.loadRideHistory,
+            onPressed: onToggle,
             style: OutlinedButton.styleFrom(
               foregroundColor: _RideColors.orange,
               side: BorderSide(color: Colors.white.withOpacity(0.14)),
@@ -2716,9 +2802,9 @@ class _ScanPanel extends StatelessWidget {
                 borderRadius: BorderRadius.circular(22),
               ),
             ),
-            child: const Text(
-              '停止扫描',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+            child: Text(
+              scanning ? '停止扫描' : '扫描设备',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
             ),
           ),
         ],
@@ -2728,7 +2814,9 @@ class _ScanPanel extends StatelessWidget {
 }
 
 class _AvailableDevicesPanel extends StatelessWidget {
-  const _AvailableDevicesPanel();
+  const _AvailableDevicesPanel({required this.onRefresh});
+
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
@@ -2747,7 +2835,12 @@ class _AvailableDevicesPanel extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              Icon(Icons.refresh, color: Colors.white.withOpacity(0.78)),
+              IconButton(
+                onPressed: onRefresh,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: Icon(Icons.refresh, color: Colors.white.withOpacity(0.78)),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -4308,8 +4401,9 @@ class _DualLineChartPainter extends CustomPainter {
   static const _speedMax = 60.0;
   static const _altMax = 1500.0;
 
+  // 两侧各仅留一列刻度的窄边距，曲线区尽量拉宽（贴近设计图近满屏宽）。
   Rect _chartRect(Size size) =>
-      Rect.fromLTRB(26, 18, size.width - 30, size.height - 16);
+      Rect.fromLTRB(21, 24, size.width - 25, size.height - 15);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4317,27 +4411,28 @@ class _DualLineChartPainter extends CustomPainter {
     final grid = Paint()
       ..color = Colors.white.withOpacity(0.08)
       ..strokeWidth = 1;
-    // 4 条水平刻度线，左侧标速度刻度、右侧标海拔刻度（贴近设计图）
+    // 单位与刻度成列：左列(km/h + 60/40/20)统一左对齐，右列(m + 1500/1000/500)统一右对齐。
     const levels = 4;
+    _drawAxisText(canvas, 'km/h', const Offset(1, 3));
+    _drawAxisText(canvas, 'm', Offset(size.width - 1, 3), alignRight: true);
     for (var i = 0; i < levels; i++) {
       final t = i / (levels - 1);
       final y = rect.bottom - rect.height * t;
       canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), grid);
+      if (i == 0) continue; // 跳过 0 刻度：仅显示 20/40/60 与 500/1000/1500
       _drawTick(canvas, (_speedMax * t).round().toString(),
-          Offset(rect.left - 4, y - 6), alignRight: true);
+          Offset(1, y - 5), alignRight: false);
       _drawTick(canvas, (_altMax * t).round().toString(),
-          Offset(rect.right + 4, y - 6), alignRight: false);
+          Offset(size.width - 1, y - 5), alignRight: true);
     }
 
-    _drawAxisText(canvas, 'km/h', const Offset(2, 2));
-    _drawAxisText(canvas, 'm', Offset(size.width - 14, 2));
     _drawSeries(canvas, rect, altitude, const Color(0xFFA533FF), _altMax);
     _drawSeries(canvas, rect, speed, const Color(0xFF2B9DFF), _speedMax);
 
     const labels = ['0:00', '45:00', '1:30:00', '2:15:00', '3:00:00', '3:45:28'];
     for (var i = 0; i < labels.length; i++) {
       final x = rect.left + rect.width * i / (labels.length - 1);
-      _drawChartLabel(canvas, labels[i], Offset(x, size.height - 13), center: true);
+      _drawChartLabel(canvas, labels[i], Offset(x, size.height - 12), center: true);
     }
   }
 
@@ -4405,19 +4500,21 @@ class _DualLineChartPainter extends CustomPainter {
     );
   }
 
-  void _drawAxisText(Canvas canvas, String text, Offset offset) {
+  void _drawAxisText(Canvas canvas, String text, Offset offset,
+      {bool alignRight = false}) {
     final painter = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.52),
+          color: Colors.white.withOpacity(0.62),
           fontSize: 11,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    painter.paint(canvas, offset);
+    final dx = alignRight ? offset.dx - painter.width : offset.dx;
+    painter.paint(canvas, Offset(dx, offset.dy));
   }
 
   void _drawChartLabel(
@@ -4651,12 +4748,18 @@ class _DonutPainter extends CustomPainter {
 }
 
 class _RadarPainter extends CustomPainter {
-  const _RadarPainter();
+  const _RadarPainter({this.sweepStart = 0, this.active = true});
+
+  // 扫描扇形的起始角（弧度）；由 AnimationController 循环驱动旋转。
+  final double sweepStart;
+  // 是否扫描中：停止时只保留静态雷达网格、不画旋转扇形。
+  final bool active;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) * 0.46;
+    if (radius <= 0) return;
     final ring = Paint()
       ..color = Colors.white.withOpacity(0.10)
       ..style = PaintingStyle.stroke
@@ -4675,9 +4778,10 @@ class _RadarPainter extends CustomPainter {
       ring,
     );
 
+    if (!active) return;
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
-      0,
+      sweepStart,
       math.pi / 2,
       true,
       Paint()
@@ -4691,7 +4795,8 @@ class _RadarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RadarPainter oldDelegate) =>
+      oldDelegate.sweepStart != sweepStart || oldDelegate.active != active;
 }
 
 void _showUiMessage(String title, String message) {
