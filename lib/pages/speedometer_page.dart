@@ -419,6 +419,18 @@ class _DesignMetricGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final sample = _RideSample.from(controller);
+      final speedDetail = _MetricDetailData.speed(
+        sample,
+        controller.speedTrendKmh.toList(),
+      );
+      final powerDetail = _MetricDetailData.power();
+      final heartRateDetail = _MetricDetailData.heartRate();
+      final cadenceDetail = _MetricDetailData.cadence();
+      final climbDetail = _MetricDetailData.climb(
+        sample,
+        controller.altitudeTrendM.toList(),
+      );
+      final temperatureDetail = _MetricDetailData.temperature();
       final cards = [
         _MetricTile(
           icon: Icons.speed,
@@ -429,36 +441,40 @@ class _DesignMetricGrid extends StatelessWidget {
           footnote: '最高 ${sample.maxSpeedText} km/h',
           sparkColor: const Color(0xFF2088FF),
           values: const [16, 17, 18, 18, 20, 24, 22, 29, 27, 31, 30, 33],
+          onTap: () => _showMetricDetailDialog(context, speedDetail),
         ),
-        const _MetricTile(
+        _MetricTile(
           icon: Icons.bolt,
-          color: Color(0xFF64D72A),
+          color: const Color(0xFF64D72A),
           title: '平均功率',
           value: '186',
           unit: 'w',
           footnote: '最大 562 w',
-          sparkColor: Color(0xFF64D72A),
-          values: [110, 112, 118, 135, 172, 188, 160, 176, 182, 194, 181, 202],
+          sparkColor: const Color(0xFF64D72A),
+          values: const [110, 112, 118, 135, 172, 188, 160, 176, 182, 194, 181, 202],
+          onTap: () => _showMetricDetailDialog(context, powerDetail),
         ),
-        const _MetricTile(
+        _MetricTile(
           icon: Icons.favorite,
-          color: Color(0xFFFF3B5F),
+          color: const Color(0xFFFF3B5F),
           title: '平均心率',
           value: '156',
           unit: 'bpm',
           footnote: '最大 188 bpm',
-          sparkColor: Color(0xFFFF3B5F),
-          values: [98, 106, 118, 130, 146, 159, 154, 165, 172, 169, 176, 182],
+          sparkColor: const Color(0xFFFF3B5F),
+          values: const [98, 106, 118, 130, 146, 159, 154, 165, 172, 169, 176, 182],
+          onTap: () => _showMetricDetailDialog(context, heartRateDetail),
         ),
-        const _MetricTile(
+        _MetricTile(
           icon: Icons.track_changes,
-          color: Color(0xFFFFC400),
+          color: const Color(0xFFFFC400),
           title: '平均踏频',
           value: '87',
           unit: 'rpm',
           footnote: '最高 118 rpm',
-          sparkColor: Color(0xFFFFC400),
-          values: [62, 64, 63, 70, 76, 91, 84, 79, 82, 88, 84, 92],
+          sparkColor: const Color(0xFFFFC400),
+          values: const [62, 64, 63, 70, 76, 91, 84, 79, 82, 88, 84, 92],
+          onTap: () => _showMetricDetailDialog(context, cadenceDetail),
         ),
         _MetricTile(
           icon: Icons.terrain,
@@ -482,16 +498,18 @@ class _DesignMetricGrid extends StatelessWidget {
             1010,
             1268,
           ],
+          onTap: () => _showMetricDetailDialog(context, climbDetail),
         ),
-        const _MetricTile(
+        _MetricTile(
           icon: Icons.thermostat,
-          color: Color(0xFF42D8E6),
+          color: const Color(0xFF42D8E6),
           title: '平均温度',
           value: '22.4',
           unit: '°C',
           footnote: '最高 28.6 °C',
-          sparkColor: Color(0xFF42D8E6),
-          values: [24, 23, 22, 20, 18, 19, 23, 22, 20, 19, 22, 21],
+          sparkColor: const Color(0xFF42D8E6),
+          values: const [24, 23, 22, 20, 18, 19, 23, 22, 20, 19, 22, 21],
+          onTap: () => _showMetricDetailDialog(context, temperatureDetail),
         ),
       ];
 
@@ -524,6 +542,7 @@ class _MetricTile extends StatelessWidget {
     required this.footnote,
     required this.sparkColor,
     required this.values,
+    required this.onTap,
   });
 
   final IconData icon;
@@ -534,93 +553,1177 @@ class _MetricTile extends StatelessWidget {
   final String footnote;
   final Color sparkColor;
   final List<double> values;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return _GlassPanel(
-      padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
-      child: SizedBox(
-        height: 80,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.13),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: color.withOpacity(0.90), width: 1.6),
+    return Semantics(
+      button: true,
+      label: '$title 详情',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: _GlassPanel(
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+            child: SizedBox(
+              height: 80,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.13),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: color.withOpacity(0.90),
+                            width: 1.6,
+                          ),
+                        ),
+                        child: Icon(icon, color: color, size: 12),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.north_east,
+                        color: color.withOpacity(0.86),
+                        size: 12,
+                      ),
+                    ],
                   ),
-                  child: Icon(icon, color: color, size: 12),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    title,
+                  const SizedBox(height: 4),
+                  RichText(
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: value,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            height: 1,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' $unit',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.72),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            RichText(
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: value,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.4,
-                    ),
-                  ),
-                  TextSpan(
-                    text: ' $unit',
+                  const SizedBox(height: 2),
+                  Text(
+                    footnote,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.72),
+                      color: Colors.white.withOpacity(0.58),
                       fontSize: 10,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    height: 12,
+                    child: CustomPaint(
+                      painter: _SparklinePainter(values: values, color: sparkColor),
+                      child: const SizedBox.expand(),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              footnote,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.58),
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const Spacer(),
-            SizedBox(
-              height: 12,
-              child: CustomPaint(
-                painter: _SparklinePainter(values: values, color: sparkColor),
-                child: const SizedBox.expand(),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+}
+
+class _MetricDetailData {
+  const _MetricDetailData({
+    required this.icon,
+    required this.title,
+    required this.color,
+    required this.primaryLabel,
+    required this.primaryValue,
+    required this.primaryUnit,
+    required this.secondaryLabel,
+    required this.secondaryValue,
+    required this.secondaryUnit,
+    required this.chartUnit,
+    required this.chartMax,
+    required this.chartTicks,
+    required this.chartValues,
+    required this.distributionTitle,
+    required this.footerLabel,
+    required this.footerValue,
+    this.zones = const [],
+    this.detailRows = const [],
+    this.footerIcon,
+  });
+
+  final IconData icon;
+  final String title;
+  final Color color;
+  final String primaryLabel;
+  final String primaryValue;
+  final String primaryUnit;
+  final String secondaryLabel;
+  final String secondaryValue;
+  final String secondaryUnit;
+  final String chartUnit;
+  final double chartMax;
+  final List<double> chartTicks;
+  final List<double> chartValues;
+  final String distributionTitle;
+  final List<_MetricZoneRow> zones;
+  final List<_MetricDetailRow> detailRows;
+  final String footerLabel;
+  final String footerValue;
+  final IconData? footerIcon;
+
+  static _MetricDetailData speed(
+    _RideSample sample,
+    List<double> liveValues,
+  ) {
+    const fallback = [
+      31.0, 8.0, 35.0, 27.0, 38.0, 30.0, 41.0, 33.0, 37.0, 29.0, 39.0, 36.0,
+      33.0, 34.0, 40.0, 32.0, 44.0, 37.0, 42.0, 6.0, 39.0, 34.0, 36.0, 35.0,
+      41.0, 28.0, 45.0, 31.0, 33.0, 35.0, 30.0, 37.0, 44.0, 40.0, 34.0, 38.0,
+      36.0, 39.0, 35.0, 42.0, 24.0,
+    ];
+    return _MetricDetailData(
+      icon: Icons.speed,
+      title: '速度',
+      color: const Color(0xFF2088FF),
+      primaryLabel: '平均速度',
+      primaryValue: sample.avgSpeedText,
+      primaryUnit: 'km/h',
+      secondaryLabel: '最高速度',
+      secondaryValue: sample.maxSpeedText,
+      secondaryUnit: 'km/h',
+      chartUnit: 'km/h',
+      chartMax: 60,
+      chartTicks: const <double>[0, 20, 40, 60],
+      chartValues: _detailSeries(liveValues, fallback),
+      distributionTitle: '速度分布',
+      zones: const [
+        _MetricZoneRow(
+          color: Color(0xFFFF3158),
+          zone: 'Z5',
+          range: '> 50 km/h',
+          value: '12:15',
+          ratio: '11%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFF7A1A),
+          zone: 'Z4',
+          range: '40 - 50 km/h',
+          value: '28:47',
+          ratio: '26%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFFD21A),
+          zone: 'Z3',
+          range: '30 - 40 km/h',
+          value: '40:21',
+          ratio: '36%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF4AD14A),
+          zone: 'Z2',
+          range: '20 - 30 km/h',
+          value: '32:16',
+          ratio: '18%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF268DFF),
+          zone: 'Z1',
+          range: '< 20 km/h',
+          value: '12:09',
+          ratio: '9%',
+        ),
+      ],
+      footerLabel: '本段平均配速',
+      footerValue: '02:12 /km',
+    );
+  }
+
+  static _MetricDetailData power() {
+    return const _MetricDetailData(
+      icon: Icons.bolt,
+      title: '功率',
+      color: Color(0xFF64D72A),
+      primaryLabel: '平均功率',
+      primaryValue: '186',
+      primaryUnit: 'w',
+      secondaryLabel: '最大功率',
+      secondaryValue: '562',
+      secondaryUnit: 'w',
+      chartUnit: 'w',
+      chartMax: 600,
+      chartTicks: <double>[0, 200, 400, 600],
+      chartValues: <double>[
+        260, 300, 325, 345, 335, 360, 320, 380, 355, 390, 365, 430, 372, 470,
+        520, 455, 562, 510, 445, 405, 435, 395, 410, 180, 430, 390, 415, 385,
+        435, 405, 418, 392, 450, 405, 470, 330, 455, 390, 410, 480, 360,
+      ],
+      distributionTitle: '功率分布',
+      zones: [
+        _MetricZoneRow(
+          color: Color(0xFFFF3158),
+          zone: 'Z5',
+          range: '> 350 w',
+          value: '12:15',
+          ratio: '11%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFF7A1A),
+          zone: 'Z4',
+          range: '250 - 350 w',
+          value: '28:47',
+          ratio: '26%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFFD21A),
+          zone: 'Z3',
+          range: '180 - 250 w',
+          value: '40:21',
+          ratio: '36%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF4AD14A),
+          zone: 'Z2',
+          range: '120 - 180 w',
+          value: '32:16',
+          ratio: '18%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF268DFF),
+          zone: 'Z1',
+          range: '< 120 w',
+          value: '12:09',
+          ratio: '9%',
+        ),
+      ],
+      footerLabel: '归一化功率 (NP)',
+      footerValue: '210 w',
+    );
+  }
+
+  static _MetricDetailData heartRate() {
+    return const _MetricDetailData(
+      icon: Icons.favorite,
+      title: '心率',
+      color: Color(0xFFFF3B5F),
+      primaryLabel: '平均心率',
+      primaryValue: '156',
+      primaryUnit: 'bpm',
+      secondaryLabel: '最大心率',
+      secondaryValue: '188',
+      secondaryUnit: 'bpm',
+      chartUnit: 'bpm',
+      chartMax: 200,
+      chartTicks: <double>[0, 50, 100, 150, 200],
+      chartValues: <double>[
+        88, 96, 92, 98, 94, 100, 110, 116, 125, 104, 126, 148, 160, 154, 166,
+        158, 172, 164, 148, 134, 108, 146, 168, 176, 170, 182, 174, 168, 172,
+        166, 148, 138, 142, 132, 150, 164, 158, 172, 152, 166, 156,
+      ],
+      distributionTitle: '心率分布',
+      zones: [
+        _MetricZoneRow(
+          color: Color(0xFFFF3158),
+          zone: 'Z5',
+          range: '> 178 bpm',
+          value: '08:36',
+          ratio: '6%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFF7A1A),
+          zone: 'Z4',
+          range: '160 - 178 bpm',
+          value: '26:18',
+          ratio: '17%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFFD21A),
+          zone: 'Z3',
+          range: '140 - 160 bpm',
+          value: '55:21',
+          ratio: '36%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF4AD14A),
+          zone: 'Z2',
+          range: '120 - 140 bpm',
+          value: '48:23',
+          ratio: '31%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF268DFF),
+          zone: 'Z1',
+          range: '< 120 bpm',
+          value: '11:10',
+          ratio: '10%',
+        ),
+      ],
+      footerLabel: '心率储备',
+      footerValue: '63%',
+    );
+  }
+
+  static _MetricDetailData cadence() {
+    return const _MetricDetailData(
+      icon: Icons.track_changes,
+      title: '踏频',
+      color: Color(0xFFFFC400),
+      primaryLabel: '平均踏频',
+      primaryValue: '87',
+      primaryUnit: 'rpm',
+      secondaryLabel: '最高踏频',
+      secondaryValue: '118',
+      secondaryUnit: 'rpm',
+      chartUnit: 'rpm',
+      chartMax: 150,
+      chartTicks: <double>[0, 50, 100, 150],
+      chartValues: <double>[
+        78, 84, 88, 92, 96, 90, 104, 82, 88, 94, 86, 91, 97, 102, 90, 86, 93,
+        98, 104, 100, 95, 108, 97, 102, 94, 99, 92, 101, 88, 96, 103, 94, 98,
+        90, 100, 96, 104, 92, 101, 95, 106,
+      ],
+      distributionTitle: '踏频分布',
+      zones: [
+        _MetricZoneRow(
+          color: Color(0xFFFF3158),
+          zone: 'Z5',
+          range: '> 110 rpm',
+          value: '10:12',
+          ratio: '9%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFF7A1A),
+          zone: 'Z4',
+          range: '90 - 110 rpm',
+          value: '28:33',
+          ratio: '25%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFFFFD21A),
+          zone: 'Z3',
+          range: '70 - 90 rpm',
+          value: '45:18',
+          ratio: '39%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF4AD14A),
+          zone: 'Z2',
+          range: '50 - 70 rpm',
+          value: '32:45',
+          ratio: '19%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF268DFF),
+          zone: 'Z1',
+          range: '< 50 rpm',
+          value: '08:40',
+          ratio: '8%',
+        ),
+      ],
+      footerLabel: '最常用踏频',
+      footerValue: '84 rpm',
+    );
+  }
+
+  static _MetricDetailData climb(
+    _RideSample sample,
+    List<double> liveValues,
+  ) {
+    const fallback = [
+      180.0, 230.0, 260.0, 320.0, 360.0, 440.0, 500.0, 540.0, 620.0, 720.0,
+      820.0, 900.0, 960.0, 1030.0, 1090.0, 1060.0, 1140.0, 1110.0, 1185.0,
+      1100.0, 1160.0, 1190.0, 1280.0, 1360.0, 1390.0, 1420.0, 1460.0, 1440.0,
+      1490.0, 1470.0, 1500.0,
+    ];
+    return _MetricDetailData(
+      icon: Icons.terrain,
+      title: '爬升',
+      color: const Color(0xFFA533FF),
+      primaryLabel: '累计爬升',
+      primaryValue: sample.climbText,
+      primaryUnit: 'm',
+      secondaryLabel: '累计下降',
+      secondaryValue: '1187',
+      secondaryUnit: 'm',
+      chartUnit: 'm',
+      chartMax: 1500,
+      chartTicks: const <double>[0, 500, 1000, 1500],
+      chartValues: _detailSeries(liveValues, fallback),
+      distributionTitle: '爬升分布',
+      zones: const [
+        _MetricZoneRow(
+          color: Color(0xFFB64CFF),
+          zone: '',
+          range: '> 20%',
+          value: '2.1 km',
+          ratio: '8%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF7A35D8),
+          zone: '',
+          range: '10% - 20%',
+          value: '6.5 km',
+          ratio: '24%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF365CCF),
+          zone: '',
+          range: '5% - 10%',
+          value: '11.8 km',
+          ratio: '43%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF22BCD1),
+          zone: '',
+          range: '1% - 5%',
+          value: '9.3 km',
+          ratio: '18%',
+        ),
+        _MetricZoneRow(
+          color: Color(0xFF66D34C),
+          zone: '',
+          range: '< 1%',
+          value: '2.0 km',
+          ratio: '7%',
+        ),
+      ],
+      footerLabel: '最大坡度',
+      footerValue: '24.3%',
+    );
+  }
+
+  static _MetricDetailData temperature() {
+    return const _MetricDetailData(
+      icon: Icons.thermostat,
+      title: '温度',
+      color: Color(0xFF23D8E9),
+      primaryLabel: '平均温度',
+      primaryValue: '22.4',
+      primaryUnit: '°C',
+      secondaryLabel: '最高温度',
+      secondaryValue: '28.6',
+      secondaryUnit: '°C',
+      chartUnit: '°C',
+      chartMax: 40,
+      chartTicks: <double>[0, 10, 20, 30, 40],
+      chartValues: <double>[
+        24, 22, 24, 23, 22, 21, 20, 16, 15, 14, 15, 13, 14, 12, 13, 11, 15,
+        18, 21, 22, 24, 26, 18, 17, 19, 18, 17, 15, 16, 18, 20, 23, 18,
+      ],
+      distributionTitle: '',
+      detailRows: [
+        _MetricDetailRow(label: '最低温度', value: '18.2 °C'),
+        _MetricDetailRow(label: '温差', value: '10.4 °C'),
+        _MetricDetailRow(label: '高温时长 (>25°C)', value: '1:12:38    32%'),
+        _MetricDetailRow(label: '低温时长 (<15°C)', value: '00:00:00    0%'),
+      ],
+      footerLabel: '温度趋势',
+      footerValue: '缓慢升高',
+      footerIcon: Icons.north_east,
+    );
+  }
+}
+
+class _MetricZoneRow {
+  const _MetricZoneRow({
+    required this.color,
+    required this.zone,
+    required this.range,
+    required this.value,
+    required this.ratio,
+  });
+
+  final Color color;
+  final String zone;
+  final String range;
+  final String value;
+  final String ratio;
+}
+
+class _MetricDetailRow {
+  const _MetricDetailRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+}
+
+List<double> _detailSeries(List<double> liveValues, List<double> fallback) {
+  final cleaned = liveValues.where((value) => value.isFinite).toList();
+  return cleaned.length >= 2 ? cleaned : fallback;
+}
+
+void _showMetricDetailDialog(BuildContext context, _MetricDetailData data) {
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black.withOpacity(0.62),
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (context, animation, secondaryAnimation) {
+      return _MetricDetailDialog(data: data);
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+class _MetricDetailDialog extends StatelessWidget {
+  const _MetricDetailDialog({required this.data});
+
+  final _MetricDetailData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxHeight = math.min(746.0, constraints.maxHeight);
+              return Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: 520,
+                    maxHeight: maxHeight,
+                  ),
+                  child: _MetricDetailPanel(data: data),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricDetailPanel extends StatelessWidget {
+  const _MetricDetailPanel({required this.data});
+
+  final _MetricDetailData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.10)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF202A36).withOpacity(0.98),
+            const Color(0xFF121922).withOpacity(0.99),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.46),
+            blurRadius: 34,
+            offset: const Offset(0, 20),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _MetricDetailHeader(data: data),
+              const SizedBox(height: 22),
+              _MetricDetailStats(data: data),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 190,
+                child: CustomPaint(
+                  painter: _MetricAreaChartPainter(data: data),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (data.zones.isNotEmpty)
+                _MetricDistributionBox(data: data)
+              else
+                _MetricDetailRowsBox(rows: data.detailRows),
+              const SizedBox(height: 20),
+              _MetricDetailFooter(data: data),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricDetailHeader extends StatelessWidget {
+  const _MetricDetailHeader({required this.data});
+
+  final _MetricDetailData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+              icon: Icon(
+                Icons.close,
+                color: Colors.white.withOpacity(0.62),
+                size: 30,
+              ),
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: data.color.withOpacity(0.13),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: data.color, width: 2),
+                ),
+                child: Icon(data.icon, color: data.color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                data.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricDetailStats extends StatelessWidget {
+  const _MetricDetailStats({required this.data});
+
+  final _MetricDetailData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _MetricDetailStat(
+            label: data.primaryLabel,
+            value: data.primaryValue,
+            unit: data.primaryUnit,
+          ),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+          child: _MetricDetailStat(
+            label: data.secondaryLabel,
+            value: data.secondaryValue,
+            unit: data.secondaryUnit,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricDetailStat extends StatelessWidget {
+  const _MetricDetailStat({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final String label;
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.55),
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: RichText(
+            maxLines: 1,
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    height: 1,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.6,
+                  ),
+                ),
+                TextSpan(
+                  text: ' $unit',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.70),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricDistributionBox extends StatelessWidget {
+  const _MetricDistributionBox({required this.data});
+
+  final _MetricDetailData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final distribution = data.zones
+        .map((zone) => double.parse(zone.ratio.replaceAll('%', '')) / 100)
+        .toList();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.015),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            data.distributionTitle,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final donutSize = constraints.maxWidth < 390 ? 96.0 : 116.0;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        for (final zone in data.zones)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 9),
+                            child: _MetricZoneLine(zone: zone),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  _InteractiveDonutChart(
+                    size: donutSize,
+                    strokeWidth: donutSize < 100 ? 14 : 18,
+                    colors: data.zones.map((zone) => zone.color).toList(),
+                    values: distribution,
+                    labels: data.zones
+                        .map((zone) => zone.zone.isEmpty
+                            ? zone.range
+                            : '${zone.zone} ${zone.range}')
+                        .toList(),
+                    details: data.zones
+                        .map((zone) => '${zone.value}   ${zone.ratio}')
+                        .toList(),
+                    backgroundColor: const Color(0xFF171D27),
+                    center: const SizedBox.shrink(),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricZoneLine extends StatelessWidget {
+  const _MetricZoneLine({required this.zone});
+
+  final _MetricZoneRow zone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: zone.color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        if (zone.zone.isNotEmpty) ...[
+          const SizedBox(width: 7),
+          Text(
+            zone.zone,
+            style: TextStyle(
+              color: zone.color,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            zone.range,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.58),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 62,
+          child: Text(
+            zone.value,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.82),
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 36,
+          child: Text(
+            zone.ratio,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.64),
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricDetailRowsBox extends StatelessWidget {
+  const _MetricDetailRowsBox({required this.rows});
+
+  final List<_MetricDetailRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.015),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Column(
+        children: [
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      row.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Flexible(
+                    child: Text(
+                      row.value,
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.82),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricDetailFooter extends StatelessWidget {
+  const _MetricDetailFooter({required this.data});
+
+  final _MetricDetailData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            data.footerLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.70),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            data.footerValue,
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.88),
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        if (data.footerIcon != null) ...[
+          const SizedBox(width: 10),
+          Icon(data.footerIcon, color: Colors.white.withOpacity(0.62), size: 20),
+        ],
+      ],
+    );
+  }
+}
+
+class _MetricAreaChartPainter extends CustomPainter {
+  const _MetricAreaChartPainter({required this.data});
+
+  final _MetricDetailData data;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.chartValues.length < 2 || data.chartMax <= 0) return;
+    final chartRect = Rect.fromLTRB(42, 28, size.width - 12, size.height - 26);
+    final gridPaint = Paint()
+      ..color = Colors.white.withOpacity(0.075)
+      ..strokeWidth = 1;
+
+    _drawText(
+      canvas,
+      data.chartUnit,
+      Offset(0, 2),
+      color: Colors.white.withOpacity(0.56),
+      size: 13,
+      bold: true,
+    );
+
+    for (final tick in data.chartTicks) {
+      final y = chartRect.bottom -
+          chartRect.height * (tick / data.chartMax).clamp(0.0, 1.0);
+      canvas.drawLine(Offset(chartRect.left, y), Offset(chartRect.right, y), gridPaint);
+      _drawText(
+        canvas,
+        tick.toStringAsFixed(0),
+        Offset(6, y - 8),
+        color: Colors.white.withOpacity(0.48),
+        size: 13,
+      );
+    }
+
+    final path = Path();
+    for (var i = 0; i < data.chartValues.length; i++) {
+      final value = data.chartValues[i].clamp(0.0, data.chartMax).toDouble();
+      final x = chartRect.left + chartRect.width * i / (data.chartValues.length - 1);
+      final y = chartRect.bottom - chartRect.height * value / data.chartMax;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    final fill = Path.from(path)
+      ..lineTo(chartRect.right, chartRect.bottom)
+      ..lineTo(chartRect.left, chartRect.bottom)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            data.color.withOpacity(0.45),
+            data.color.withOpacity(0.06),
+            data.color.withOpacity(0.0),
+          ],
+        ).createShader(chartRect),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = data.color
+        ..strokeWidth = 2.2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    const labels = ['0:00', '45:00', '1:30:00', '2:15:00', '3:45:28'];
+    for (var i = 0; i < labels.length; i++) {
+      final x = chartRect.left + chartRect.width * i / (labels.length - 1);
+      _drawText(
+        canvas,
+        labels[i],
+        Offset(x, size.height - 14),
+        color: Colors.white.withOpacity(0.52),
+        size: 13,
+        center: true,
+        maxWidth: size.width,
+      );
+    }
+  }
+
+  void _drawText(
+    Canvas canvas,
+    String text,
+    Offset offset, {
+    required Color color,
+    required double size,
+    bool bold = false,
+    bool center = false,
+    double? maxWidth,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: size,
+          fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    var dx = offset.dx - (center ? painter.width / 2 : 0);
+    if (maxWidth != null) {
+      dx = dx.clamp(0.0, math.max(0.0, maxWidth - painter.width)).toDouble();
+    }
+    painter.paint(canvas, Offset(dx, offset.dy));
+  }
+
+  @override
+  bool shouldRepaint(covariant _MetricAreaChartPainter oldDelegate) {
+    return oldDelegate.data != data;
   }
 }
 
