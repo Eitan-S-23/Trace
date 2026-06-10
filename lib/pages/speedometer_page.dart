@@ -1190,10 +1190,7 @@ class _MetricDetailPanel extends StatelessWidget {
               const SizedBox(height: 20),
               SizedBox(
                 height: 190,
-                child: CustomPaint(
-                  painter: _MetricAreaChartPainter(data: data),
-                  child: const SizedBox.expand(),
-                ),
+                child: _InteractiveMetricAreaChart(data: data),
               ),
               const SizedBox(height: 18),
               if (data.zones.isNotEmpty)
@@ -1604,15 +1601,103 @@ class _MetricDetailFooter extends StatelessWidget {
   }
 }
 
-class _MetricAreaChartPainter extends CustomPainter {
-  const _MetricAreaChartPainter({required this.data});
+class _InteractiveMetricAreaChart extends StatefulWidget {
+  const _InteractiveMetricAreaChart({required this.data});
 
   final _MetricDetailData data;
 
   @override
+  State<_InteractiveMetricAreaChart> createState() =>
+      _InteractiveMetricAreaChartState();
+}
+
+class _InteractiveMetricAreaChartState
+    extends State<_InteractiveMetricAreaChart> {
+  Timer? _hideTimer;
+  int? _selectedIndex;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _hideSelection() {
+    if (_selectedIndex == null) return;
+    _hideTimer?.cancel();
+    setState(() => _selectedIndex = null);
+  }
+
+  void _selectAt(Offset localPosition, Size size) {
+    final index = _indexForPosition(localPosition, size);
+    if (index == null) {
+      _hideSelection();
+      return;
+    }
+    _hideTimer?.cancel();
+    setState(() => _selectedIndex = index);
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _selectedIndex = null);
+    });
+  }
+
+  int? _indexForPosition(Offset localPosition, Size size) {
+    final values = widget.data.chartValues;
+    if (values.length < 2) return null;
+    final rect = _metricAreaChartRect(size);
+    if (!rect.inflate(18).contains(localPosition)) return null;
+    final t =
+        ((localPosition.dx - rect.left) / rect.width).clamp(0.0, 1.0).toDouble();
+    return (t * (values.length - 1))
+        .round()
+        .clamp(0, values.length - 1)
+        .toInt();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        return TapRegion(
+          onTapOutside: (_) => _hideSelection(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) => _selectAt(details.localPosition, size),
+            onLongPressStart: (details) =>
+                _selectAt(details.localPosition, size),
+            onLongPressMoveUpdate: (details) =>
+                _selectAt(details.localPosition, size),
+            child: CustomPaint(
+              painter: _MetricAreaChartPainter(
+                data: widget.data,
+                selectedIndex: _selectedIndex,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+Rect _metricAreaChartRect(Size size) =>
+    Rect.fromLTRB(42, 28, size.width - 12, size.height - 26);
+
+class _MetricAreaChartPainter extends CustomPainter {
+  const _MetricAreaChartPainter({
+    required this.data,
+    this.selectedIndex,
+  });
+
+  final _MetricDetailData data;
+  final int? selectedIndex;
+
+  @override
   void paint(Canvas canvas, Size size) {
     if (data.chartValues.length < 2 || data.chartMax <= 0) return;
-    final chartRect = Rect.fromLTRB(42, 28, size.width - 12, size.height - 26);
+    final chartRect = _metricAreaChartRect(size);
     final gridPaint = Paint()
       ..color = Colors.white.withOpacity(0.075)
       ..strokeWidth = 1;
@@ -1691,6 +1776,100 @@ class _MetricAreaChartPainter extends CustomPainter {
         maxWidth: size.width,
       );
     }
+
+    _drawSelection(canvas, size, chartRect);
+  }
+
+  void _drawSelection(Canvas canvas, Size size, Rect chartRect) {
+    final index = selectedIndex;
+    if (index == null || index < 0 || index >= data.chartValues.length) return;
+    final value = data.chartValues[index].clamp(0.0, data.chartMax).toDouble();
+    final x = chartRect.left + chartRect.width * index / (data.chartValues.length - 1);
+    final y = chartRect.bottom - chartRect.height * value / data.chartMax;
+    final point = Offset(x, y);
+
+    canvas.drawLine(
+      Offset(x, chartRect.top),
+      Offset(x, chartRect.bottom),
+      Paint()
+        ..color = Colors.white.withOpacity(0.16)
+        ..strokeWidth = 1,
+    );
+    canvas.drawCircle(
+      point,
+      6,
+      Paint()
+        ..color = data.color
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawCircle(
+      point,
+      3,
+      Paint()
+        ..color = Colors.white.withOpacity(0.92)
+        ..style = PaintingStyle.fill,
+    );
+
+    final valueText =
+        '${_formatChartValue(value, data.chartUnit)} ${data.chartUnit}';
+    final timeText = _timeLabelForIndex(index, data.chartValues.length);
+    _drawTooltip(
+      canvas,
+      anchor: point,
+      size: size,
+      title: timeText,
+      value: valueText,
+      accent: data.color,
+    );
+  }
+
+  void _drawTooltip(
+    Canvas canvas, {
+    required Offset anchor,
+    required Size size,
+    required String title,
+    required String value,
+    required Color accent,
+  }) {
+    final titlePainter = _textPainter(
+      title,
+      color: Colors.white.withOpacity(0.66),
+      size: 11,
+      weight: FontWeight.w700,
+    );
+    final valuePainter = _textPainter(
+      value,
+      color: Colors.white,
+      size: 13,
+      weight: FontWeight.w900,
+    );
+    final width = math.max(titlePainter.width, valuePainter.width) + 24;
+    const height = 48.0;
+    final centerX = _clampDouble(anchor.dx, width / 2, size.width - width / 2);
+    final top = _clampDouble(anchor.dy - height - 16, 6, size.height - height - 6);
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(centerX - width / 2, top, width, height),
+      const Radius.circular(9),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()..color = const Color(0xFF303744).withOpacity(0.96),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = accent.withOpacity(0.32)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    titlePainter.paint(
+      canvas,
+      Offset(centerX - titlePainter.width / 2, top + 7),
+    );
+    valuePainter.paint(
+      canvas,
+      Offset(centerX - valuePainter.width / 2, top + 25),
+    );
   }
 
   void _drawText(
@@ -1723,8 +1902,81 @@ class _MetricAreaChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MetricAreaChartPainter oldDelegate) {
-    return oldDelegate.data != data;
+    return oldDelegate.data != data ||
+        oldDelegate.selectedIndex != selectedIndex;
   }
+}
+
+class _ChartTooltipRow {
+  const _ChartTooltipRow({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+}
+
+class _SeriesSelection {
+  const _SeriesSelection({
+    required this.point,
+    required this.value,
+    required this.color,
+  });
+
+  final Offset point;
+  final double value;
+  final Color color;
+}
+
+TextPainter _textPainter(
+  String text, {
+  required Color color,
+  required double size,
+  required FontWeight weight,
+}) {
+  return TextPainter(
+    text: TextSpan(
+      text: text,
+      style: TextStyle(
+        color: color,
+        fontSize: size,
+        fontWeight: weight,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+}
+
+String _formatChartValue(double value, String unit) {
+  if (unit == 'km/h' || unit == '°C') {
+    return value.toStringAsFixed(1);
+  }
+  return value.round().toString();
+}
+
+double _clampDouble(double value, double min, double max) {
+  if (max < min) return (min + max) / 2;
+  return value.clamp(min, max).toDouble();
+}
+
+String _timeLabelForIndex(int index, int length) {
+  if (length <= 1) return '0:00';
+  return _timeLabelForT(index / (length - 1));
+}
+
+String _timeLabelForT(double t) {
+  const totalSeconds = 3 * 3600 + 45 * 60 + 28;
+  final seconds = (totalSeconds * t.clamp(0.0, 1.0)).round();
+  final hours = seconds ~/ 3600;
+  final minutes = (seconds % 3600) ~/ 60;
+  final secs = seconds % 60;
+  if (hours > 0) {
+    return '$hours:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+  return '$minutes:${secs.toString().padLeft(2, '0')}';
 }
 
 class _SpeedAltitudePanel extends StatelessWidget {
@@ -1805,12 +2057,9 @@ class _SpeedAltitudePanel extends StatelessWidget {
           const SizedBox(height: 10),
           SizedBox(
             height: 116,
-            child: CustomPaint(
-              painter: _DualLineChartPainter(
-                speed: speedData,
-                altitude: altitudeData,
-              ),
-              child: const SizedBox.expand(),
+            child: _InteractiveDualLineChart(
+              speed: speedData,
+              altitude: altitudeData,
             ),
           ),
         ],
@@ -5492,8 +5741,8 @@ class _SparklinePainter extends CustomPainter {
   }
 }
 
-class _DualLineChartPainter extends CustomPainter {
-  const _DualLineChartPainter({
+class _InteractiveDualLineChart extends StatefulWidget {
+  const _InteractiveDualLineChart({
     required this.speed,
     required this.altitude,
   });
@@ -5501,12 +5750,97 @@ class _DualLineChartPainter extends CustomPainter {
   final List<double> speed;
   final List<double> altitude;
 
+  @override
+  State<_InteractiveDualLineChart> createState() =>
+      _InteractiveDualLineChartState();
+}
+
+class _InteractiveDualLineChartState extends State<_InteractiveDualLineChart> {
+  Timer? _hideTimer;
+  double? _selectedT;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _hideSelection() {
+    if (_selectedT == null) return;
+    _hideTimer?.cancel();
+    setState(() => _selectedT = null);
+  }
+
+  void _selectAt(Offset localPosition, Size size) {
+    final t = _tForPosition(localPosition, size);
+    if (t == null) {
+      _hideSelection();
+      return;
+    }
+    _hideTimer?.cancel();
+    setState(() => _selectedT = t);
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _selectedT = null);
+    });
+  }
+
+  double? _tForPosition(Offset localPosition, Size size) {
+    if (widget.speed.length < 2 && widget.altitude.length < 2) return null;
+    final rect = _dualLineChartRect(size);
+    if (!rect.inflate(18).contains(localPosition)) return null;
+    return ((localPosition.dx - rect.left) / rect.width)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        return TapRegion(
+          onTapOutside: (_) => _hideSelection(),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) => _selectAt(details.localPosition, size),
+            onLongPressStart: (details) =>
+                _selectAt(details.localPosition, size),
+            onLongPressMoveUpdate: (details) =>
+                _selectAt(details.localPosition, size),
+            child: CustomPaint(
+              painter: _DualLineChartPainter(
+                speed: widget.speed,
+                altitude: widget.altitude,
+                selectedT: _selectedT,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+Rect _dualLineChartRect(Size size) =>
+    Rect.fromLTRB(21, 24, size.width - 25, size.height - 15);
+
+class _DualLineChartPainter extends CustomPainter {
+  const _DualLineChartPainter({
+    required this.speed,
+    required this.altitude,
+    this.selectedT,
+  });
+
+  final List<double> speed;
+  final List<double> altitude;
+  final double? selectedT;
+
   static const _speedMax = 60.0;
   static const _altMax = 1500.0;
 
   // 两侧各仅留一列刻度的窄边距，曲线区尽量拉宽（贴近设计图近满屏宽）。
-  Rect _chartRect(Size size) =>
-      Rect.fromLTRB(21, 24, size.width - 25, size.height - 15);
+  Rect _chartRect(Size size) => _dualLineChartRect(size);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -5537,6 +5871,8 @@ class _DualLineChartPainter extends CustomPainter {
       final x = rect.left + rect.width * i / (labels.length - 1);
       _drawChartLabel(canvas, labels[i], Offset(x, size.height - 12), center: true);
     }
+
+    _drawSelection(canvas, size, rect);
   }
 
   void _drawTick(
@@ -5640,9 +5976,160 @@ class _DualLineChartPainter extends CustomPainter {
     painter.paint(canvas, Offset(offset.dx - (center ? painter.width / 2 : 0), offset.dy));
   }
 
+  void _drawSelection(Canvas canvas, Size size, Rect rect) {
+    final t = selectedT;
+    if (t == null) return;
+    final clampedT = t.clamp(0.0, 1.0).toDouble();
+    final x = rect.left + rect.width * clampedT;
+    canvas.drawLine(
+      Offset(x, rect.top),
+      Offset(x, rect.bottom),
+      Paint()
+        ..color = Colors.white.withOpacity(0.16)
+        ..strokeWidth = 1,
+    );
+
+    final speedSelection = _seriesSelection(
+      data: speed,
+      chartRect: rect,
+      color: const Color(0xFF2B9DFF),
+      maxValue: _speedMax,
+      t: clampedT,
+    );
+    final altitudeSelection = _seriesSelection(
+      data: altitude,
+      chartRect: rect,
+      color: const Color(0xFFA533FF),
+      maxValue: _altMax,
+      t: clampedT,
+    );
+
+    if (speedSelection != null) _drawSelectionPoint(canvas, speedSelection);
+    if (altitudeSelection != null) {
+      _drawSelectionPoint(canvas, altitudeSelection);
+    }
+
+    final title = _timeLabelForT(clampedT);
+    final rows = <_ChartTooltipRow>[
+      if (speedSelection != null)
+        _ChartTooltipRow(
+          label: '速度',
+          value: '${_formatChartValue(speedSelection.value, 'km/h')} km/h',
+          color: speedSelection.color,
+        ),
+      if (altitudeSelection != null)
+        _ChartTooltipRow(
+          label: '海拔',
+          value: '${_formatChartValue(altitudeSelection.value, 'm')} m',
+          color: altitudeSelection.color,
+        ),
+    ];
+    if (rows.isEmpty) return;
+
+    final anchor = speedSelection?.point ??
+        altitudeSelection?.point ??
+        Offset(x, rect.center.dy);
+    _drawMultiRowTooltip(canvas, size, anchor, title, rows);
+  }
+
+  _SeriesSelection? _seriesSelection({
+    required List<double> data,
+    required Rect chartRect,
+    required Color color,
+    required double maxValue,
+    required double t,
+  }) {
+    if (data.length < 2 || maxValue <= 0) return null;
+    final index = (t * (data.length - 1))
+        .round()
+        .clamp(0, data.length - 1)
+        .toInt();
+    final value = data[index].clamp(0.0, maxValue).toDouble();
+    final x = chartRect.left + chartRect.width * index / (data.length - 1);
+    final y = chartRect.bottom - chartRect.height * value / maxValue;
+    return _SeriesSelection(
+      point: Offset(x, y),
+      value: value,
+      color: color,
+    );
+  }
+
+  void _drawSelectionPoint(Canvas canvas, _SeriesSelection selection) {
+    canvas.drawCircle(
+      selection.point,
+      5,
+      Paint()..color = selection.color,
+    );
+    canvas.drawCircle(
+      selection.point,
+      2.4,
+      Paint()..color = Colors.white.withOpacity(0.92),
+    );
+  }
+
+  void _drawMultiRowTooltip(
+    Canvas canvas,
+    Size size,
+    Offset anchor,
+    String title,
+    List<_ChartTooltipRow> rows,
+  ) {
+    final titlePainter = _textPainter(
+      title,
+      color: Colors.white.withOpacity(0.66),
+      size: 10,
+      weight: FontWeight.w700,
+    );
+    final labelPainters = [
+      for (final row in rows)
+        _textPainter(
+          row.label,
+          color: row.color,
+          size: 11,
+          weight: FontWeight.w900,
+        ),
+    ];
+    final valuePainters = [
+      for (final row in rows)
+        _textPainter(
+          row.value,
+          color: Colors.white,
+          size: 12,
+          weight: FontWeight.w900,
+        ),
+    ];
+    var width = titlePainter.width + 24;
+    for (var i = 0; i < rows.length; i++) {
+      width =
+          math.max(width, labelPainters[i].width + valuePainters[i].width + 32);
+    }
+    final height = 28.0 + rows.length * 18.0;
+    final centerX = _clampDouble(anchor.dx, width / 2, size.width - width / 2);
+    final top = _clampDouble(anchor.dy - height - 14, 4, size.height - height - 4);
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(centerX - width / 2, top, width, height),
+      const Radius.circular(9),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()..color = const Color(0xFF303744).withOpacity(0.96),
+    );
+    titlePainter.paint(canvas, Offset(centerX - titlePainter.width / 2, top + 7));
+    for (var i = 0; i < rows.length; i++) {
+      final y = top + 24 + i * 18;
+      labelPainters[i].paint(canvas, Offset(rect.left + 11, y));
+      valuePainters[i].paint(
+        canvas,
+        Offset(rect.right - valuePainters[i].width - 11, y),
+      );
+    }
+  }
+
   @override
   bool shouldRepaint(covariant _DualLineChartPainter oldDelegate) {
-    return oldDelegate.speed != speed || oldDelegate.altitude != altitude;
+    return oldDelegate.speed != speed ||
+        oldDelegate.altitude != altitude ||
+        oldDelegate.selectedT != selectedT;
   }
 }
 
