@@ -1645,7 +1645,6 @@ class _InteractiveMetricAreaChartState
     final values = widget.data.chartValues;
     if (values.length < 2) return null;
     final rect = _metricAreaChartRect(size);
-    if (!rect.inflate(18).contains(localPosition)) return null;
     final t =
         ((localPosition.dx - rect.left) / rect.width).clamp(0.0, 1.0).toDouble();
     return (t * (values.length - 1))
@@ -1661,13 +1660,10 @@ class _InteractiveMetricAreaChartState
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         return TapRegion(
           onTapOutside: (_) => _hideSelection(),
-          child: GestureDetector(
+          child: Listener(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (details) => _selectAt(details.localPosition, size),
-            onLongPressStart: (details) =>
-                _selectAt(details.localPosition, size),
-            onLongPressMoveUpdate: (details) =>
-                _selectAt(details.localPosition, size),
+            onPointerDown: (event) => _selectAt(event.localPosition, size),
+            onPointerMove: (event) => _selectAt(event.localPosition, size),
             child: CustomPaint(
               painter: _MetricAreaChartPainter(
                 data: widget.data,
@@ -5787,7 +5783,6 @@ class _InteractiveDualLineChartState extends State<_InteractiveDualLineChart> {
   double? _tForPosition(Offset localPosition, Size size) {
     if (widget.speed.length < 2 && widget.altitude.length < 2) return null;
     final rect = _dualLineChartRect(size);
-    if (!rect.inflate(18).contains(localPosition)) return null;
     return ((localPosition.dx - rect.left) / rect.width)
         .clamp(0.0, 1.0)
         .toDouble();
@@ -5800,13 +5795,10 @@ class _InteractiveDualLineChartState extends State<_InteractiveDualLineChart> {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         return TapRegion(
           onTapOutside: (_) => _hideSelection(),
-          child: GestureDetector(
+          child: Listener(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (details) => _selectAt(details.localPosition, size),
-            onLongPressStart: (details) =>
-                _selectAt(details.localPosition, size),
-            onLongPressMoveUpdate: (details) =>
-                _selectAt(details.localPosition, size),
+            onPointerDown: (event) => _selectAt(event.localPosition, size),
+            onPointerMove: (event) => _selectAt(event.localPosition, size),
             child: CustomPaint(
               painter: _DualLineChartPainter(
                 speed: widget.speed,
