@@ -5213,6 +5213,7 @@ class _RouteListCardState extends State<_RouteListCard> {
                                   climb: climb,
                                   duration: duration,
                                   difficulty: difficulty,
+                                  variant: variant,
                                 ),
                               ),
                             ],
