@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
+import 'package:share_plus/share_plus.dart';
 import '../controllers/ble_controller.dart';
 
 // AD Type data structure
@@ -60,7 +61,7 @@ class DeviceDetailPage extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.share),
-            onPressed: () => _shareDeviceInfo(controller),
+            onPressed: () => _shareDeviceInfo(context, controller),
           ),
         ],
       ),
@@ -733,7 +734,10 @@ class DeviceDetailPage extends StatelessWidget {
     }
   }
 
-  void _shareDeviceInfo(BleController controller) {
+  Future<void> _shareDeviceInfo(
+    BuildContext context,
+    BleController controller,
+  ) async {
     final deviceInfo = '''
 设备名称: ${controller.getDeviceName(device)}
 设备ID: ${controller.getDeviceId(device)}
@@ -742,8 +746,32 @@ class DeviceDetailPage extends StatelessWidget {
 服务数量: ${controller.getServiceUuids(device).length}
 ''';
 
-    Clipboard.setData(ClipboardData(text: deviceInfo));
+    try {
+      final result = await SharePlus.instance.share(
+        ShareParams(
+          title: '设备信息',
+          subject: '设备信息',
+          text: deviceInfo,
+          sharePositionOrigin: _sharePositionOrigin(context),
+        ),
+      );
+      if (result.status == ShareResultStatus.unavailable) {
+        await _copyDeviceInfo(deviceInfo);
+      }
+    } catch (_) {
+      await _copyDeviceInfo(deviceInfo);
+    }
+  }
+
+  Future<void> _copyDeviceInfo(String deviceInfo) async {
+    await Clipboard.setData(ClipboardData(text: deviceInfo));
     Get.snackbar('提示', '设备信息已复制到剪贴板', snackPosition: SnackPosition.BOTTOM);
+  }
+
+  Rect? _sharePositionOrigin(BuildContext context) {
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return null;
+    return renderObject.localToGlobal(Offset.zero) & renderObject.size;
   }
 
   Widget _buildRawAdvertisementDataCard(ScanResult scanResult) {

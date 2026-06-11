@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../controllers/ride_controller.dart';
 import '../models/ride_models.dart';
@@ -292,7 +294,7 @@ class _ActivityHeroCard extends StatelessWidget {
                       const SizedBox(height: 10),
                       _RoundIconButton(
                         icon: Icons.share_outlined,
-                        onTap: () => _showUiMessage('分享路线', '路线分享入口已激活'),
+                        onTap: () => _shareCurrentRide(context, controller),
                       ),
                     ],
                   ),
@@ -5007,9 +5009,25 @@ class _RouteListCard extends StatelessWidget {
                               color: Colors.white.withOpacity(0.68),
                             ),
                             const SizedBox(width: 28),
-                            Icon(
-                              Icons.share_outlined,
-                              color: Colors.white.withOpacity(0.68),
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(
+                                width: 28,
+                                height: 28,
+                              ),
+                              onPressed: () => _shareRouteSummary(
+                                context,
+                                title: title,
+                                date: date,
+                                distance: distance,
+                                climb: climb,
+                                duration: duration,
+                                difficulty: difficulty,
+                              ),
+                              icon: Icon(
+                                Icons.share_outlined,
+                                color: Colors.white.withOpacity(0.68),
+                              ),
                             ),
                             const SizedBox(width: 28),
                             Icon(
@@ -5255,8 +5273,15 @@ class _RideRouteDetailPage extends StatelessWidget {
                               bottom: 10,
                               child: _RoundIconButton(
                                 icon: Icons.share_outlined,
-                                onTap: () =>
-                                    _showUiMessage('分享路线', '路线分享入口已激活'),
+                                onTap: () => _shareRouteSummary(
+                                  context,
+                                  title: title,
+                                  date: date,
+                                  distance: distance,
+                                  climb: climb,
+                                  duration: duration,
+                                  difficulty: difficulty,
+                                ),
                               ),
                             ),
                           ],
@@ -7863,6 +7888,81 @@ void _showUiMessage(String title, String message) {
     message,
     snackPosition: SnackPosition.BOTTOM,
     duration: const Duration(seconds: 2),
+  );
+}
+
+Future<void> _shareText(
+  BuildContext context, {
+  required String title,
+  required String text,
+}) async {
+  try {
+    final result = await SharePlus.instance.share(
+      ShareParams(
+        title: title,
+        subject: title,
+        text: text,
+        sharePositionOrigin: _sharePositionOrigin(context),
+      ),
+    );
+    if (result.status == ShareResultStatus.unavailable) {
+      await _copyShareText(text);
+    }
+  } catch (_) {
+    await _copyShareText(text);
+  }
+}
+
+Future<void> _copyShareText(String text) async {
+  await Clipboard.setData(ClipboardData(text: text));
+  _showUiMessage('分享不可用', '内容已复制到剪贴板');
+}
+
+Rect? _sharePositionOrigin(BuildContext context) {
+  final renderObject = context.findRenderObject();
+  if (renderObject is! RenderBox || !renderObject.hasSize) return null;
+  return renderObject.localToGlobal(Offset.zero) & renderObject.size;
+}
+
+Future<void> _shareCurrentRide(
+  BuildContext context,
+  RideController controller,
+) {
+  final sample = _RideSample.from(controller);
+  return _shareRouteSummary(
+    context,
+    title: '户外骑行',
+    date: '2024/05/18  08:32',
+    distance: sample.distanceText,
+    climb: sample.climbText,
+    duration: sample.durationText,
+    difficulty: '中等',
+  );
+}
+
+Future<void> _shareRouteSummary(
+  BuildContext context, {
+  required String title,
+  required String date,
+  required String distance,
+  required String climb,
+  required String duration,
+  required String difficulty,
+}) {
+  final text = '''
+Trace 路线分享
+$title
+日期: $date
+距离: $distance km
+爬升: $climb m
+用时: $duration
+难度: $difficulty
+''';
+
+  return _shareText(
+    context,
+    title: '分享路线 - $title',
+    text: text,
   );
 }
 
