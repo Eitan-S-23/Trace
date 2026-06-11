@@ -2838,26 +2838,14 @@ Future<DateTime?> _showStatsMonthPicker(
     context,
     StatefulBuilder(
       builder: (context, setDialogState) {
-        final months = [
-          for (var i = -3; i <= 3; i++)
-            DateTime(pending.year, pending.month + i),
-        ];
         return _StatsPickerFrame(
           title: '选择月',
           onConfirm: () => Navigator.of(context).pop(pending),
           child: SizedBox(
             height: 360,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (final month in months)
-                  _StatsPickerListItem(
-                    label: _formatChineseMonth(month),
-                    selected:
-                        month.year == pending.year && month.month == pending.month,
-                    onTap: () => setDialogState(() => pending = month),
-                  ),
-              ],
+            child: _StatsScrollableMonthList(
+              selectedMonth: pending,
+              onSelect: (month) => setDialogState(() => pending = month),
             ),
           ),
         );
@@ -2876,22 +2864,14 @@ Future<int?> _showStatsYearPicker(
     context,
     StatefulBuilder(
       builder: (context, setDialogState) {
-        final years = [for (var i = -2; i <= 3; i++) pending + i];
         return _StatsPickerFrame(
           title: '选择年',
           onConfirm: () => Navigator.of(context).pop(pending),
           child: SizedBox(
             height: 390,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (final year in years)
-                  _StatsPickerListItem(
-                    label: '$year 年',
-                    selected: year == pending,
-                    onTap: () => setDialogState(() => pending = year),
-                  ),
-              ],
+            child: _StatsScrollableYearList(
+              selectedYear: pending,
+              onSelect: (year) => setDialogState(() => pending = year),
             ),
           ),
         );
@@ -2907,6 +2887,8 @@ Future<_StatsDateRange?> _showStatsAllPicker(
 }) {
   var pendingStart = initialStart;
   var pendingEnd = initialEnd;
+  var visibleMonth = DateTime(initialStart.year, initialStart.month);
+  var editingStart = true;
 
   return _showStatsDialog<_StatsDateRange>(
     context,
@@ -2918,63 +2900,90 @@ Future<_StatsDateRange?> _showStatsAllPicker(
             _StatsDateRange(start: pendingStart, end: pendingEnd),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 28, 14, 16),
+            padding: const EdgeInsets.fromLTRB(2, 12, 2, 4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatsRangeDateRow(
-                  label: '开始日期',
-                  value: _formatChineseDate(pendingStart),
-                  onTap: () async {
-                    final selected = await _showStatsMonthPicker(
-                      context,
-                      initialMonth: pendingStart,
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatsRangeDateRow(
+                        label: '开始日期',
+                        value: _formatChineseDate(pendingStart),
+                        selected: editingStart,
+                        onTap: () => setDialogState(() {
+                          editingStart = true;
+                          visibleMonth = DateTime(
+                            pendingStart.year,
+                            pendingStart.month,
+                          );
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _StatsRangeDateRow(
+                        label: '结束日期',
+                        value: _formatChineseDate(pendingEnd),
+                        selected: !editingStart,
+                        onTap: () => setDialogState(() {
+                          editingStart = false;
+                          visibleMonth = DateTime(
+                            pendingEnd.year,
+                            pendingEnd.month,
+                          );
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _StatsMonthHeader(
+                  label: _formatChineseMonth(visibleMonth),
+                  onPrevious: () => setDialogState(() {
+                    visibleMonth = DateTime(
+                      visibleMonth.year,
+                      visibleMonth.month - 1,
                     );
-                    if (selected == null) return;
-                    setDialogState(() {
-                      pendingStart = DateTime(selected.year, selected.month);
+                  }),
+                  onNext: () => setDialogState(() {
+                    visibleMonth = DateTime(
+                      visibleMonth.year,
+                      visibleMonth.month + 1,
+                    );
+                  }),
+                ),
+                const SizedBox(height: 14),
+                _StatsSingleDayCalendar(
+                  visibleMonth: visibleMonth,
+                  selectedStart: pendingStart,
+                  selectedEnd: pendingEnd,
+                  onSelect: (date) => setDialogState(() {
+                    final selectedDay = DateTime(date.year, date.month, date.day);
+                    visibleMonth = DateTime(selectedDay.year, selectedDay.month);
+                    if (editingStart) {
+                      pendingStart = selectedDay;
                       if (pendingStart.isAfter(pendingEnd)) {
-                        pendingEnd = DateTime(
-                          selected.year,
-                          selected.month,
-                          _daysInMonth(selected.year, selected.month),
-                        );
+                        pendingEnd = selectedDay;
                       }
-                    });
-                  },
-                ),
-                const SizedBox(height: 24),
-                _StatsRangeDateRow(
-                  label: '结束日期',
-                  value: _formatChineseDate(pendingEnd),
-                  onTap: () async {
-                    final selected = await _showStatsMonthPicker(
-                      context,
-                      initialMonth: pendingEnd,
-                    );
-                    if (selected == null) return;
-                    setDialogState(() {
-                      pendingEnd = DateTime(
-                        selected.year,
-                        selected.month,
-                        _daysInMonth(selected.year, selected.month),
-                      );
+                      editingStart = false;
+                    } else {
+                      pendingEnd = selectedDay;
                       if (pendingEnd.isBefore(pendingStart)) {
-                        pendingStart = DateTime(selected.year, selected.month);
+                        pendingStart = selectedDay;
                       }
-                    });
-                  },
+                    }
+                  }),
                 ),
-                const SizedBox(height: 36),
+                const SizedBox(height: 18),
                 Center(
                   child: Text(
                     '已选择：${_formatChineseDate(pendingStart)} - '
                     '${_formatChineseDate(pendingEnd)}',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.58),
-                      fontSize: 15,
+                      color: Colors.white.withOpacity(0.62),
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -2986,6 +2995,274 @@ Future<_StatsDateRange?> _showStatsAllPicker(
       },
     ),
   );
+}
+
+const double _statsPickerItemExtent = 58;
+
+class _StatsScrollableMonthList extends StatefulWidget {
+  const _StatsScrollableMonthList({
+    required this.selectedMonth,
+    required this.onSelect,
+  });
+
+  final DateTime selectedMonth;
+  final ValueChanged<DateTime> onSelect;
+
+  @override
+  State<_StatsScrollableMonthList> createState() =>
+      _StatsScrollableMonthListState();
+}
+
+class _StatsScrollableMonthListState extends State<_StatsScrollableMonthList> {
+  late final DateTime _firstMonth;
+  late final int _monthCount;
+  late final ScrollController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstMonth = DateTime(widget.selectedMonth.year - 8);
+    _monthCount = 17 * 12;
+    final initialIndex = _monthIndex(widget.selectedMonth);
+    _controller = ScrollController(
+      initialScrollOffset: math.max(
+        0.0,
+        (initialIndex - 3) * _statsPickerItemExtent,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  int _monthIndex(DateTime month) {
+    return (month.year - _firstMonth.year) * 12 +
+        month.month -
+        _firstMonth.month;
+  }
+
+  DateTime _monthAt(int index) {
+    return DateTime(_firstMonth.year, _firstMonth.month + index);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      controller: _controller,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      itemExtent: _statsPickerItemExtent,
+      itemCount: _monthCount,
+      itemBuilder: (context, index) {
+        final month = _monthAt(index);
+        return _StatsPickerListItem(
+          label: _formatChineseMonth(month),
+          selected: month.year == widget.selectedMonth.year &&
+              month.month == widget.selectedMonth.month,
+          onTap: () => widget.onSelect(month),
+        );
+      },
+    );
+  }
+}
+
+class _StatsScrollableYearList extends StatefulWidget {
+  const _StatsScrollableYearList({
+    required this.selectedYear,
+    required this.onSelect,
+  });
+
+  final int selectedYear;
+  final ValueChanged<int> onSelect;
+
+  @override
+  State<_StatsScrollableYearList> createState() =>
+      _StatsScrollableYearListState();
+}
+
+class _StatsScrollableYearListState extends State<_StatsScrollableYearList> {
+  late final int _firstYear;
+  late final int _yearCount;
+  late final ScrollController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstYear = widget.selectedYear - 50;
+    _yearCount = 101;
+    final initialIndex = widget.selectedYear - _firstYear;
+    _controller = ScrollController(
+      initialScrollOffset: math.max(
+        0.0,
+        (initialIndex - 3) * _statsPickerItemExtent,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      controller: _controller,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      itemExtent: _statsPickerItemExtent,
+      itemCount: _yearCount,
+      itemBuilder: (context, index) {
+        final year = _firstYear + index;
+        return _StatsPickerListItem(
+          label: '$year 年',
+          selected: year == widget.selectedYear,
+          onTap: () => widget.onSelect(year),
+        );
+      },
+    );
+  }
+}
+
+class _StatsSingleDayCalendar extends StatelessWidget {
+  const _StatsSingleDayCalendar({
+    required this.visibleMonth,
+    required this.selectedStart,
+    required this.selectedEnd,
+    required this.onSelect,
+  });
+
+  final DateTime visibleMonth;
+  final DateTime selectedStart;
+  final DateTime selectedEnd;
+  final ValueChanged<DateTime> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    final weeks = _calendarWeeksForMonth(visibleMonth);
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (final weekday in weekdays)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    weekday,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.76),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        for (final week in weeks)
+          SizedBox(
+            height: 42,
+            child: Row(
+              children: [
+                for (final day in week)
+                  _StatsRangeDayCell(
+                    day: day,
+                    visibleMonth: visibleMonth,
+                    selectedStart: selectedStart,
+                    selectedEnd: selectedEnd,
+                    onSelect: onSelect,
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _StatsRangeDayCell extends StatelessWidget {
+  const _StatsRangeDayCell({
+    required this.day,
+    required this.visibleMonth,
+    required this.selectedStart,
+    required this.selectedEnd,
+    required this.onSelect,
+  });
+
+  final DateTime day;
+  final DateTime visibleMonth;
+  final DateTime selectedStart;
+  final DateTime selectedEnd;
+  final ValueChanged<DateTime> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final inMonth = day.month == visibleMonth.month;
+    final isStart = _isSameDate(day, selectedStart);
+    final isEnd = _isSameDate(day, selectedEnd);
+    final inRange = !day.isBefore(selectedStart) && !day.isAfter(selectedEnd);
+    final selected = isStart || isEnd;
+
+    return Expanded(
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => onSelect(day),
+        child: SizedBox(
+          height: 42,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (inRange)
+                Positioned.fill(
+                  left: isStart ? 12 : 0,
+                  right: isEnd ? 12 : 0,
+                  top: 7,
+                  bottom: 7,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _RideColors.orange.withOpacity(0.16),
+                      borderRadius: BorderRadius.horizontal(
+                        left: Radius.circular(isStart ? 14 : 0),
+                        right: Radius.circular(isEnd ? 14 : 0),
+                      ),
+                    ),
+                  ),
+                ),
+              Container(
+                width: selected ? 30 : 28,
+                height: selected ? 30 : 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected ? _RideColors.orange : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  day.day.toString(),
+                  style: TextStyle(
+                    color: selected
+                        ? Colors.black.withOpacity(0.86)
+                        : inRange
+                            ? Colors.white.withOpacity(0.92)
+                            : Colors.white.withOpacity(inMonth ? 0.76 : 0.42),
+                    fontSize: 14,
+                    fontWeight: selected || inRange
+                        ? FontWeight.w900
+                        : FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _StatsPickerFrame extends StatelessWidget {
@@ -3309,11 +3586,13 @@ class _StatsRangeDateRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onTap,
+    this.selected = false,
   });
 
   final String label;
   final String value;
   final VoidCallback onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -3333,30 +3612,43 @@ class _StatsRangeDateRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(15),
           onTap: onTap,
           child: Container(
-            height: 58,
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            height: 54,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
+              color: selected
+                  ? _RideColors.orange.withOpacity(0.14)
+                  : Colors.white.withOpacity(0.06),
               borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                color: selected
+                    ? _RideColors.orange.withOpacity(0.78)
+                    : Colors.white.withOpacity(0.07),
+              ),
             ),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w800,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
                 Icon(
-                  Icons.chevron_right,
-                  color: Colors.white.withOpacity(0.36),
-                  size: 28,
+                  selected ? Icons.edit_calendar : Icons.calendar_month,
+                  color: selected
+                      ? _RideColors.orange
+                      : Colors.white.withOpacity(0.36),
+                  size: 21,
                 ),
               ],
             ),
@@ -3401,10 +3693,6 @@ String _formatChineseDate(DateTime date) {
 
 String _formatChineseMonth(DateTime date) {
   return '${date.year}年${date.month}月';
-}
-
-int _daysInMonth(int year, int month) {
-  return DateTime(year, month + 1, 0).day;
 }
 
 class _StatsOverview extends StatelessWidget {
