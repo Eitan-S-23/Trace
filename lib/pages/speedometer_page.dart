@@ -566,7 +566,7 @@ class _MetricTile extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
           child: _GlassPanel(
-            padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+            padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
             child: SizedBox(
               height: 80,
               child: Column(
@@ -575,35 +575,37 @@ class _MetricTile extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        width: 22,
-                        height: 22,
+                        width: 18,
+                        height: 18,
                         decoration: BoxDecoration(
                           color: color.withOpacity(0.13),
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: color.withOpacity(0.90),
-                            width: 1.6,
+                            width: 1.2,
                           ),
                         ),
-                        child: Icon(icon, color: color, size: 12),
+                        child: Icon(icon, color: color, size: 10),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
+                        child: SizedBox(
+                          height: 14,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              softWrap: false,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      Icon(
-                        Icons.north_east,
-                        color: color.withOpacity(0.86),
-                        size: 12,
                       ),
                     ],
                   ),
@@ -635,14 +637,22 @@ class _MetricTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    footnote,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.58),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                  SizedBox(
+                    height: 12,
+                    width: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        footnote,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.58),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                   const Spacer(),
