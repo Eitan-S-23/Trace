@@ -1,14 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
-import 'dart:ui' as ui;
 
-import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8229,7 +8224,16 @@ Future<void> _shareRouteSummary(
   int variant = 0,
 }) async {
   final shareTitle = '分享路线 - $title';
-  final summary = _routeSummaryText(
+  final shareUrl = _routeShareUrl(
+    title: title,
+    date: date,
+    distance: distance,
+    climb: climb,
+    duration: duration,
+    difficulty: difficulty,
+    variant: variant,
+  );
+  final summaryText = _routeSummaryText(
     title: title,
     date: date,
     distance: distance,
@@ -8237,41 +8241,12 @@ Future<void> _shareRouteSummary(
     duration: duration,
     difficulty: difficulty,
   );
+  final summary = '$summaryText\n$shareUrl';
 
-  try {
-    final cardFile = await _createRouteShareCard(
-      title: title,
-      date: date,
-      distance: distance,
-      climb: climb,
-      duration: duration,
-      difficulty: difficulty,
-      variant: variant,
-    );
-    final result = await SharePlus.instance.share(
-      ShareParams(
-        title: shareTitle,
-        subject: shareTitle,
-        text: summary,
-        files: [
-          XFile(
-            cardFile.path,
-            mimeType: 'image/png',
-            name: 'trace-route-card.png',
-          ),
-        ],
-        sharePositionOrigin: _sharePositionOrigin(context),
-      ),
-    );
-    if (result.status == ShareResultStatus.unavailable) {
-      await _shareText(context, title: shareTitle, text: summary);
-    }
-  } catch (_) {
-    await _shareText(context, title: shareTitle, text: summary);
-  }
+  return _shareText(context, title: shareTitle, text: summary);
 }
 
-Future<File> _createRouteShareCard({
+String _routeShareUrl({
   required String title,
   required String date,
   required String distance,
@@ -8279,251 +8254,16 @@ Future<File> _createRouteShareCard({
   required String duration,
   required String difficulty,
   required int variant,
-}) async {
-  const width = 900.0;
-  const height = 540.0;
-  final recorder = ui.PictureRecorder();
-  final canvas = Canvas(recorder);
-  final size = const Size(width, height);
-  final cardRect = Offset.zero & size;
-
-  final background = Paint()
-    ..shader = const LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        Color(0xFF1C2530),
-        Color(0xFF080D14),
-      ],
-    ).createShader(cardRect);
-  canvas.drawRect(cardRect, background);
-
-  final mapRect = Rect.fromLTWH(32, 28, width - 64, 286);
-  canvas.save();
-  canvas.clipRRect(RRect.fromRectAndRadius(mapRect, const Radius.circular(28)));
-  canvas.translate(mapRect.left, mapRect.top);
-  _RouteMapPainter(variant: variant).paint(canvas, mapRect.size);
-  canvas.restore();
-
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(mapRect, const Radius.circular(28)),
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..color = Colors.white.withOpacity(0.10),
-  );
-
-  final mapOverlay = Paint()
-    ..shader = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        Colors.transparent,
-        const Color(0xFF080D14).withOpacity(0.72),
-      ],
-    ).createShader(mapRect);
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(mapRect, const Radius.circular(28)),
-    mapOverlay,
-  );
-
-  _drawShareText(
-    canvas,
-    'TRACE ROUTE',
-    const Offset(58, 52),
-    TextStyle(
-      color: Colors.white.withOpacity(0.72),
-      fontSize: 22,
-      fontWeight: FontWeight.w900,
-    ),
-    maxWidth: 220,
-  );
-
-  final difficultyRect = Rect.fromLTWH(width - 198, 48, 136, 42);
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(difficultyRect, const Radius.circular(21)),
-    Paint()..color = _RideColors.orange.withOpacity(0.18),
-  );
-  canvas.drawRRect(
-    RRect.fromRectAndRadius(difficultyRect, const Radius.circular(21)),
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..color = _RideColors.orange.withOpacity(0.88),
-  );
-  _drawShareText(
-    canvas,
-    '难度 $difficulty',
-    Offset(difficultyRect.left, difficultyRect.top + 10),
-    const TextStyle(
-      color: _RideColors.orange,
-      fontSize: 18,
-      fontWeight: FontWeight.w900,
-    ),
-    maxWidth: difficultyRect.width,
-    textAlign: TextAlign.center,
-  );
-
-  _drawShareText(
-    canvas,
-    title,
-    const Offset(58, 220),
-    const TextStyle(
-      color: Colors.white,
-      fontSize: 44,
-      fontWeight: FontWeight.w900,
-      height: 1.05,
-    ),
-    maxWidth: 580,
-  );
-  _drawShareText(
-    canvas,
-    date,
-    const Offset(60, 274),
-    TextStyle(
-      color: Colors.white.withOpacity(0.68),
-      fontSize: 22,
-      fontWeight: FontWeight.w700,
-    ),
-    maxWidth: 360,
-  );
-
-  final metricTop = 344.0;
-  final metricWidth = (width - 64 - 36) / 4;
-  final metrics = [
-    ('距离', distance, 'km', const Color(0xFF62D729)),
-    ('爬升', climb, 'm', const Color(0xFFFFA324)),
-    ('用时', duration, '', const Color(0xFF55B7FF)),
-    ('难度', difficulty, '', _RideColors.orange),
-  ];
-  for (var i = 0; i < metrics.length; i++) {
-    final rect = Rect.fromLTWH(
-      32 + i * (metricWidth + 12),
-      metricTop,
-      metricWidth,
-      128,
-    );
-    final metric = metrics[i];
-    _drawShareMetric(
-      canvas,
-      rect: rect,
-      label: metric.$1,
-      value: metric.$2,
-      unit: metric.$3,
-      accent: metric.$4,
-    );
-  }
-
-  _drawShareText(
-    canvas,
-    'Trace 码表',
-    const Offset(58, 492),
-    TextStyle(
-      color: Colors.white.withOpacity(0.46),
-      fontSize: 18,
-      fontWeight: FontWeight.w800,
-    ),
-    maxWidth: 180,
-  );
-
-  final picture = recorder.endRecording();
-  final image = await picture.toImage(width.toInt(), height.toInt());
-  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-  image.dispose();
-  if (byteData == null) {
-    throw StateError('Unable to encode route share card.');
-  }
-
-  final bytes = byteData.buffer.asUint8List();
-  final directory = await getTemporaryDirectory();
-  final file = File(
-    '${directory.path}${Platform.pathSeparator}'
-    'trace-route-card-${DateTime.now().millisecondsSinceEpoch}.png',
-  );
-  await file.writeAsBytes(bytes, flush: true);
-  return file;
-}
-
-void _drawShareMetric(
-  Canvas canvas, {
-  required Rect rect,
-  required String label,
-  required String value,
-  required String unit,
-  required Color accent,
 }) {
-  final radius = RRect.fromRectAndRadius(rect, const Radius.circular(20));
-  canvas.drawRRect(
-    radius,
-    Paint()..color = Colors.white.withOpacity(0.07),
-  );
-  canvas.drawRRect(
-    radius,
-    Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = Colors.white.withOpacity(0.10),
-  );
-  canvas.drawCircle(
-    Offset(rect.left + 28, rect.top + 30),
-    6,
-    Paint()..color = accent,
-  );
-  _drawShareText(
-    canvas,
-    label,
-    Offset(rect.left + 46, rect.top + 19),
-    TextStyle(
-      color: Colors.white.withOpacity(0.62),
-      fontSize: 18,
-      fontWeight: FontWeight.w800,
-    ),
-    maxWidth: rect.width - 58,
-  );
-  _drawShareText(
-    canvas,
-    value,
-    Offset(rect.left + 20, rect.top + 58),
-    const TextStyle(
-      color: Colors.white,
-      fontSize: 32,
-      fontWeight: FontWeight.w900,
-      height: 1.0,
-    ),
-    maxWidth: rect.width - 40,
-  );
-  if (unit.isNotEmpty) {
-    _drawShareText(
-      canvas,
-      unit,
-      Offset(rect.left + 22, rect.top + 94),
-      TextStyle(
-        color: Colors.white.withOpacity(0.58),
-        fontSize: 17,
-        fontWeight: FontWeight.w800,
-      ),
-      maxWidth: rect.width - 44,
-    );
-  }
-}
-
-void _drawShareText(
-  Canvas canvas,
-  String text,
-  Offset offset,
-  TextStyle style, {
-  required double maxWidth,
-  int maxLines = 1,
-  TextAlign textAlign = TextAlign.left,
-}) {
-  final painter = TextPainter(
-    text: TextSpan(text: text, style: style),
-    textAlign: textAlign,
-    textDirection: TextDirection.ltr,
-    maxLines: maxLines,
-    ellipsis: '...',
-  )..layout(maxWidth: maxWidth);
-  painter.paint(canvas, offset);
+  return Uri.https('github.com', '/Eitan-S-23/Trace', {
+    'trace_route': title,
+    'date': date,
+    'distance_km': distance,
+    'climb_m': climb,
+    'duration': duration,
+    'difficulty': difficulty,
+    'variant': variant.toString(),
+  }).toString();
 }
 
 String _routeSummaryText({
