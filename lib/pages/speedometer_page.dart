@@ -295,7 +295,7 @@ class _ActivityHeroCard extends StatelessWidget {
                       const SizedBox(height: 10),
                       _RoundIconButton(
                         icon: Icons.share_outlined,
-                        onTap: () => _shareCurrentRide(context, controller),
+                        onTap: () => _shareCurrentRide(context),
                       ),
                     ],
                   ),
@@ -5199,12 +5199,6 @@ class _RouteListCardState extends State<_RouteListCard> {
                                 onTap: () => _shareRouteSummary(
                                   context,
                                   title: title,
-                                  date: date,
-                                  distance: distance,
-                                  climb: climb,
-                                  duration: duration,
-                                  difficulty: difficulty,
-                                  variant: variant,
                                 ),
                               ),
                               const SizedBox(width: 18),
@@ -5219,7 +5213,6 @@ class _RouteListCardState extends State<_RouteListCard> {
                                   climb: climb,
                                   duration: duration,
                                   difficulty: difficulty,
-                                  variant: variant,
                                 ),
                               ),
                             ],
@@ -5547,12 +5540,6 @@ class _RideRouteDetailPage extends StatelessWidget {
                                 onTap: () => _shareRouteSummary(
                                   context,
                                   title: title,
-                                  date: date,
-                                  distance: distance,
-                                  climb: climb,
-                                  duration: duration,
-                                  difficulty: difficulty,
-                                  variant: variant,
                                 ),
                               ),
                             ),
@@ -8198,47 +8185,24 @@ Rect? _sharePositionOrigin(BuildContext context) {
 
 Future<void> _shareCurrentRide(
   BuildContext context,
-  RideController controller,
 ) {
-  final sample = _RideSample.from(controller);
   return _shareRouteSummary(
     context,
     title: '户外骑行',
-    date: '2024/05/18  08:32',
-    distance: sample.distanceText,
-    climb: sample.climbText,
-    duration: sample.durationText,
-    difficulty: '中等',
-    variant: 0,
   );
 }
 
 Future<void> _shareRouteSummary(
   BuildContext context, {
   required String title,
-  required String date,
-  required String distance,
-  required String climb,
-  required String duration,
-  required String difficulty,
-  int variant = 0,
 }) async {
   final shareTitle = '分享路线 - $title';
-  final shareUri = _routeShareUri(
-    title: title,
-    date: date,
-    distance: distance,
-    climb: climb,
-    duration: duration,
-    difficulty: difficulty,
-    variant: variant,
-  );
+  final shareUri = _routeShareUri();
 
   try {
     final result = await SharePlus.instance.share(
       ShareParams(
         title: shareTitle,
-        subject: shareTitle,
         uri: shareUri,
         sharePositionOrigin: _sharePositionOrigin(context),
       ),
@@ -8251,24 +8215,8 @@ Future<void> _shareRouteSummary(
   }
 }
 
-Uri _routeShareUri({
-  required String title,
-  required String date,
-  required String distance,
-  required String climb,
-  required String duration,
-  required String difficulty,
-  required int variant,
-}) {
-  return Uri.https('github.com', '/Eitan-S-23/Trace', {
-    'trace_route': title,
-    'date': date,
-    'distance_km': distance,
-    'climb_m': climb,
-    'duration': duration,
-    'difficulty': difficulty,
-    'variant': variant.toString(),
-  });
+Uri _routeShareUri() {
+  return Uri.https('github.com', '/Eitan-S-23/Trace');
 }
 
 String _routeSummaryText({
@@ -8357,12 +8305,6 @@ Future<void> _showRouteMoreActions(
                   _shareRouteSummary(
                     context,
                     title: title,
-                    date: date,
-                    distance: distance,
-                    climb: climb,
-                    duration: duration,
-                    difficulty: difficulty,
-                    variant: variant,
                   );
                 },
               ),
