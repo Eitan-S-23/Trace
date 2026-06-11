@@ -8224,7 +8224,7 @@ Future<void> _shareRouteSummary(
   int variant = 0,
 }) async {
   final shareTitle = '分享路线 - $title';
-  final shareUrl = _routeShareUrl(
+  final shareUri = _routeShareUri(
     title: title,
     date: date,
     distance: distance,
@@ -8233,20 +8233,25 @@ Future<void> _shareRouteSummary(
     difficulty: difficulty,
     variant: variant,
   );
-  final summaryText = _routeSummaryText(
-    title: title,
-    date: date,
-    distance: distance,
-    climb: climb,
-    duration: duration,
-    difficulty: difficulty,
-  );
-  final summary = '$summaryText\n$shareUrl';
 
-  return _shareText(context, title: shareTitle, text: summary);
+  try {
+    final result = await SharePlus.instance.share(
+      ShareParams(
+        title: shareTitle,
+        subject: shareTitle,
+        uri: shareUri,
+        sharePositionOrigin: _sharePositionOrigin(context),
+      ),
+    );
+    if (result.status == ShareResultStatus.unavailable) {
+      await _copyShareText(shareUri.toString());
+    }
+  } catch (_) {
+    await _copyShareText(shareUri.toString());
+  }
 }
 
-String _routeShareUrl({
+Uri _routeShareUri({
   required String title,
   required String date,
   required String distance,
@@ -8263,7 +8268,7 @@ String _routeShareUrl({
     'duration': duration,
     'difficulty': difficulty,
     'variant': variant.toString(),
-  }).toString();
+  });
 }
 
 String _routeSummaryText({
