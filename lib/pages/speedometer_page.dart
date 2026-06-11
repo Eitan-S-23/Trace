@@ -4750,23 +4750,7 @@ class _RoutesPageState extends State<_RoutesPage> {
             itemCount: _cards.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
-              final c = _cards[index];
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openRidePage(
-                  () => _RideRouteDetailPage(
-                    title: c.title,
-                    date: c.date,
-                    distance: c.distance,
-                    climb: c.climb,
-                    duration: c.duration,
-                    difficulty: c.difficulty,
-                    difficultyColor: c.difficultyColor,
-                    variant: c.variant,
-                  ),
-                ),
-                child: c,
-              );
+              return _cards[index];
             },
           ),
         ),
@@ -4895,7 +4879,7 @@ class _RouteSearchBar extends StatelessWidget {
   }
 }
 
-class _RouteListCard extends StatelessWidget {
+class _RouteListCard extends StatefulWidget {
   const _RouteListCard({
     required this.title,
     required this.date,
@@ -4917,13 +4901,52 @@ class _RouteListCard extends StatelessWidget {
   final int variant;
 
   @override
+  State<_RouteListCard> createState() => _RouteListCardState();
+}
+
+class _RouteListCardState extends State<_RouteListCard> {
+  var _favorited = false;
+
+  void _openRoute() {
+    _openRidePage(
+      () => _RideRouteDetailPage(
+        title: widget.title,
+        date: widget.date,
+        distance: widget.distance,
+        climb: widget.climb,
+        duration: widget.duration,
+        difficulty: widget.difficulty,
+        difficultyColor: widget.difficultyColor,
+        variant: widget.variant,
+      ),
+    );
+  }
+
+  void _toggleFavorite() {
+    setState(() => _favorited = !_favorited);
+    _showUiMessage(
+      '收藏',
+      _favorited ? '已收藏 ${widget.title}' : '已取消收藏 ${widget.title}',
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final title = widget.title;
+    final date = widget.date;
+    final distance = widget.distance;
+    final climb = widget.climb;
+    final duration = widget.duration;
+    final difficulty = widget.difficulty;
+    final difficultyColor = widget.difficultyColor;
+    final variant = widget.variant;
+
     return _GlassPanel(
       padding: EdgeInsets.zero,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 360;
-          final cardHeight = compact ? 194.0 : 176.0;
+          final cardHeight = compact ? 214.0 : 194.0;
           final mapWidth = compact ? 118.0 : 148.0;
           final titleSize = compact ? 18.0 : 20.0;
 
@@ -4931,15 +4954,19 @@ class _RouteListCard extends StatelessWidget {
             height: cardHeight,
             child: Row(
               children: [
-                SizedBox(
-                  width: mapWidth,
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.horizontal(
-                      left: Radius.circular(14),
-                    ),
-                    child: CustomPaint(
-                      painter: _RouteMapPainter(variant: variant),
-                      child: const SizedBox.expand(),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _openRoute,
+                  child: SizedBox(
+                    width: mapWidth,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(14),
+                      ),
+                      child: CustomPaint(
+                        painter: _RouteMapPainter(variant: variant),
+                        child: const SizedBox.expand(),
+                      ),
                     ),
                   ),
                 ),
@@ -4954,87 +4981,107 @@ class _RouteListCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: titleSize,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          date,
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.60),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            _RouteBadge(
-                              label: '公路',
-                              color: _RideColors.orange,
+                        Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _openRoute,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: titleSize,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  date,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.60),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    _RouteBadge(
+                                      label: '公路',
+                                      color: _RideColors.orange,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _RouteBadge(
+                                      label: '难度 $difficulty',
+                                      color: difficultyColor,
+                                    ),
+                                  ],
+                                ),
+                                const Spacer(),
+                                Wrap(
+                                  spacing: compact ? 10 : 14,
+                                  runSpacing: 4,
+                                  children: [
+                                    _RouteMetric(value: distance, unit: 'km'),
+                                    _RouteMetric(value: climb, unit: 'm'),
+                                    _RouteMetric(value: duration, unit: ''),
+                                  ],
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            _RouteBadge(
-                              label: '难度 $difficulty',
-                              color: difficultyColor,
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Wrap(
-                          spacing: compact ? 10 : 14,
-                          runSpacing: 4,
-                          children: [
-                            _RouteMetric(value: distance, unit: 'km'),
-                            _RouteMetric(value: climb, unit: 'm'),
-                            _RouteMetric(value: duration, unit: ''),
-                          ],
+                          ),
                         ),
                         Divider(
                           color: Colors.white.withOpacity(0.08),
-                          height: 18,
+                          height: 16,
                         ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Icon(
-                              Icons.star_border,
-                              color: Colors.white.withOpacity(0.68),
-                            ),
-                            const SizedBox(width: 28),
-                            IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints.tightFor(
-                                width: 28,
-                                height: 28,
+                        SizedBox(
+                          height: 34,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              _RouteActionButton(
+                                icon: _favorited
+                                    ? Icons.star
+                                    : Icons.star_border,
+                                active: _favorited,
+                                tooltip: '收藏',
+                                onTap: _toggleFavorite,
                               ),
-                              onPressed: () => _shareRouteSummary(
-                                context,
-                                title: title,
-                                date: date,
-                                distance: distance,
-                                climb: climb,
-                                duration: duration,
-                                difficulty: difficulty,
+                              const SizedBox(width: 18),
+                              _RouteActionButton(
+                                icon: Icons.share_outlined,
+                                tooltip: '分享',
+                                onTap: () => _shareRouteSummary(
+                                  context,
+                                  title: title,
+                                  date: date,
+                                  distance: distance,
+                                  climb: climb,
+                                  duration: duration,
+                                  difficulty: difficulty,
+                                ),
                               ),
-                              icon: Icon(
-                                Icons.share_outlined,
-                                color: Colors.white.withOpacity(0.68),
+                              const SizedBox(width: 18),
+                              _RouteActionButton(
+                                icon: Icons.more_horiz,
+                                tooltip: '更多',
+                                onTap: () => _showRouteMoreActions(
+                                  context,
+                                  title: title,
+                                  date: date,
+                                  distance: distance,
+                                  climb: climb,
+                                  duration: duration,
+                                  difficulty: difficulty,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 28),
-                            Icon(
-                              Icons.more_horiz,
-                              color: Colors.white.withOpacity(0.68),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -5044,6 +5091,37 @@ class _RouteListCard extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _RouteActionButton extends StatelessWidget {
+  const _RouteActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? _RideColors.orange : Colors.white.withOpacity(0.72);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(17),
+        onTap: onTap,
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(icon, color: color, size: 21),
+        ),
       ),
     );
   }
@@ -7949,7 +8027,29 @@ Future<void> _shareRouteSummary(
   required String duration,
   required String difficulty,
 }) {
-  final text = '''
+  return _shareText(
+    context,
+    title: '分享路线 - $title',
+    text: _routeSummaryText(
+      title: title,
+      date: date,
+      distance: distance,
+      climb: climb,
+      duration: duration,
+      difficulty: difficulty,
+    ),
+  );
+}
+
+String _routeSummaryText({
+  required String title,
+  required String date,
+  required String distance,
+  required String climb,
+  required String duration,
+  required String difficulty,
+}) {
+  return '''
 Trace 路线分享
 $title
 日期: $date
@@ -7958,12 +8058,126 @@ $title
 用时: $duration
 难度: $difficulty
 ''';
+}
 
-  return _shareText(
-    context,
-    title: '分享路线 - $title',
-    text: text,
+Future<void> _showRouteMoreActions(
+  BuildContext context, {
+  required String title,
+  required String date,
+  required String distance,
+  required String climb,
+  required String duration,
+  required String difficulty,
+}) {
+  final summary = _routeSummaryText(
+    title: title,
+    date: date,
+    distance: distance,
+    climb: climb,
+    duration: duration,
+    difficulty: difficulty,
   );
+
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      return SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF171D27),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.42),
+                blurRadius: 28,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _RouteMoreAction(
+                icon: Icons.send_to_mobile,
+                label: '发送到设备',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showUiMessage('发送到设备', '$title 已加入发送队列');
+                },
+              ),
+              _RouteMoreAction(
+                icon: Icons.copy,
+                label: '复制路线信息',
+                onTap: () async {
+                  Navigator.of(sheetContext).pop();
+                  await Clipboard.setData(ClipboardData(text: summary));
+                  _showUiMessage('复制成功', '路线信息已复制到剪贴板');
+                },
+              ),
+              _RouteMoreAction(
+                icon: Icons.share_outlined,
+                label: '分享路线',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _shareRouteSummary(
+                    context,
+                    title: title,
+                    date: date,
+                    distance: distance,
+                    climb: climb,
+                    duration: duration,
+                    difficulty: difficulty,
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _RouteMoreAction extends StatelessWidget {
+  const _RouteMoreAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: SizedBox(
+        height: 50,
+        child: Row(
+          children: [
+            const SizedBox(width: 8),
+            Icon(icon, color: _RideColors.orange, size: 22),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // 码表模块统一页面跳转：强制使用 Cupertino 横向滑动转场。
