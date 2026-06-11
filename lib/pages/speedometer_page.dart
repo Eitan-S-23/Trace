@@ -3016,7 +3016,7 @@ class _StatsScrollableMonthList extends StatefulWidget {
 class _StatsScrollableMonthListState extends State<_StatsScrollableMonthList> {
   late final DateTime _firstMonth;
   late final int _monthCount;
-  late final ScrollController _controller;
+  late final FixedExtentScrollController _controller;
 
   @override
   void initState() {
@@ -3024,12 +3024,7 @@ class _StatsScrollableMonthListState extends State<_StatsScrollableMonthList> {
     _firstMonth = DateTime(widget.selectedMonth.year - 8);
     _monthCount = 17 * 12;
     final initialIndex = _monthIndex(widget.selectedMonth);
-    _controller = ScrollController(
-      initialScrollOffset: math.max(
-        0.0,
-        (initialIndex - 3) * _statsPickerItemExtent,
-      ),
-    );
+    _controller = FixedExtentScrollController(initialItem: initialIndex);
   }
 
   @override
@@ -3050,21 +3045,38 @@ class _StatsScrollableMonthListState extends State<_StatsScrollableMonthList> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      controller: _controller,
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      itemExtent: _statsPickerItemExtent,
-      itemCount: _monthCount,
-      itemBuilder: (context, index) {
-        final month = _monthAt(index);
-        return _StatsPickerListItem(
-          label: _formatChineseMonth(month),
-          selected: month.year == widget.selectedMonth.year &&
-              month.month == widget.selectedMonth.month,
-          onTap: () => widget.onSelect(month),
-        );
-      },
+    return _StatsWheelViewport(
+      child: ListWheelScrollView.useDelegate(
+        controller: _controller,
+        physics: const FixedExtentScrollPhysics(),
+        itemExtent: _statsPickerItemExtent,
+        diameterRatio: 1.55,
+        perspective: 0.0025,
+        squeeze: 1.05,
+        overAndUnderCenterOpacity: 0.52,
+        onSelectedItemChanged: (index) => widget.onSelect(_monthAt(index)),
+        childDelegate: ListWheelChildBuilderDelegate(
+          childCount: _monthCount,
+          builder: (context, index) {
+            if (index < 0 || index >= _monthCount) return null;
+            final month = _monthAt(index);
+            final selected = month.year == widget.selectedMonth.year &&
+                month.month == widget.selectedMonth.month;
+            return _StatsWheelItem(
+              label: _formatChineseMonth(month),
+              selected: selected,
+              onTap: () {
+                _controller.animateToItem(
+                  index,
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                );
+                widget.onSelect(month);
+              },
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -3086,7 +3098,7 @@ class _StatsScrollableYearList extends StatefulWidget {
 class _StatsScrollableYearListState extends State<_StatsScrollableYearList> {
   late final int _firstYear;
   late final int _yearCount;
-  late final ScrollController _controller;
+  late final FixedExtentScrollController _controller;
 
   @override
   void initState() {
@@ -3094,12 +3106,7 @@ class _StatsScrollableYearListState extends State<_StatsScrollableYearList> {
     _firstYear = widget.selectedYear - 50;
     _yearCount = 101;
     final initialIndex = widget.selectedYear - _firstYear;
-    _controller = ScrollController(
-      initialScrollOffset: math.max(
-        0.0,
-        (initialIndex - 3) * _statsPickerItemExtent,
-      ),
-    );
+    _controller = FixedExtentScrollController(initialItem: initialIndex);
   }
 
   @override
@@ -3110,20 +3117,146 @@ class _StatsScrollableYearListState extends State<_StatsScrollableYearList> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      controller: _controller,
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      itemExtent: _statsPickerItemExtent,
-      itemCount: _yearCount,
-      itemBuilder: (context, index) {
-        final year = _firstYear + index;
-        return _StatsPickerListItem(
-          label: '$year 年',
-          selected: year == widget.selectedYear,
-          onTap: () => widget.onSelect(year),
-        );
-      },
+    return _StatsWheelViewport(
+      child: ListWheelScrollView.useDelegate(
+        controller: _controller,
+        physics: const FixedExtentScrollPhysics(),
+        itemExtent: _statsPickerItemExtent,
+        diameterRatio: 1.55,
+        perspective: 0.0025,
+        squeeze: 1.05,
+        overAndUnderCenterOpacity: 0.52,
+        onSelectedItemChanged: (index) => widget.onSelect(_firstYear + index),
+        childDelegate: ListWheelChildBuilderDelegate(
+          childCount: _yearCount,
+          builder: (context, index) {
+            if (index < 0 || index >= _yearCount) return null;
+            final year = _firstYear + index;
+            return _StatsWheelItem(
+              label: '$year 年',
+              selected: year == widget.selectedYear,
+              onTap: () {
+                _controller.animateToItem(
+                  index,
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                );
+                widget.onSelect(year);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsWheelViewport extends StatelessWidget {
+  const _StatsWheelViewport({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Positioned.fill(child: child),
+        IgnorePointer(
+          child: Center(
+            child: Container(
+              height: _statsPickerItemExtent,
+              margin: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                color: _RideColors.orange.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.symmetric(
+                  horizontal: BorderSide(
+                    color: _RideColors.orange.withOpacity(0.72),
+                    width: 1.2,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 56,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF1F2731),
+                    const Color(0xFF1F2731).withOpacity(0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 56,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    const Color(0xFF171F29),
+                    const Color(0xFF171F29).withOpacity(0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatsWheelItem extends StatelessWidget {
+  const _StatsWheelItem({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Center(
+        child: AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          style: TextStyle(
+            color: Colors.white.withOpacity(selected ? 0.98 : 0.46),
+            fontSize: selected ? 25 : 18,
+            fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+          ),
+        ),
+      ),
     );
   }
 }
