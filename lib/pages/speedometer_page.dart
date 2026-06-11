@@ -2328,6 +2328,11 @@ class _StatisticsPage extends StatefulWidget {
 
 class _StatisticsPageState extends State<_StatisticsPage> {
   var _periodIndex = 1; // 0 周 / 1 月 / 2 年 / 3 全部
+  DateTime _selectedWeekStart = DateTime(2024, 5, 12);
+  DateTime _selectedMonth = DateTime(2024, 5);
+  int _selectedYear = 2024;
+  DateTime _allStart = DateTime(2023, 1, 1);
+  DateTime _allEnd = DateTime(2024, 5, 18);
 
   // 周/全部 的总览为示例数据（统计页定位为示例驱动的设计复刻）。
   static const _weekStats = _RideStats(
@@ -2350,14 +2355,85 @@ class _StatisticsPageState extends State<_StatisticsPage> {
   String get _dateLabel {
     switch (_periodIndex) {
       case 0:
-        return '2024/05/12 - 05/18';
+        return '${_formatSlashDate(_selectedWeekStart)} - '
+            '${_formatSlashDate(_selectedWeekStart.add(const Duration(days: 6)))}';
       case 2:
-        return '2024年';
+        return '$_selectedYear年';
       case 3:
-        return '2023/01 - 2024/05';
+        return '${_formatSlashDate(_allStart)} - ${_formatSlashDate(_allEnd)}';
       case 1:
       default:
-        return '2024年5月';
+        return '${_selectedMonth.year}年${_selectedMonth.month}月';
+    }
+  }
+
+  bool get _canShiftDate => _periodIndex != 3;
+
+  void _shiftDate(int delta) {
+    if (!_canShiftDate) return;
+    setState(() {
+      switch (_periodIndex) {
+        case 0:
+          _selectedWeekStart =
+              _selectedWeekStart.add(Duration(days: 7 * delta));
+          break;
+        case 2:
+          _selectedYear += delta;
+          break;
+        case 1:
+        default:
+          _selectedMonth = DateTime(
+            _selectedMonth.year,
+            _selectedMonth.month + delta,
+          );
+          break;
+      }
+    });
+  }
+
+  Future<void> _openDatePicker() async {
+    switch (_periodIndex) {
+      case 0:
+        final selected = await _showStatsWeekPicker(
+          context,
+          initialWeekStart: _selectedWeekStart,
+        );
+        if (selected != null && mounted) {
+          setState(() => _selectedWeekStart = selected);
+        }
+        break;
+      case 2:
+        final selected = await _showStatsYearPicker(
+          context,
+          initialYear: _selectedYear,
+        );
+        if (selected != null && mounted) {
+          setState(() => _selectedYear = selected);
+        }
+        break;
+      case 3:
+        final selected = await _showStatsAllPicker(
+          context,
+          initialStart: _allStart,
+          initialEnd: _allEnd,
+        );
+        if (selected != null && mounted) {
+          setState(() {
+            _allStart = selected.start;
+            _allEnd = selected.end;
+          });
+        }
+        break;
+      case 1:
+      default:
+        final selected = await _showStatsMonthPicker(
+          context,
+          initialMonth: _selectedMonth,
+        );
+        if (selected != null && mounted) {
+          setState(() => _selectedMonth = selected);
+        }
+        break;
     }
   }
 
@@ -2377,7 +2453,13 @@ class _StatisticsPageState extends State<_StatisticsPage> {
                   onSelect: (index) => setState(() => _periodIndex = index),
                 ),
                 const SizedBox(height: 14),
-                _MonthSelector(label: _dateLabel),
+                _MonthSelector(
+                  label: _dateLabel,
+                  canShift: _canShiftDate,
+                  onPrevious: () => _shiftDate(-1),
+                  onNext: () => _shiftDate(1),
+                  onTapLabel: _openDatePicker,
+                ),
               ],
             ),
           ),
@@ -2570,30 +2652,759 @@ class _PeriodSegment extends StatelessWidget {
 }
 
 class _MonthSelector extends StatelessWidget {
-  const _MonthSelector({required this.label});
+  const _MonthSelector({
+    required this.label,
+    required this.canShift,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onTapLabel,
+  });
 
   final String label;
+  final bool canShift;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onTapLabel;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.chevron_left, color: Colors.white.withOpacity(0.86), size: 30),
-        const SizedBox(width: 42),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
+        IconButton(
+          onPressed: canShift ? onPrevious : null,
+          icon: Icon(
+            Icons.chevron_left,
+            color: Colors.white.withOpacity(canShift ? 0.86 : 0.24),
+            size: 30,
           ),
         ),
-        const SizedBox(width: 42),
-        Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.86), size: 30),
+        const SizedBox(width: 18),
+        Flexible(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTapLabel,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 18),
+        IconButton(
+          onPressed: canShift ? onNext : null,
+          icon: Icon(
+            Icons.chevron_right,
+            color: Colors.white.withOpacity(canShift ? 0.86 : 0.24),
+            size: 30,
+          ),
+        ),
       ],
     );
   }
+}
+
+class _StatsDateRange {
+  const _StatsDateRange({
+    required this.start,
+    required this.end,
+  });
+
+  final DateTime start;
+  final DateTime end;
+}
+
+Future<T?> _showStatsDialog<T>(
+  BuildContext context,
+  Widget child,
+) {
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black.withOpacity(0.58),
+    transitionDuration: const Duration(milliseconds: 220),
+    pageBuilder: (context, animation, secondaryAnimation) {
+      return Material(
+        color: Colors.transparent,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 18),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+Future<DateTime?> _showStatsWeekPicker(
+  BuildContext context, {
+  required DateTime initialWeekStart,
+}) {
+  var visibleMonth = DateTime(initialWeekStart.year, initialWeekStart.month);
+  var pendingWeekStart = _weekStartSunday(initialWeekStart);
+
+  return _showStatsDialog<DateTime>(
+    context,
+    StatefulBuilder(
+      builder: (context, setDialogState) {
+        return _StatsPickerFrame(
+          title: '选择周',
+          onConfirm: () => Navigator.of(context).pop(pendingWeekStart),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _StatsMonthHeader(
+                label: _formatChineseMonth(visibleMonth),
+                onPrevious: () => setDialogState(() {
+                  visibleMonth = DateTime(
+                    visibleMonth.year,
+                    visibleMonth.month - 1,
+                  );
+                }),
+                onNext: () => setDialogState(() {
+                  visibleMonth = DateTime(
+                    visibleMonth.year,
+                    visibleMonth.month + 1,
+                  );
+                }),
+              ),
+              const SizedBox(height: 18),
+              _StatsWeekCalendar(
+                visibleMonth: visibleMonth,
+                selectedWeekStart: pendingWeekStart,
+                onSelect: (date) => setDialogState(() {
+                  pendingWeekStart = _weekStartSunday(date);
+                }),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                '已选择：${_formatChineseDate(pendingWeekStart)} - '
+                '${_formatChineseDate(pendingWeekStart.add(const Duration(days: 6)))}',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.72),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Future<DateTime?> _showStatsMonthPicker(
+  BuildContext context, {
+  required DateTime initialMonth,
+}) {
+  var pending = DateTime(initialMonth.year, initialMonth.month);
+
+  return _showStatsDialog<DateTime>(
+    context,
+    StatefulBuilder(
+      builder: (context, setDialogState) {
+        final months = [
+          for (var i = -3; i <= 3; i++)
+            DateTime(pending.year, pending.month + i),
+        ];
+        return _StatsPickerFrame(
+          title: '选择月',
+          onConfirm: () => Navigator.of(context).pop(pending),
+          child: SizedBox(
+            height: 360,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (final month in months)
+                  _StatsPickerListItem(
+                    label: _formatChineseMonth(month),
+                    selected:
+                        month.year == pending.year && month.month == pending.month,
+                    onTap: () => setDialogState(() => pending = month),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Future<int?> _showStatsYearPicker(
+  BuildContext context, {
+  required int initialYear,
+}) {
+  var pending = initialYear;
+
+  return _showStatsDialog<int>(
+    context,
+    StatefulBuilder(
+      builder: (context, setDialogState) {
+        final years = [for (var i = -2; i <= 3; i++) pending + i];
+        return _StatsPickerFrame(
+          title: '选择年',
+          onConfirm: () => Navigator.of(context).pop(pending),
+          child: SizedBox(
+            height: 390,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (final year in years)
+                  _StatsPickerListItem(
+                    label: '$year 年',
+                    selected: year == pending,
+                    onTap: () => setDialogState(() => pending = year),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Future<_StatsDateRange?> _showStatsAllPicker(
+  BuildContext context, {
+  required DateTime initialStart,
+  required DateTime initialEnd,
+}) {
+  var pendingStart = initialStart;
+  var pendingEnd = initialEnd;
+
+  return _showStatsDialog<_StatsDateRange>(
+    context,
+    StatefulBuilder(
+      builder: (context, setDialogState) {
+        return _StatsPickerFrame(
+          title: '选择全部',
+          onConfirm: () => Navigator.of(context).pop(
+            _StatsDateRange(start: pendingStart, end: pendingEnd),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 28, 14, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _StatsRangeDateRow(
+                  label: '开始日期',
+                  value: _formatChineseDate(pendingStart),
+                  onTap: () async {
+                    final selected = await _showStatsMonthPicker(
+                      context,
+                      initialMonth: pendingStart,
+                    );
+                    if (selected == null) return;
+                    setDialogState(() {
+                      pendingStart = DateTime(selected.year, selected.month);
+                      if (pendingStart.isAfter(pendingEnd)) {
+                        pendingEnd = DateTime(
+                          selected.year,
+                          selected.month,
+                          _daysInMonth(selected.year, selected.month),
+                        );
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 24),
+                _StatsRangeDateRow(
+                  label: '结束日期',
+                  value: _formatChineseDate(pendingEnd),
+                  onTap: () async {
+                    final selected = await _showStatsMonthPicker(
+                      context,
+                      initialMonth: pendingEnd,
+                    );
+                    if (selected == null) return;
+                    setDialogState(() {
+                      pendingEnd = DateTime(
+                        selected.year,
+                        selected.month,
+                        _daysInMonth(selected.year, selected.month),
+                      );
+                      if (pendingEnd.isBefore(pendingStart)) {
+                        pendingStart = DateTime(selected.year, selected.month);
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 36),
+                Center(
+                  child: Text(
+                    '已选择：${_formatChineseDate(pendingStart)} - '
+                    '${_formatChineseDate(pendingEnd)}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.58),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+class _StatsPickerFrame extends StatelessWidget {
+  const _StatsPickerFrame({
+    required this.title,
+    required this.child,
+    required this.onConfirm,
+  });
+
+  final String title;
+  final Widget child;
+  final VoidCallback onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF252D38).withOpacity(0.98),
+            const Color(0xFF151C26).withOpacity(0.99),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.48),
+            blurRadius: 36,
+            offset: const Offset(0, 22),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: 74,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                    ),
+                  ),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: onConfirm,
+                      child: const Text(
+                        '确定',
+                        style: TextStyle(
+                          color: _RideColors.orange,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: Colors.white.withOpacity(0.07)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+              child: child,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsMonthHeader extends StatelessWidget {
+  const _StatsMonthHeader({
+    required this.label,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final String label;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          onPressed: onPrevious,
+          icon: const Icon(Icons.chevron_left, color: Colors.white, size: 28),
+        ),
+        SizedBox(
+          width: 188,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right, color: Colors.white, size: 28),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatsWeekCalendar extends StatelessWidget {
+  const _StatsWeekCalendar({
+    required this.visibleMonth,
+    required this.selectedWeekStart,
+    required this.onSelect,
+  });
+
+  final DateTime visibleMonth;
+  final DateTime selectedWeekStart;
+  final ValueChanged<DateTime> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+    final weeks = _calendarWeeksForMonth(visibleMonth);
+    return Column(
+      children: [
+        Row(
+          children: [
+            for (final weekday in weekdays)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    weekday,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.76),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        for (final week in weeks)
+          _StatsWeekCalendarRow(
+            days: week,
+            visibleMonth: visibleMonth,
+            selectedWeekStart: selectedWeekStart,
+            onSelect: onSelect,
+          ),
+      ],
+    );
+  }
+}
+
+class _StatsWeekCalendarRow extends StatelessWidget {
+  const _StatsWeekCalendarRow({
+    required this.days,
+    required this.visibleMonth,
+    required this.selectedWeekStart,
+    required this.onSelect,
+  });
+
+  final List<DateTime> days;
+  final DateTime visibleMonth;
+  final DateTime selectedWeekStart;
+  final ValueChanged<DateTime> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelectedRow = days.any(
+      (day) => _isSameDate(_weekStartSunday(day), selectedWeekStart),
+    );
+    return SizedBox(
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (isSelectedRow)
+            Positioned.fill(
+              left: 3,
+              right: 3,
+              top: 4,
+              bottom: 4,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _RideColors.orange.withOpacity(0.20),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: _RideColors.orange.withOpacity(0.72),
+                  ),
+                ),
+              ),
+            ),
+          Row(
+            children: [
+              for (final day in days)
+                Expanded(
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => onSelect(day),
+                    child: Center(
+                      child: _StatsDayCircle(
+                        day: day,
+                        visibleMonth: visibleMonth,
+                        selected: _isSameDate(
+                          _weekStartSunday(day),
+                          selectedWeekStart,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsDayCircle extends StatelessWidget {
+  const _StatsDayCircle({
+    required this.day,
+    required this.visibleMonth,
+    required this.selected,
+  });
+
+  final DateTime day;
+  final DateTime visibleMonth;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final inMonth = day.month == visibleMonth.month;
+    return Container(
+      width: selected ? 30 : 28,
+      height: selected ? 30 : 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? _RideColors.orange : Colors.transparent,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        day.day.toString(),
+        style: TextStyle(
+          color: selected
+              ? Colors.black.withOpacity(0.86)
+              : Colors.white.withOpacity(inMonth ? 0.76 : 0.42),
+          fontSize: 14,
+          fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsPickerListItem extends StatelessWidget {
+  const _StatsPickerListItem({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        height: 52,
+        width: double.infinity,
+        alignment: Alignment.center,
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white.withOpacity(0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(selected ? 0.96 : 0.34),
+            fontSize: selected ? 25 : 18,
+            fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsRangeDateRow extends StatelessWidget {
+  const _StatsRangeDateRow({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.58),
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 12),
+        InkWell(
+          borderRadius: BorderRadius.circular(15),
+          onTap: onTap,
+          child: Container(
+            height: 58,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: Colors.white.withOpacity(0.36),
+                  size: 28,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+DateTime _weekStartSunday(DateTime date) {
+  final day = DateTime(date.year, date.month, date.day);
+  return day.subtract(Duration(days: day.weekday % 7));
+}
+
+List<List<DateTime>> _calendarWeeksForMonth(DateTime month) {
+  final firstDay = DateTime(month.year, month.month);
+  final lastDay = DateTime(month.year, month.month + 1, 0);
+  final start = _weekStartSunday(firstDay);
+  final end = _weekStartSunday(lastDay).add(const Duration(days: 6));
+  final weeks = <List<DateTime>>[];
+  var cursor = start;
+  while (!cursor.isAfter(end)) {
+    weeks.add([for (var i = 0; i < 7; i++) cursor.add(Duration(days: i))]);
+    cursor = cursor.add(const Duration(days: 7));
+  }
+  return weeks;
+}
+
+bool _isSameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+String _formatSlashDate(DateTime date) {
+  return '${date.year}/${date.month.toString().padLeft(2, '0')}/'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+String _formatChineseDate(DateTime date) {
+  return '${date.year}年${date.month}月${date.day}日';
+}
+
+String _formatChineseMonth(DateTime date) {
+  return '${date.year}年${date.month}月';
+}
+
+int _daysInMonth(int year, int month) {
+  return DateTime(year, month + 1, 0).day;
 }
 
 class _StatsOverview extends StatelessWidget {
