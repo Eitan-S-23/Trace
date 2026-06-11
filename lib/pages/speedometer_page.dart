@@ -1,10 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/ride_controller.dart';
 import '../models/ride_models.dart';
@@ -4660,10 +4666,13 @@ class _RoutesPage extends StatefulWidget {
 }
 
 class _RoutesPageState extends State<_RoutesPage> {
-  var _modeIndex = 0;
+  static const _favoriteRoutesPrefsKey = 'speedometer.favorite_routes';
 
-  static const _cards = <_RouteListCard>[
-    _RouteListCard(
+  var _modeIndex = 0;
+  final _favoriteRouteTitles = <String>{};
+
+  static const _routes = <_RouteListEntry>[
+    _RouteListEntry(
       title: '周末环山路线',
       date: '2024/05/18  08:32',
       distance: '102.63',
@@ -4673,7 +4682,7 @@ class _RoutesPageState extends State<_RoutesPage> {
       difficultyColor: Color(0xFFA46AFF),
       variant: 0,
     ),
-    _RouteListCard(
+    _RouteListEntry(
       title: '滨海骑行路线',
       date: '2024/05/12  07:15',
       distance: '65.28',
@@ -4683,7 +4692,7 @@ class _RoutesPageState extends State<_RoutesPage> {
       difficultyColor: Color(0xFF62D729),
       variant: 1,
     ),
-    _RouteListCard(
+    _RouteListEntry(
       title: '城市探索路线',
       date: '2024/05/05  09:42',
       distance: '88.47',
@@ -4693,7 +4702,7 @@ class _RoutesPageState extends State<_RoutesPage> {
       difficultyColor: Color(0xFFFF3B5F),
       variant: 2,
     ),
-    _RouteListCard(
+    _RouteListEntry(
       title: '晨间训练路线',
       date: '2024/04/28  06:30',
       distance: '45.16',
@@ -4702,15 +4711,65 @@ class _RoutesPageState extends State<_RoutesPage> {
       difficulty: '简单',
       difficultyColor: Color(0xFF62D729),
       variant: 3,
+      imported: true,
     ),
   ];
 
+  List<_RouteListEntry> get _visibleRoutes {
+    return switch (_modeIndex) {
+      1 => _routes
+          .where((route) => _favoriteRouteTitles.contains(route.title))
+          .toList(),
+      2 => _routes.where((route) => route.imported).toList(),
+      _ => _routes,
+    };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadFavoriteRoutes());
+  }
+
+  Future<void> _loadFavoriteRoutes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final knownTitles = _routes.map((route) => route.title).toSet();
+    final titles = prefs
+            .getStringList(_favoriteRoutesPrefsKey)
+            ?.where(knownTitles.contains)
+            .toSet() ??
+        <String>{};
+    if (!mounted) return;
+    setState(() {
+      _favoriteRouteTitles
+        ..clear()
+        ..addAll(titles);
+    });
+  }
+
+  Future<void> _saveFavoriteRoutes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final titles = _favoriteRouteTitles.toList()..sort();
+    await prefs.setStringList(_favoriteRoutesPrefsKey, titles);
+  }
+
+  void _toggleFavorite(_RouteListEntry route) {
+    setState(() {
+      if (!_favoriteRouteTitles.add(route.title)) {
+        _favoriteRouteTitles.remove(route.title);
+      }
+    });
+    unawaited(_saveFavoriteRoutes());
+  }
+
   @override
   Widget build(BuildContext context) {
+    final visibleRoutes = _visibleRoutes;
+    final importedCount = _routes.where((route) => route.imported).length;
     final routeCountLabel = switch (_modeIndex) {
-      1 => '收藏路线（6）',
-      2 => '导入路线（3）',
-      _ => '路线（18）',
+      1 => '收藏路线（${_favoriteRouteTitles.length}）',
+      2 => '导入路线（$importedCount）',
+      _ => '我的路线（${_routes.length}）',
     };
 
     return Column(
@@ -4722,6 +4781,11 @@ class _RoutesPageState extends State<_RoutesPage> {
             children: [
               _RouteModeTabs(
                 selectedIndex: _modeIndex,
+                counts: [
+                  _routes.length,
+                  _favoriteRouteTitles.length,
+                  importedCount,
+                ],
                 onSelect: (index) => setState(() => _modeIndex = index),
               ),
               const SizedBox(height: 12),
@@ -4744,17 +4808,84 @@ class _RoutesPageState extends State<_RoutesPage> {
         const SizedBox(height: 12),
         // 单一滚动区：路线卡片列表
         Expanded(
-          child: ListView.separated(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-            itemCount: _cards.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, index) {
-              return _cards[index];
-            },
-          ),
+          child: visibleRoutes.isEmpty
+              ? _RouteEmptyState(modeIndex: _modeIndex)
+              : ListView.separated(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+                  itemCount: visibleRoutes.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final route = visibleRoutes[index];
+                    return _RouteListCard(
+                      title: route.title,
+                      date: route.date,
+                      distance: route.distance,
+                      climb: route.climb,
+                      duration: route.duration,
+                      difficulty: route.difficulty,
+                      difficultyColor: route.difficultyColor,
+                      variant: route.variant,
+                      favorited: _favoriteRouteTitles.contains(route.title),
+                      onFavoriteToggle: () => _toggleFavorite(route),
+                    );
+                  },
+                ),
         ),
       ],
+    );
+  }
+}
+
+class _RouteListEntry {
+  const _RouteListEntry({
+    required this.title,
+    required this.date,
+    required this.distance,
+    required this.climb,
+    required this.duration,
+    required this.difficulty,
+    required this.difficultyColor,
+    required this.variant,
+    this.imported = false,
+  });
+
+  final String title;
+  final String date;
+  final String distance;
+  final String climb;
+  final String duration;
+  final String difficulty;
+  final Color difficultyColor;
+  final int variant;
+  final bool imported;
+}
+
+class _RouteEmptyState extends StatelessWidget {
+  const _RouteEmptyState({required this.modeIndex});
+
+  final int modeIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = modeIndex == 1 ? '暂无收藏路线' : '暂无导入路线';
+    final icon = modeIndex == 1 ? Icons.star_border : Icons.file_upload_outlined;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white.withOpacity(0.36), size: 42),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.58),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -4762,10 +4893,12 @@ class _RoutesPageState extends State<_RoutesPage> {
 class _RouteModeTabs extends StatelessWidget {
   const _RouteModeTabs({
     required this.selectedIndex,
+    required this.counts,
     required this.onSelect,
   });
 
   final int selectedIndex;
+  final List<int> counts;
   final ValueChanged<int> onSelect;
 
   @override
@@ -4794,14 +4927,21 @@ class _RouteModeTabs extends StatelessWidget {
                           )
                         : null,
                   ),
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: i == selectedIndex
-                          ? _RideColors.orange
-                          : Colors.white.withOpacity(0.70),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${labels[i]}（${counts[i]}）',
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: i == selectedIndex
+                              ? _RideColors.orange
+                              : Colors.white.withOpacity(0.70),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -4889,6 +5029,8 @@ class _RouteListCard extends StatefulWidget {
     required this.difficulty,
     required this.difficultyColor,
     required this.variant,
+    required this.favorited,
+    required this.onFavoriteToggle,
   });
 
   final String title;
@@ -4899,14 +5041,14 @@ class _RouteListCard extends StatefulWidget {
   final String difficulty;
   final Color difficultyColor;
   final int variant;
+  final bool favorited;
+  final VoidCallback onFavoriteToggle;
 
   @override
   State<_RouteListCard> createState() => _RouteListCardState();
 }
 
 class _RouteListCardState extends State<_RouteListCard> {
-  var _favorited = false;
-
   void _openRoute() {
     _openRidePage(
       () => _RideRouteDetailPage(
@@ -4918,15 +5060,18 @@ class _RouteListCardState extends State<_RouteListCard> {
         difficulty: widget.difficulty,
         difficultyColor: widget.difficultyColor,
         variant: widget.variant,
+        favorited: widget.favorited,
+        onFavoriteToggle: widget.onFavoriteToggle,
       ),
     );
   }
 
   void _toggleFavorite() {
-    setState(() => _favorited = !_favorited);
+    final willFavorite = !widget.favorited;
+    widget.onFavoriteToggle();
     _showUiMessage(
       '收藏',
-      _favorited ? '已收藏 ${widget.title}' : '已取消收藏 ${widget.title}',
+      willFavorite ? '已收藏 ${widget.title}' : '已取消收藏 ${widget.title}',
     );
   }
 
@@ -5045,10 +5190,10 @@ class _RouteListCardState extends State<_RouteListCard> {
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               _RouteActionButton(
-                                icon: _favorited
+                                icon: widget.favorited
                                     ? Icons.star
                                     : Icons.star_border,
-                                active: _favorited,
+                                active: widget.favorited,
                                 tooltip: '收藏',
                                 onTap: _toggleFavorite,
                               ),
@@ -5064,6 +5209,7 @@ class _RouteListCardState extends State<_RouteListCard> {
                                   climb: climb,
                                   duration: duration,
                                   difficulty: difficulty,
+                                  variant: variant,
                                 ),
                               ),
                               const SizedBox(width: 18),
@@ -5078,6 +5224,7 @@ class _RouteListCardState extends State<_RouteListCard> {
                                   climb: climb,
                                   duration: duration,
                                   difficulty: difficulty,
+                                  variant: variant,
                                 ),
                               ),
                             ],
@@ -5194,6 +5341,52 @@ class _RouteMetric extends StatelessWidget {
   }
 }
 
+class _RouteDetailFavoriteButton extends StatefulWidget {
+  const _RouteDetailFavoriteButton({
+    required this.initialFavorited,
+    required this.title,
+    this.onToggle,
+  });
+
+  final bool initialFavorited;
+  final String title;
+  final VoidCallback? onToggle;
+
+  @override
+  State<_RouteDetailFavoriteButton> createState() =>
+      _RouteDetailFavoriteButtonState();
+}
+
+class _RouteDetailFavoriteButtonState extends State<_RouteDetailFavoriteButton> {
+  late bool _favorited;
+
+  @override
+  void initState() {
+    super.initState();
+    _favorited = widget.initialFavorited;
+  }
+
+  void _toggle() {
+    setState(() => _favorited = !_favorited);
+    widget.onToggle?.call();
+    _showUiMessage(
+      '收藏',
+      _favorited ? '已收藏 ${widget.title}' : '已取消收藏 ${widget.title}',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: _toggle,
+      icon: Icon(
+        _favorited ? Icons.star : Icons.star_border,
+        color: _favorited ? _RideColors.orange : Colors.white.withOpacity(0.9),
+      ),
+    );
+  }
+}
+
 class _DetailTopBar extends StatelessWidget {
   const _DetailTopBar({required this.title, this.actions = const []});
 
@@ -5283,6 +5476,8 @@ class _RideRouteDetailPage extends StatelessWidget {
     required this.difficulty,
     required this.difficultyColor,
     required this.variant,
+    this.favorited = false,
+    this.onFavoriteToggle,
   });
 
   final String title;
@@ -5293,6 +5488,8 @@ class _RideRouteDetailPage extends StatelessWidget {
   final String difficulty;
   final Color difficultyColor;
   final int variant;
+  final bool favorited;
+  final VoidCallback? onFavoriteToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -5305,9 +5502,10 @@ class _RideRouteDetailPage extends StatelessWidget {
             _DetailTopBar(
               title: '路线详情',
               actions: [
-                IconButton(
-                  onPressed: () => _showUiMessage('收藏', '已收藏该路线'),
-                  icon: Icon(Icons.star_border, color: Colors.white.withOpacity(0.9)),
+                _RouteDetailFavoriteButton(
+                  initialFavorited: favorited,
+                  onToggle: onFavoriteToggle,
+                  title: title,
                 ),
                 IconButton(
                   onPressed: () => _showUiMessage('更多', '更多操作入口已激活'),
@@ -5359,6 +5557,7 @@ class _RideRouteDetailPage extends StatelessWidget {
                                   climb: climb,
                                   duration: duration,
                                   difficulty: difficulty,
+                                  variant: variant,
                                 ),
                               ),
                             ),
@@ -8015,6 +8214,7 @@ Future<void> _shareCurrentRide(
     climb: sample.climbText,
     duration: sample.durationText,
     difficulty: '中等',
+    variant: 0,
   );
 }
 
@@ -8026,19 +8226,304 @@ Future<void> _shareRouteSummary(
   required String climb,
   required String duration,
   required String difficulty,
-}) {
-  return _shareText(
-    context,
-    title: '分享路线 - $title',
-    text: _routeSummaryText(
+  int variant = 0,
+}) async {
+  final shareTitle = '分享路线 - $title';
+  final summary = _routeSummaryText(
+    title: title,
+    date: date,
+    distance: distance,
+    climb: climb,
+    duration: duration,
+    difficulty: difficulty,
+  );
+
+  try {
+    final cardFile = await _createRouteShareCard(
       title: title,
       date: date,
       distance: distance,
       climb: climb,
       duration: duration,
       difficulty: difficulty,
-    ),
+      variant: variant,
+    );
+    final result = await SharePlus.instance.share(
+      ShareParams(
+        title: shareTitle,
+        subject: shareTitle,
+        text: summary,
+        files: [
+          XFile(
+            cardFile.path,
+            mimeType: 'image/png',
+            name: 'trace-route-card.png',
+          ),
+        ],
+        sharePositionOrigin: _sharePositionOrigin(context),
+      ),
+    );
+    if (result.status == ShareResultStatus.unavailable) {
+      await _shareText(context, title: shareTitle, text: summary);
+    }
+  } catch (_) {
+    await _shareText(context, title: shareTitle, text: summary);
+  }
+}
+
+Future<File> _createRouteShareCard({
+  required String title,
+  required String date,
+  required String distance,
+  required String climb,
+  required String duration,
+  required String difficulty,
+  required int variant,
+}) async {
+  const width = 900.0;
+  const height = 540.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final size = const Size(width, height);
+  final cardRect = Offset.zero & size;
+
+  final background = Paint()
+    ..shader = const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color(0xFF1C2530),
+        Color(0xFF080D14),
+      ],
+    ).createShader(cardRect);
+  canvas.drawRect(cardRect, background);
+
+  final mapRect = Rect.fromLTWH(32, 28, width - 64, 286);
+  canvas.save();
+  canvas.clipRRect(RRect.fromRectAndRadius(mapRect, const Radius.circular(28)));
+  canvas.translate(mapRect.left, mapRect.top);
+  _RouteMapPainter(variant: variant).paint(canvas, mapRect.size);
+  canvas.restore();
+
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(mapRect, const Radius.circular(28)),
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..color = Colors.white.withOpacity(0.10),
   );
+
+  final mapOverlay = Paint()
+    ..shader = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Colors.transparent,
+        const Color(0xFF080D14).withOpacity(0.72),
+      ],
+    ).createShader(mapRect);
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(mapRect, const Radius.circular(28)),
+    mapOverlay,
+  );
+
+  _drawShareText(
+    canvas,
+    'TRACE ROUTE',
+    const Offset(58, 52),
+    TextStyle(
+      color: Colors.white.withOpacity(0.72),
+      fontSize: 22,
+      fontWeight: FontWeight.w900,
+    ),
+    maxWidth: 220,
+  );
+
+  final difficultyRect = Rect.fromLTWH(width - 198, 48, 136, 42);
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(difficultyRect, const Radius.circular(21)),
+    Paint()..color = _RideColors.orange.withOpacity(0.18),
+  );
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(difficultyRect, const Radius.circular(21)),
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = _RideColors.orange.withOpacity(0.88),
+  );
+  _drawShareText(
+    canvas,
+    '难度 $difficulty',
+    Offset(difficultyRect.left, difficultyRect.top + 10),
+    const TextStyle(
+      color: _RideColors.orange,
+      fontSize: 18,
+      fontWeight: FontWeight.w900,
+    ),
+    maxWidth: difficultyRect.width,
+    textAlign: TextAlign.center,
+  );
+
+  _drawShareText(
+    canvas,
+    title,
+    const Offset(58, 220),
+    const TextStyle(
+      color: Colors.white,
+      fontSize: 44,
+      fontWeight: FontWeight.w900,
+      height: 1.05,
+    ),
+    maxWidth: 580,
+  );
+  _drawShareText(
+    canvas,
+    date,
+    const Offset(60, 274),
+    TextStyle(
+      color: Colors.white.withOpacity(0.68),
+      fontSize: 22,
+      fontWeight: FontWeight.w700,
+    ),
+    maxWidth: 360,
+  );
+
+  final metricTop = 344.0;
+  final metricWidth = (width - 64 - 36) / 4;
+  final metrics = [
+    ('距离', distance, 'km', const Color(0xFF62D729)),
+    ('爬升', climb, 'm', const Color(0xFFFFA324)),
+    ('用时', duration, '', const Color(0xFF55B7FF)),
+    ('难度', difficulty, '', _RideColors.orange),
+  ];
+  for (var i = 0; i < metrics.length; i++) {
+    final rect = Rect.fromLTWH(
+      32 + i * (metricWidth + 12),
+      metricTop,
+      metricWidth,
+      128,
+    );
+    final metric = metrics[i];
+    _drawShareMetric(
+      canvas,
+      rect: rect,
+      label: metric.$1,
+      value: metric.$2,
+      unit: metric.$3,
+      accent: metric.$4,
+    );
+  }
+
+  _drawShareText(
+    canvas,
+    'Trace 码表',
+    const Offset(58, 492),
+    TextStyle(
+      color: Colors.white.withOpacity(0.46),
+      fontSize: 18,
+      fontWeight: FontWeight.w800,
+    ),
+    maxWidth: 180,
+  );
+
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width.toInt(), height.toInt());
+  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  if (byteData == null) {
+    throw StateError('Unable to encode route share card.');
+  }
+
+  final bytes = byteData.buffer.asUint8List();
+  final directory = await getTemporaryDirectory();
+  final file = File(
+    '${directory.path}${Platform.pathSeparator}'
+    'trace-route-card-${DateTime.now().millisecondsSinceEpoch}.png',
+  );
+  await file.writeAsBytes(bytes, flush: true);
+  return file;
+}
+
+void _drawShareMetric(
+  Canvas canvas, {
+  required Rect rect,
+  required String label,
+  required String value,
+  required String unit,
+  required Color accent,
+}) {
+  final radius = RRect.fromRectAndRadius(rect, const Radius.circular(20));
+  canvas.drawRRect(
+    radius,
+    Paint()..color = Colors.white.withOpacity(0.07),
+  );
+  canvas.drawRRect(
+    radius,
+    Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = Colors.white.withOpacity(0.10),
+  );
+  canvas.drawCircle(
+    Offset(rect.left + 28, rect.top + 30),
+    6,
+    Paint()..color = accent,
+  );
+  _drawShareText(
+    canvas,
+    label,
+    Offset(rect.left + 46, rect.top + 19),
+    TextStyle(
+      color: Colors.white.withOpacity(0.62),
+      fontSize: 18,
+      fontWeight: FontWeight.w800,
+    ),
+    maxWidth: rect.width - 58,
+  );
+  _drawShareText(
+    canvas,
+    value,
+    Offset(rect.left + 20, rect.top + 58),
+    const TextStyle(
+      color: Colors.white,
+      fontSize: 32,
+      fontWeight: FontWeight.w900,
+      height: 1.0,
+    ),
+    maxWidth: rect.width - 40,
+  );
+  if (unit.isNotEmpty) {
+    _drawShareText(
+      canvas,
+      unit,
+      Offset(rect.left + 22, rect.top + 94),
+      TextStyle(
+        color: Colors.white.withOpacity(0.58),
+        fontSize: 17,
+        fontWeight: FontWeight.w800,
+      ),
+      maxWidth: rect.width - 44,
+    );
+  }
+}
+
+void _drawShareText(
+  Canvas canvas,
+  String text,
+  Offset offset,
+  TextStyle style, {
+  required double maxWidth,
+  int maxLines = 1,
+  TextAlign textAlign = TextAlign.left,
+}) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textAlign: textAlign,
+    textDirection: TextDirection.ltr,
+    maxLines: maxLines,
+    ellipsis: '...',
+  )..layout(maxWidth: maxWidth);
+  painter.paint(canvas, offset);
 }
 
 String _routeSummaryText({
@@ -8068,6 +8553,7 @@ Future<void> _showRouteMoreActions(
   required String climb,
   required String duration,
   required String difficulty,
+  required int variant,
 }) {
   final summary = _routeSummaryText(
     title: title,
@@ -8131,6 +8617,7 @@ Future<void> _showRouteMoreActions(
                     climb: climb,
                     duration: duration,
                     difficulty: difficulty,
+                    variant: variant,
                   );
                 },
               ),
