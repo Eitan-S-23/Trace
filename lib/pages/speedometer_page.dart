@@ -2788,6 +2788,14 @@ Future<DateTime?> _showStatsWeekPicker(
             children: [
               _StatsMonthHeader(
                 label: _formatChineseMonth(visibleMonth),
+                onTapLabel: () async {
+                  final selected = await _showStatsYearMonthPicker(
+                    context,
+                    initialMonth: visibleMonth,
+                  );
+                  if (selected == null) return;
+                  setDialogState(() => visibleMonth = selected);
+                },
                 onPrevious: () => setDialogState(() {
                   visibleMonth = DateTime(
                     visibleMonth.year,
