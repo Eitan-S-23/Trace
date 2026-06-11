@@ -2880,6 +2880,41 @@ Future<int?> _showStatsYearPicker(
   );
 }
 
+Future<DateTime?> _showStatsYearMonthPicker(
+  BuildContext context, {
+  required DateTime initialMonth,
+}) {
+  var pendingYear = initialMonth.year;
+  var pendingMonth = initialMonth.month;
+
+  return _showStatsDialog<DateTime>(
+    context,
+    StatefulBuilder(
+      builder: (context, setDialogState) {
+        return _StatsPickerFrame(
+          title: '选择年月',
+          onConfirm: () => Navigator.of(context).pop(
+            DateTime(pendingYear, pendingMonth),
+          ),
+          child: SizedBox(
+            height: 360,
+            child: _StatsYearMonthWheelPicker(
+              selectedYear: pendingYear,
+              selectedMonth: pendingMonth,
+              onYearChanged: (year) => setDialogState(() {
+                pendingYear = year;
+              }),
+              onMonthChanged: (month) => setDialogState(() {
+                pendingMonth = month;
+              }),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
 Future<_StatsDateRange?> _showStatsAllPicker(
   BuildContext context, {
   required DateTime initialStart,
@@ -2940,6 +2975,14 @@ Future<_StatsDateRange?> _showStatsAllPicker(
                 const SizedBox(height: 16),
                 _StatsMonthHeader(
                   label: _formatChineseMonth(visibleMonth),
+                  onTapLabel: () async {
+                    final selected = await _showStatsYearMonthPicker(
+                      context,
+                      initialMonth: visibleMonth,
+                    );
+                    if (selected == null) return;
+                    setDialogState(() => visibleMonth = selected);
+                  },
                   onPrevious: () => setDialogState(() {
                     visibleMonth = DateTime(
                       visibleMonth.year,
@@ -2998,6 +3041,7 @@ Future<_StatsDateRange?> _showStatsAllPicker(
 }
 
 const double _statsPickerItemExtent = 58;
+const Color _statsWheelBlue = Color(0xFF76B7FF);
 
 class _StatsScrollableMonthList extends StatefulWidget {
   const _StatsScrollableMonthList({
@@ -3151,10 +3195,138 @@ class _StatsScrollableYearListState extends State<_StatsScrollableYearList> {
   }
 }
 
+class _StatsYearMonthWheelPicker extends StatefulWidget {
+  const _StatsYearMonthWheelPicker({
+    required this.selectedYear,
+    required this.selectedMonth,
+    required this.onYearChanged,
+    required this.onMonthChanged,
+  });
+
+  final int selectedYear;
+  final int selectedMonth;
+  final ValueChanged<int> onYearChanged;
+  final ValueChanged<int> onMonthChanged;
+
+  @override
+  State<_StatsYearMonthWheelPicker> createState() =>
+      _StatsYearMonthWheelPickerState();
+}
+
+class _StatsYearMonthWheelPickerState extends State<_StatsYearMonthWheelPicker> {
+  late final int _firstYear;
+  late final int _yearCount;
+  late final FixedExtentScrollController _yearController;
+  late final FixedExtentScrollController _monthController;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstYear = widget.selectedYear - 50;
+    _yearCount = 101;
+    _yearController = FixedExtentScrollController(initialItem: 50);
+    _monthController = FixedExtentScrollController(
+      initialItem: widget.selectedMonth - 1,
+    );
+  }
+
+  @override
+  void dispose() {
+    _yearController.dispose();
+    _monthController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatsWheelViewport(
+            horizontalMargin: 8,
+            child: ListWheelScrollView.useDelegate(
+              controller: _yearController,
+              physics: const FixedExtentScrollPhysics(),
+              itemExtent: _statsPickerItemExtent,
+              diameterRatio: 1.55,
+              perspective: 0.0025,
+              squeeze: 1.05,
+              overAndUnderCenterOpacity: 0.52,
+              onSelectedItemChanged: (index) {
+                widget.onYearChanged(_firstYear + index);
+              },
+              childDelegate: ListWheelChildBuilderDelegate(
+                childCount: _yearCount,
+                builder: (context, index) {
+                  if (index < 0 || index >= _yearCount) return null;
+                  final year = _firstYear + index;
+                  return _StatsWheelItem(
+                    label: '$year 年',
+                    selected: year == widget.selectedYear,
+                    onTap: () {
+                      _yearController.animateToItem(
+                        index,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                      );
+                      widget.onYearChanged(year);
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatsWheelViewport(
+            horizontalMargin: 8,
+            child: ListWheelScrollView.useDelegate(
+              controller: _monthController,
+              physics: const FixedExtentScrollPhysics(),
+              itemExtent: _statsPickerItemExtent,
+              diameterRatio: 1.55,
+              perspective: 0.0025,
+              squeeze: 1.05,
+              overAndUnderCenterOpacity: 0.52,
+              onSelectedItemChanged: (index) {
+                widget.onMonthChanged(index + 1);
+              },
+              childDelegate: ListWheelChildBuilderDelegate(
+                childCount: 12,
+                builder: (context, index) {
+                  if (index < 0 || index >= 12) return null;
+                  final month = index + 1;
+                  return _StatsWheelItem(
+                    label: '$month 月',
+                    selected: month == widget.selectedMonth,
+                    onTap: () {
+                      _monthController.animateToItem(
+                        index,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                      );
+                      widget.onMonthChanged(month);
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _StatsWheelViewport extends StatelessWidget {
-  const _StatsWheelViewport({required this.child});
+  const _StatsWheelViewport({
+    required this.child,
+    this.horizontalMargin = 18,
+  });
 
   final Widget child;
+  final double horizontalMargin;
 
   @override
   Widget build(BuildContext context) {
@@ -3166,13 +3338,13 @@ class _StatsWheelViewport extends StatelessWidget {
           child: Center(
             child: Container(
               height: _statsPickerItemExtent,
-              margin: const EdgeInsets.symmetric(horizontal: 18),
+              margin: EdgeInsets.symmetric(horizontal: horizontalMargin),
               decoration: BoxDecoration(
-                color: _RideColors.orange.withOpacity(0.10),
+                color: _statsWheelBlue.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.symmetric(
                   horizontal: BorderSide(
-                    color: _RideColors.orange.withOpacity(0.72),
+                    color: _statsWheelBlue.withOpacity(0.76),
                     width: 1.2,
                   ),
                 ),
@@ -3491,11 +3663,13 @@ class _StatsMonthHeader extends StatelessWidget {
     required this.label,
     required this.onPrevious,
     required this.onNext,
+    this.onTapLabel,
   });
 
   final String label;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
+  final VoidCallback? onTapLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -3506,15 +3680,39 @@ class _StatsMonthHeader extends StatelessWidget {
           onPressed: onPrevious,
           icon: const Icon(Icons.chevron_left, color: Colors.white, size: 28),
         ),
-        SizedBox(
-          width: 188,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
+        InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTapLabel,
+          child: SizedBox(
+            width: 188,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+                if (onTapLabel != null) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.expand_more,
+                    color: Colors.white.withOpacity(0.62),
+                    size: 20,
+                  ),
+                ],
+              ],
             ),
           ),
         ),
