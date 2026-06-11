@@ -1479,29 +1479,41 @@ class _MetricZoneLine extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         SizedBox(
-          width: 62,
-          child: Text(
-            zone.value,
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.82),
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
+          width: 58,
+          height: 17,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(
+              zone.value,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              softWrap: false,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.82),
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         SizedBox(
-          width: 36,
-          child: Text(
-            zone.ratio,
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.64),
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
+          width: 44,
+          height: 17,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(
+              zone.ratio,
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              softWrap: false,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.64),
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ),
@@ -1533,28 +1545,44 @@ class _MetricDetailRowsBox extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      row.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.55),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                    flex: 3,
+                    child: SizedBox(
+                      height: 19,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          row.label,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.55),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 14),
-                  Flexible(
-                    child: Text(
-                      row.value,
-                      textAlign: TextAlign.right,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.82),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                  Expanded(
+                    flex: 2,
+                    child: SizedBox(
+                      height: 19,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          row.value,
+                          textAlign: TextAlign.right,
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.82),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                   ),
