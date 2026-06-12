@@ -4792,10 +4792,7 @@ class _RoutesPageState extends State<_RoutesPage> {
 
   Future<void> _importGpxRoute() async {
     if (_importingRoute) return;
-    setState(() {
-      _importingRoute = true;
-      _routeFabExpanded = false;
-    });
+    _importingRoute = true;
 
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -4803,10 +4800,12 @@ class _RoutesPageState extends State<_RoutesPage> {
         allowedExtensions: const ['gpx'],
         allowMultiple: false,
         withData: true,
-        dialogTitle: '选择 GPX 路书',
+        dialogTitle: '选择路书文件',
       );
       if (result == null || result.files.isEmpty) return;
       if (!mounted) return;
+
+      setState(() => _routeFabExpanded = false);
 
       final file = result.files.single;
       final content = await _readPickedGpxFile(file);
@@ -5060,7 +5059,7 @@ class _RouteListEntry {
   }
 }
 
-class _RouteImportFab extends StatelessWidget {
+class _RouteImportFab extends StatefulWidget {
   const _RouteImportFab({
     required this.expanded,
     required this.busy,
@@ -5076,43 +5075,94 @@ class _RouteImportFab extends StatelessWidget {
   final VoidCallback onCreateRoute;
 
   @override
+  State<_RouteImportFab> createState() => _RouteImportFabState();
+}
+
+class _RouteImportFabState extends State<_RouteImportFab>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+      value: widget.expanded ? 1 : 0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _RouteImportFab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.expanded != oldWidget.expanded) {
+      if (widget.expanded) {
+        unawaited(_controller.forward());
+      } else {
+        unawaited(_controller.reverse());
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    const actionSpacing = 12.0;
+    const actionStep = 68.0;
+    final actionCount = 2;
+    final stackHeight = 64.0 + actionSpacing + actionStep * actionCount;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          child: expanded
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _RouteFabAction(
-                      label: '导入 GPX',
-                      icon: Icons.file_upload_outlined,
-                      color: _RideColors.orange,
-                      busy: busy,
-                      onTap: busy ? null : onImportGpx,
-                    ),
-                    const SizedBox(height: 12),
-                    _RouteFabAction(
-                      label: '创建路书',
-                      icon: Icons.edit,
-                      color: const Color(0xFFFFB000),
-                      onTap: onCreateRoute,
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                )
-              : const SizedBox.shrink(),
-        ),
-        _RouteFabButton(
-          icon: expanded ? Icons.close : Icons.add,
-          color: const Color(0xFFFFB000),
-          size: 64,
-          onTap: onToggle,
+        SizedBox(
+          width: 164,
+          height: stackHeight,
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              _RouteFabAction(
+                label: '创建路书',
+                icon: Icons.edit,
+                color: const Color(0xFFFFB000),
+                busy: false,
+                onTap: widget.onCreateRoute,
+                animation: CurvedAnimation(
+                  parent: _controller,
+                  curve: const Interval(0.38, 1, curve: Curves.easeOutCubic),
+                  reverseCurve:
+                      const Interval(0.38, 1, curve: Curves.easeInCubic),
+                ),
+                bottom: 64 + actionSpacing + actionStep,
+              ),
+              _RouteFabAction(
+                label: '导入路书',
+                icon: Icons.file_upload_outlined,
+                color: _RideColors.orange,
+                busy: widget.busy,
+                onTap: widget.busy ? null : widget.onImportGpx,
+                animation: CurvedAnimation(
+                  parent: _controller,
+                  curve: const Interval(0, 0.62, curve: Curves.easeOutCubic),
+                  reverseCurve:
+                      const Interval(0, 0.62, curve: Curves.easeInCubic),
+                ),
+                bottom: 64 + actionSpacing,
+              ),
+              _RouteFabButton(
+                icon: widget.expanded ? Icons.close : Icons.add,
+                color: const Color(0xFFFFB000),
+                size: 64,
+                onTap: widget.onToggle,
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -5125,6 +5175,8 @@ class _RouteFabAction extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.onTap,
+    required this.animation,
+    required this.bottom,
     this.busy = false,
   });
 
@@ -5132,47 +5184,73 @@ class _RouteFabAction extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback? onTap;
+  final Animation<double> animation;
+  final double bottom;
   final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          height: 34,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFF101720).withOpacity(0.92),
-            borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: Colors.white.withOpacity(0.10)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.24),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
+    return Positioned(
+      right: 0,
+      bottom: bottom,
+      child: AnimatedBuilder(
+        animation: animation,
+        builder: (context, child) {
+          final progress = animation.value;
+          return IgnorePointer(
+            ignoring: progress < 0.98 || busy,
+            child: Opacity(
+              opacity: progress,
+              child: Transform.translate(
+                offset: Offset(0, 34 * (1 - progress)),
+                child: Transform.scale(
+                  scale: 0.82 + 0.18 * progress,
+                  alignment: Alignment.bottomRight,
+                  child: child,
+                ),
               ),
-            ],
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
             ),
-          ),
+          );
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF101720).withOpacity(0.92),
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(color: Colors.white.withOpacity(0.10)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.24),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            _RouteFabButton(
+              icon: icon,
+              color: color,
+              size: 56,
+              busy: busy,
+              onTap: onTap,
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        _RouteFabButton(
-          icon: icon,
-          color: color,
-          size: 56,
-          busy: busy,
-          onTap: onTap,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -5477,7 +5555,7 @@ class _RouteEmptyState extends StatelessWidget {
               ),
               icon: const Icon(Icons.file_upload_outlined, size: 20),
               label: const Text(
-                '导入 GPX 路书',
+                '导入路书',
                 style: TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
