@@ -138,7 +138,6 @@
 
     if (!isAndroid && !isIos) {
       setMode('desktop');
-      setStatus('请在手机浏览器打开此页面，或下载 Windows 版。');
       return;
     }
 
