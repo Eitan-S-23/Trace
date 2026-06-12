@@ -111,6 +111,7 @@ class MyApp extends StatelessWidget {
             });
           }),
           getPages: [
+            GetPage(name: '/main', page: () => const MainAppPage()),
             GetPage(name: '/', page: () => const HomePage()),
             GetPage(name: '/monitor', page: () => const MonitorPage()),
             GetPage(

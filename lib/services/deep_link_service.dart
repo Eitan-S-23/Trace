@@ -67,7 +67,14 @@ class DeepLinkService extends GetxService {
   void _openSpeedometer() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (Get.currentRoute == '/speedometer') return;
-      Get.toNamed('/speedometer');
+      if (Get.currentRoute != '/main') {
+        Get.offAllNamed('/main');
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (Get.currentRoute == '/speedometer') return;
+        Get.toNamed('/speedometer');
+      });
     });
   }
 }

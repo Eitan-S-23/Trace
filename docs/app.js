@@ -41,6 +41,7 @@
 
   function setMode(mode) {
     document.body.dataset.mode = mode;
+    wechatGuide.hidden = mode !== 'in-app';
   }
 
   function setStatus(message, tone = 'normal') {
