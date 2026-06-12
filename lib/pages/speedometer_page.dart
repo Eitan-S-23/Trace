@@ -4790,6 +4790,21 @@ class _RoutesPageState extends State<_RoutesPage> {
     unawaited(_saveFavoriteRoutes());
   }
 
+  void _deleteImportedRoute(_RouteListEntry route) {
+    if (!route.imported) {
+      _showUiMessage('删除路线', '默认路线不能删除');
+      return;
+    }
+
+    setState(() {
+      _importedRoutes.removeWhere((item) => item.title == route.title);
+      _favoriteRouteTitles.remove(route.title);
+    });
+    unawaited(_saveImportedRoutes());
+    unawaited(_saveFavoriteRoutes());
+    _showUiMessage('删除路线', '已删除 ${route.title}');
+  }
+
   Future<void> _importGpxRoute() async {
     if (_importingRoute) return;
     _importingRoute = true;
@@ -4936,8 +4951,12 @@ class _RoutesPageState extends State<_RoutesPage> {
                           difficulty: route.difficulty,
                           difficultyColor: route.difficultyColor,
                           variant: route.variant,
+                          track: route.track,
                           favorited: _favoriteRouteTitles.contains(route.title),
                           onFavoriteToggle: () => _toggleFavorite(route),
+                          onDelete: route.imported
+                              ? () => _deleteImportedRoute(route)
+                              : null,
                         );
                       },
                     ),
@@ -4978,6 +4997,7 @@ class _RouteListEntry {
     required this.difficultyColor,
     required this.variant,
     this.imported = false,
+    this.track = const <_GpxPoint>[],
   });
 
   final String title;
@@ -4989,6 +5009,7 @@ class _RouteListEntry {
   final Color difficultyColor;
   final int variant;
   final bool imported;
+  final List<_GpxPoint> track;
 
   _RouteListEntry copyWith({
     String? title,
@@ -5000,6 +5021,7 @@ class _RouteListEntry {
     Color? difficultyColor,
     int? variant,
     bool? imported,
+    List<_GpxPoint>? track,
   }) {
     return _RouteListEntry(
       title: title ?? this.title,
@@ -5011,6 +5033,7 @@ class _RouteListEntry {
       difficultyColor: difficultyColor ?? this.difficultyColor,
       variant: variant ?? this.variant,
       imported: imported ?? this.imported,
+      track: track ?? this.track,
     );
   }
 
@@ -5025,6 +5048,7 @@ class _RouteListEntry {
       'difficultyColor': difficultyColor.value,
       'variant': variant,
       'imported': imported,
+      'track': track.map((point) => point.toJson()).toList(),
     };
   }
 
@@ -5043,6 +5067,7 @@ class _RouteListEntry {
         difficultyColor: Color(_intValue(data['difficultyColor'], 0xFF62D729)),
         variant: _intValue(data['variant'], 0),
         imported: _boolValue(data['imported'], true),
+        track: _trackValue(data['track']),
       );
     } catch (_) {
       return null;
@@ -5065,6 +5090,14 @@ class _RouteListEntry {
     if (value is bool) return value;
     if (value is String) return value.toLowerCase() == 'true';
     return fallback;
+  }
+
+  static List<_GpxPoint> _trackValue(Object? value) {
+    if (value is! List) return const <_GpxPoint>[];
+    return value
+        .map(_GpxPoint.tryFromJson)
+        .whereType<_GpxPoint>()
+        .toList(growable: false);
   }
 }
 
@@ -5432,7 +5465,24 @@ _RouteListEntry _parseGpxRoute(
     difficultyColor: _routeDifficultyColor(distanceKm, climbMeters),
     variant: fallbackVariant % 6,
     imported: true,
+    track: _sampleGpxPoints(points),
   );
+}
+
+List<_GpxPoint> _sampleGpxPoints(
+  List<_GpxPoint> points, {
+  int maxPoints = 800,
+}) {
+  if (points.length <= maxPoints) {
+    return List<_GpxPoint>.unmodifiable(points);
+  }
+
+  final sampled = <_GpxPoint>[];
+  final step = (points.length - 1) / (maxPoints - 1);
+  for (var i = 0; i < maxPoints; i++) {
+    sampled.add(points[(i * step).round()]);
+  }
+  return List<_GpxPoint>.unmodifiable(sampled);
 }
 
 List<_GpxPoint> _extractGpxPoints(String source) {
@@ -5456,6 +5506,19 @@ List<_GpxPoint> _extractGpxPoints(String source) {
         ele: _extractGpxTagDouble(body, 'ele'),
       ),
     );
+  }
+
+  final selfClosingMatches = RegExp(
+    r'<(?:\w+:)?(?:trkpt|rtept)\b([^>]*)/>',
+    caseSensitive: false,
+  ).allMatches(source);
+  for (final match in selfClosingMatches) {
+    final attributes = match.group(1) ?? '';
+    final lat = _extractGpxAttribute(attributes, 'lat');
+    final lon = _extractGpxAttribute(attributes, 'lon');
+    if (lat == null || lon == null) continue;
+
+    points.add(_GpxPoint(lat: lat, lon: lon, ele: null));
   }
 
   return points;
@@ -5612,6 +5675,88 @@ class _GpxPoint {
   final double lat;
   final double lon;
   final double? ele;
+
+  Map<String, Object?> toJson() {
+    return {
+      'lat': lat,
+      'lon': lon,
+      if (ele != null) 'ele': ele,
+    };
+  }
+
+  static _GpxPoint? tryFromJson(Object? value) {
+    if (value is! Map) return null;
+    final lat = _jsonDouble(value['lat']);
+    final lon = _jsonDouble(value['lon']);
+    if (lat == null || lon == null) return null;
+    return _GpxPoint(
+      lat: lat,
+      lon: lon,
+      ele: _jsonDouble(value['ele']),
+    );
+  }
+
+  static double? _jsonDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+}
+
+List<double> _routeElevationValues(List<_GpxPoint> track) {
+  final values = track
+      .map((point) => point.ele)
+      .whereType<double>()
+      .where((value) => value.isFinite)
+      .toList(growable: false);
+  if (values.length < 2) {
+    return const <double>[
+      120,
+      180,
+      260,
+      420,
+      700,
+      980,
+      1180,
+      1268,
+      1040,
+      760,
+      520,
+      360,
+      240,
+      160,
+    ];
+  }
+  return _sampleDoubleValues(values, maxValues: 80);
+}
+
+List<double> _sampleDoubleValues(
+  List<double> values, {
+  required int maxValues,
+}) {
+  if (values.length <= maxValues) return values;
+  final sampled = <double>[];
+  final step = (values.length - 1) / (maxValues - 1);
+  for (var i = 0; i < maxValues; i++) {
+    sampled.add(values[(i * step).round()]);
+  }
+  return sampled;
+}
+
+String _routePointLabel(_GpxPoint? point) {
+  if (point == null) return '杭州市 西湖区';
+  return '${point.lat.toStringAsFixed(5)}, ${point.lon.toStringAsFixed(5)}';
+}
+
+String _routeMaxElevationLabel(List<_GpxPoint> track) {
+  final elevations = track
+      .map((point) => point.ele)
+      .whereType<double>()
+      .where((value) => value.isFinite)
+      .toList(growable: false);
+  if (elevations.isEmpty) return '未提供';
+  final maxElevation = elevations.reduce(math.max);
+  return '${maxElevation.round()} m';
 }
 
 class _RouteEmptyState extends StatelessWidget {
@@ -5808,8 +5953,10 @@ class _RouteListCard extends StatefulWidget {
     required this.difficulty,
     required this.difficultyColor,
     required this.variant,
+    required this.track,
     required this.favorited,
     required this.onFavoriteToggle,
+    this.onDelete,
   });
 
   final String title;
@@ -5820,8 +5967,10 @@ class _RouteListCard extends StatefulWidget {
   final String difficulty;
   final Color difficultyColor;
   final int variant;
+  final List<_GpxPoint> track;
   final bool favorited;
   final VoidCallback onFavoriteToggle;
+  final VoidCallback? onDelete;
 
   @override
   State<_RouteListCard> createState() => _RouteListCardState();
@@ -5839,6 +5988,7 @@ class _RouteListCardState extends State<_RouteListCard> {
         difficulty: widget.difficulty,
         difficultyColor: widget.difficultyColor,
         variant: widget.variant,
+        track: widget.track,
         favorited: widget.favorited,
         onFavoriteToggle: widget.onFavoriteToggle,
       ),
@@ -5888,7 +6038,10 @@ class _RouteListCardState extends State<_RouteListCard> {
                         left: Radius.circular(14),
                       ),
                       child: CustomPaint(
-                        painter: _RouteMapPainter(variant: variant),
+                        painter: _RouteMapPainter(
+                          variant: variant,
+                          gpxTrack: widget.track,
+                        ),
                         child: const SizedBox.expand(),
                       ),
                     ),
@@ -5997,7 +6150,7 @@ class _RouteListCardState extends State<_RouteListCard> {
                                   climb: climb,
                                   duration: duration,
                                   difficulty: difficulty,
-                                  variant: variant,
+                                  onDelete: widget.onDelete,
                                 ),
                               ),
                             ],
@@ -6249,6 +6402,7 @@ class _RideRouteDetailPage extends StatelessWidget {
     required this.difficulty,
     required this.difficultyColor,
     required this.variant,
+    this.track = const <_GpxPoint>[],
     this.favorited = false,
     this.onFavoriteToggle,
   });
@@ -6261,6 +6415,7 @@ class _RideRouteDetailPage extends StatelessWidget {
   final String difficulty;
   final Color difficultyColor;
   final int variant;
+  final List<_GpxPoint> track;
   final bool favorited;
   final VoidCallback? onFavoriteToggle;
 
@@ -6303,7 +6458,10 @@ class _RideRouteDetailPage extends StatelessWidget {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(15),
                                 child: CustomPaint(
-                                  painter: _RouteMapPainter(variant: variant),
+                                  painter: _RouteMapPainter(
+                                    variant: variant,
+                                    gpxTrack: track,
+                                  ),
                                   child: const SizedBox.expand(),
                                 ),
                               ),
@@ -6407,7 +6565,9 @@ class _RideRouteDetailPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            '这是一条经典的环山路线，适合有一定经验的骑友。路线包含平路、爬坡与下坡，沿途风景优美，建议早晨出发，注意补给和防晒。',
+                            track.isEmpty
+                                ? '这是一条经典的环山路线，适合有一定经验的骑友。路线包含平路、爬坡与下坡，沿途风景优美，建议早晨出发，注意补给和防晒。'
+                                : '已解析导入路书中的 ${track.length} 个路线点，地图与海拔图会按 GPX 轨迹绘制。请在发送到设备前确认路线方向与路点完整性。',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.68),
                               fontSize: 14,
@@ -6448,12 +6608,9 @@ class _RideRouteDetailPage extends StatelessWidget {
                           SizedBox(
                             height: 120,
                             child: CustomPaint(
-                              painter: const _SparklinePainter(
-                                values: [
-                                  120, 180, 260, 420, 700, 980, 1180, 1268,
-                                  1040, 760, 520, 360, 240, 160,
-                                ],
-                                color: Color(0xFFA533FF),
+                              painter: _SparklinePainter(
+                                values: _routeElevationValues(track),
+                                color: const Color(0xFFA533FF),
                               ),
                               child: const SizedBox.expand(),
                             ),
@@ -6464,11 +6621,24 @@ class _RideRouteDetailPage extends StatelessWidget {
                     const SizedBox(height: 12),
                     _GlassPanel(
                       child: Column(
-                        children: const [
-                          _DetailInfoRow(label: '起点', value: '杭州市 西湖区'),
-                          _DetailInfoRow(label: '终点', value: '杭州市 西湖区'),
+                        children: [
                           _DetailInfoRow(
-                              label: '最高海拔', value: '1268 m', last: true),
+                            label: '起点',
+                            value: _routePointLabel(
+                              track.isEmpty ? null : track.first,
+                            ),
+                          ),
+                          _DetailInfoRow(
+                            label: '终点',
+                            value: _routePointLabel(
+                              track.isEmpty ? null : track.last,
+                            ),
+                          ),
+                          _DetailInfoRow(
+                            label: '最高海拔',
+                            value: _routeMaxElevationLabel(track),
+                            last: true,
+                          ),
                         ],
                       ),
                     ),
@@ -8007,10 +8177,15 @@ String _formatSeconds(int seconds) {
 }
 
 class _RouteMapPainter extends CustomPainter {
-  const _RouteMapPainter({this.variant = 0, this.track = const []});
+  const _RouteMapPainter({
+    this.variant = 0,
+    this.track = const [],
+    this.gpxTrack = const <_GpxPoint>[],
+  });
 
   final int variant;
   final List<RidePoint> track;
+  final List<_GpxPoint> gpxTrack;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -8027,7 +8202,7 @@ class _RouteMapPainter extends CustomPainter {
 
     _drawMapLines(canvas, size);
     // 有有效真实轨迹则画真实轨迹，否则兜底示例环线
-    final projected = _projectTrack(size);
+    final projected = _projectGpxTrack(size) ?? _projectTrack(size);
     if (projected != null) {
       _drawPolyline(canvas, projected);
     } else {
@@ -8036,25 +8211,43 @@ class _RouteMapPainter extends CustomPainter {
   }
 
   // 将真实 GPS 轨迹等比投影到画布；点不足/坐标非法/跨度过小时返回 null（兜底）
+  List<Offset>? _projectGpxTrack(Size size) {
+    if (gpxTrack.length < 2) return null;
+    return _projectCoordinates(
+      size,
+      gpxTrack.map((point) => _TrackCoordinate(point.lat, point.lon)),
+    );
+  }
+
   List<Offset>? _projectTrack(Size size) {
     if (track.length < 2) return null;
+    return _projectCoordinates(
+      size,
+      track.map((point) => _TrackCoordinate(point.latitude, point.longitude)),
+    );
+  }
+
+  List<Offset>? _projectCoordinates(
+    Size size,
+    Iterable<_TrackCoordinate> coordinates,
+  ) {
     var minLat = double.infinity;
     var maxLat = -double.infinity;
     var minLon = double.infinity;
     var maxLon = -double.infinity;
-    var valid = 0;
-    for (final p in track) {
-      final lat = p.latitude;
-      final lon = p.longitude;
+    final validCoordinates = <_TrackCoordinate>[];
+    for (final p in coordinates) {
+      final lat = p.lat;
+      final lon = p.lon;
       if (!lat.isFinite || !lon.isFinite) continue;
       if (lat == 0 && lon == 0) continue;
+      validCoordinates.add(p);
       minLat = math.min(minLat, lat);
       maxLat = math.max(maxLat, lat);
       minLon = math.min(minLon, lon);
       maxLon = math.max(maxLon, lon);
-      valid++;
     }
-    if (valid < 2) return null;
+    if (validCoordinates.length < 2) return null;
     final latSpan = maxLat - minLat;
     final lonSpan = maxLon - minLon;
     if (latSpan <= 1e-7 && lonSpan <= 1e-7) return null;
@@ -8067,13 +8260,9 @@ class _RouteMapPainter extends CustomPainter {
     final offsetX = pad + (w - lonSpan * scale) / 2;
     final offsetY = pad + (h - latSpan * scale) / 2;
     final pts = <Offset>[];
-    for (final p in track) {
-      final lat = p.latitude;
-      final lon = p.longitude;
-      if (!lat.isFinite || !lon.isFinite) continue;
-      if (lat == 0 && lon == 0) continue;
-      final x = offsetX + (lon - minLon) * scale;
-      final y = offsetY + (maxLat - lat) * scale;
+    for (final p in validCoordinates) {
+      final x = offsetX + (p.lon - minLon) * scale;
+      final y = offsetY + (maxLat - p.lat) * scale;
       pts.add(Offset(x, y));
     }
     return pts.length >= 2 ? pts : null;
@@ -8222,8 +8411,17 @@ class _RouteMapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RouteMapPainter oldDelegate) {
-    return oldDelegate.variant != variant || oldDelegate.track != track;
+    return oldDelegate.variant != variant ||
+        oldDelegate.track != track ||
+        oldDelegate.gpxTrack != gpxTrack;
   }
+}
+
+class _TrackCoordinate {
+  const _TrackCoordinate(this.lat, this.lon);
+
+  final double lat;
+  final double lon;
 }
 
 class _SparklinePainter extends CustomPainter {
@@ -9031,7 +9229,7 @@ Future<void> _showRouteMoreActions(
   required String climb,
   required String duration,
   required String difficulty,
-  required int variant,
+  VoidCallback? onDelete,
 }) {
   final summary = _routeSummaryText(
     title: title,
@@ -9093,6 +9291,18 @@ Future<void> _showRouteMoreActions(
                   );
                 },
               ),
+              if (onDelete != null) ...[
+                Divider(color: Colors.white.withOpacity(0.08), height: 8),
+                _RouteMoreAction(
+                  icon: Icons.delete_outline,
+                  label: '删除路线',
+                  color: const Color(0xFFFF3B5F),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    onDelete();
+                  },
+                ),
+              ],
             ],
           ),
         ),
@@ -9106,14 +9316,17 @@ class _RouteMoreAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.color,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final actionColor = color ?? _RideColors.orange;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
@@ -9122,12 +9335,12 @@ class _RouteMoreAction extends StatelessWidget {
         child: Row(
           children: [
             const SizedBox(width: 8),
-            Icon(icon, color: _RideColors.orange, size: 22),
+            Icon(icon, color: actionColor, size: 22),
             const SizedBox(width: 14),
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: color ?? Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
