@@ -5,6 +5,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
+import '../config/share_links.dart';
 import '../controllers/ble_controller.dart';
 
 // AD Type data structure
@@ -744,6 +745,8 @@ class DeviceDetailPage extends StatelessWidget {
 信号强度: ${controller.getDeviceRssi(device)} dBm
 可连接: ${controller.isConnectable(device) ? '是' : '否'}
 服务数量: ${controller.getServiceUuids(device).length}
+
+打开 Trace: ${ShareLinks.landingPageUrl}
 ''';
 
     try {

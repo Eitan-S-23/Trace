@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/share_links.dart';
 import '../controllers/ride_controller.dart';
 import '../models/ride_models.dart';
 
@@ -8217,7 +8218,7 @@ Future<void> _shareRouteSummary(
 }
 
 Uri _routeShareUri() {
-  return Uri.https('github.com', '/Eitan-S-23/Trace');
+  return ShareLinks.landingPageUri;
 }
 
 String _routeSummaryText({

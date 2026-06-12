@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#0b1f22" />
+    <title>Trace - 打开应用</title>
+    <meta
+      name="description"
+      content="打开 Trace 骑行与 BLE 设备监控应用。微信中请先选择在浏览器打开。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Trace - 打开应用" />
+    <meta
+      property="og:description"
+      content="骑行数据与 BLE 设备监控工具。点击后可在浏览器中唤起 App。"
+    />
+    <meta property="og:url" content="https://eitan-s-23.github.io/Trace/" />
+    <meta
+      property="og:image"
+      content="https://eitan-s-23.github.io/Trace/assets/share-card.svg"
+    />
+    <link rel="icon" href="assets/share-card.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="wechat-guide" id="wechatGuide" hidden>
+      <div class="wechat-guide__arrow" aria-hidden="true"></div>
+      <p>微信内置浏览器限制直接唤起 App。</p>
+      <strong>请点右上角菜单，选择“在浏览器打开”。</strong>
+    </aside>
+
+    <main class="shell">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero__copy">
+          <p class="eyebrow">BLE Ride Monitor</p>
+          <h1 id="hero-title">Trace</h1>
+          <p class="hero__lead">
+            打开骑行数据与蓝牙设备监控应用。浏览器会自动请求启动已安装的 Trace。
+          </p>
+
+          <div class="actions" aria-label="主要操作">
+            <button class="primary-action" id="openAppButton" type="button">
+              打开 Trace
+            </button>
+            <a class="secondary-action" id="downloadAndroid" href="#">
+              下载 Android APK
+            </a>
+          </div>
+
+          <p class="status" id="openStatus" role="status" aria-live="polite">
+            正在准备唤起应用...
+          </p>
+        </div>
+
+        <div class="hero__visual" aria-hidden="true">
+          <img src="assets/share-card.svg" alt="" />
+        </div>
+      </section>
+
+      <section class="flow" aria-labelledby="flow-title">
+        <p class="section-kicker">打开流程</p>
+        <h2 id="flow-title">微信分享链接先到这里，再交给系统浏览器。</h2>
+        <ol class="flow__steps">
+          <li>
+            <span>01</span>
+            微信内点击链接后，按页面提示选择“在浏览器打开”。
+          </li>
+          <li>
+            <span>02</span>
+            系统浏览器会自动尝试打开 <code>trace://open</code>。
+          </li>
+          <li>
+            <span>03</span>
+            如果没有安装 App，可以下载 Android APK 后重新打开此页面。
+          </li>
+        </ol>
+      </section>
+
+      <section class="download" aria-labelledby="download-title">
+        <p class="section-kicker">备用入口</p>
+        <h2 id="download-title">没有自动跳转时，使用下面的入口。</h2>
+        <div class="download__links">
+          <button id="copyLinkButton" type="button">复制页面链接</button>
+          <a id="downloadAndroidBottom" href="#">Android APK</a>
+          <a id="downloadWindows" href="#">Windows 版</a>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
