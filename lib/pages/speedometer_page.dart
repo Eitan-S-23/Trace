@@ -4790,8 +4790,10 @@ class _RoutesPageState extends State<_RoutesPage> {
     unawaited(_saveFavoriteRoutes());
   }
 
-  Future<void> _importGpxRoute() async {
+  Future<void> _importGpxRoute({bool collapseFabOnSuccess = false}) async {
     if (_importingRoute) return;
+
+    setState(() => _importingRoute = true);
 
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -4802,8 +4804,6 @@ class _RoutesPageState extends State<_RoutesPage> {
       );
       if (result == null || result.files.isEmpty) return;
       if (!mounted) return;
-
-      setState(() => _importingRoute = true);
 
       final file = result.files.single;
       final content = await _readPickedGpxFile(file);
@@ -4818,7 +4818,9 @@ class _RoutesPageState extends State<_RoutesPage> {
       setState(() {
         _importedRoutes.insert(0, route);
         _modeIndex = 2;
-        _routeFabExpanded = false;
+        if (collapseFabOnSuccess) {
+          _routeFabExpanded = false;
+        }
       });
       await _saveImportedRoutes();
       _showUiMessage('导入路线', '已导入 ${route.title}');
@@ -4909,7 +4911,9 @@ class _RoutesPageState extends State<_RoutesPage> {
               child: visibleRoutes.isEmpty
                   ? _RouteEmptyState(
                       modeIndex: _modeIndex,
-                      onImport: _importGpxRoute,
+                      onImport: () {
+                        unawaited(_importGpxRoute());
+                      },
                     )
                   : ListView.separated(
                       physics: const BouncingScrollPhysics(),
@@ -4944,7 +4948,9 @@ class _RoutesPageState extends State<_RoutesPage> {
             onToggle: () {
               setState(() => _routeFabExpanded = !_routeFabExpanded);
             },
-            onImportGpx: _importGpxRoute,
+            onImportGpx: () {
+              unawaited(_importGpxRoute(collapseFabOnSuccess: true));
+            },
             onCreateRoute: () {
               setState(() => _routeFabExpanded = false);
               _showUiMessage('创建路书', '创建路书功能入口已打开');
@@ -5153,12 +5159,14 @@ class _RouteImportFabState extends State<_RouteImportFab>
                 ),
                 bottom: 64 + actionSpacing,
               ),
-              _RouteFabButton(
-                icon: Icons.add,
+              _RouteFabToggleButton(
                 color: const Color(0xFFFFB000),
                 size: 64,
                 onTap: widget.onToggle,
-                turn: widget.expanded ? 0.125 : 0,
+                animation: CurvedAnimation(
+                  parent: _controller,
+                  curve: Curves.easeInOutCubic,
+                ),
               ),
             ],
           ),
@@ -5197,7 +5205,7 @@ class _RouteFabAction extends StatelessWidget {
         builder: (context, child) {
           final progress = animation.value;
           return IgnorePointer(
-            ignoring: progress < 0.98 || busy,
+            ignoring: progress <= 0.01 || busy,
             child: Opacity(
               opacity: progress,
               child: Transform.translate(
@@ -5251,6 +5259,79 @@ class _RouteFabAction extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _RouteFabToggleButton extends StatelessWidget {
+  const _RouteFabToggleButton({
+    required this.color,
+    required this.size,
+    required this.onTap,
+    required this.animation,
+  });
+
+  final Color color;
+  final double size;
+  final VoidCallback? onTap;
+  final Animation<double> animation;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      shape: const CircleBorder(),
+      elevation: 10,
+      shadowColor: Colors.black.withOpacity(0.52),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Center(
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (context, _) {
+                return CustomPaint(
+                  size: Size.square(size * 0.44),
+                  painter: _RouteFabToggleIconPainter(animation.value),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteFabToggleIconPainter extends CustomPainter {
+  const _RouteFabToggleIconPainter(this.progress);
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final length = size.shortestSide * (0.76 - 0.08 * progress);
+    final paint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 3.8
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    void drawLine(double angle) {
+      final vector = Offset(math.cos(angle), math.sin(angle)) * (length / 2);
+      canvas.drawLine(center - vector, center + vector, paint);
+    }
+
+    drawLine((math.pi / 4) * progress);
+    drawLine((math.pi / 2) + (math.pi / 4) * progress);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RouteFabToggleIconPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 }
 
