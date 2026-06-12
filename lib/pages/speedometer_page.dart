@@ -4792,20 +4792,18 @@ class _RoutesPageState extends State<_RoutesPage> {
 
   Future<void> _importGpxRoute() async {
     if (_importingRoute) return;
-    _importingRoute = true;
 
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['gpx'],
         allowMultiple: false,
-        withData: true,
         dialogTitle: '选择路书文件',
       );
       if (result == null || result.files.isEmpty) return;
       if (!mounted) return;
 
-      setState(() => _routeFabExpanded = false);
+      setState(() => _importingRoute = true);
 
       final file = result.files.single;
       final content = await _readPickedGpxFile(file);
@@ -5156,10 +5154,11 @@ class _RouteImportFabState extends State<_RouteImportFab>
                 bottom: 64 + actionSpacing,
               ),
               _RouteFabButton(
-                icon: widget.expanded ? Icons.close : Icons.add,
+                icon: Icons.add,
                 color: const Color(0xFFFFB000),
                 size: 64,
                 onTap: widget.onToggle,
+                turn: widget.expanded ? 0.125 : 0,
               ),
             ],
           ),
@@ -5262,6 +5261,7 @@ class _RouteFabButton extends StatelessWidget {
     required this.size,
     required this.onTap,
     this.busy = false,
+    this.turn = 0,
   });
 
   final IconData icon;
@@ -5269,6 +5269,7 @@ class _RouteFabButton extends StatelessWidget {
   final double size;
   final VoidCallback? onTap;
   final bool busy;
+  final double turn;
 
   @override
   Widget build(BuildContext context) {
@@ -5293,7 +5294,16 @@ class _RouteFabButton extends StatelessWidget {
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : Icon(icon, color: Colors.white, size: size * 0.44),
+                : AnimatedRotation(
+                    turns: turn,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    child: Icon(
+                      icon,
+                      color: Colors.white,
+                      size: size * 0.44,
+                    ),
+                  ),
           ),
         ),
       ),
