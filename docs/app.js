@@ -2,7 +2,7 @@
   'use strict';
 
   const PAGE_URL = 'https://eitan-s-23.github.io/Trace/';
-  const APP_SCHEME_URL = 'trace://open';
+  const APP_SCHEME_URL = 'trace://speedometer';
   const APP_PACKAGE_NAME = 'com.wen.gaia.gaia';
   const ANDROID_APK_URL =
     'https://github.com/Eitan-S-23/Trace/releases/latest/download/ble-monitor-android.apk';
@@ -12,6 +12,11 @@
   const userAgent = navigator.userAgent || '';
   const params = new URLSearchParams(window.location.search);
   const isWeChat = /MicroMessenger/i.test(userAgent);
+  const isInAppBrowser =
+    isWeChat ||
+    /QQ\/|Weibo|AlipayClient|DingTalk|Lark|Feishu|Bytedance|Toutiao|Aweme|Instagram|FBAN|FBAV|Line\//i.test(
+      userAgent,
+    );
   const isAndroid = /Android/i.test(userAgent);
   const isIos =
     /iPhone|iPad|iPod/i.test(userAgent) ||
@@ -29,7 +34,7 @@
   }
 
   function androidIntentUrl() {
-    return `intent://open#Intent;scheme=trace;package=${APP_PACKAGE_NAME};S.browser_fallback_url=${encodeURIComponent(
+    return `intent://speedometer#Intent;scheme=trace;package=${APP_PACKAGE_NAME};S.browser_fallback_url=${encodeURIComponent(
       fallbackPageUrl(),
     )};end`;
   }
@@ -79,24 +84,37 @@
     window.setTimeout(() => {
       cleanup();
       if (!appLikelyOpened && Date.now() - startedAt < 3200) {
-        setMode('fallback');
+        setMode('browser');
         setStatus('如果没有跳转，可能尚未安装 App，或浏览器拦截了自动唤起。', 'warning');
       }
     }, 2200);
   }
 
+  function navigateToApp(targetUrl) {
+    if (isIos) {
+      const iframe = document.createElement('iframe');
+      iframe.hidden = true;
+      iframe.src = APP_SCHEME_URL;
+      document.body.appendChild(iframe);
+      window.setTimeout(() => iframe.remove(), 1200);
+    }
+
+    window.location.href = targetUrl;
+  }
+
   function openApp(source) {
-    if (isWeChat) {
-      setMode('wechat');
-      wechatGuide.hidden = false;
-      setStatus('请先在微信右上角菜单中选择“在浏览器打开”。', 'warning');
+    if (isInAppBrowser) {
+      setMode('in-app');
+      setStatus('请先在右上角菜单中选择“在浏览器打开”。', 'warning');
       return;
     }
 
-    setStatus(source === 'auto' ? '正在尝试打开 Trace...' : '正在请求系统打开 Trace...');
+    setMode('browser');
+    setStatus(source === 'auto' ? '正在打开骑行软件...' : '正在请求系统打开骑行软件...');
     bindOpenTracking(Date.now());
 
-    window.location.href = isAndroid ? androidIntentUrl() : APP_SCHEME_URL;
+    const targetUrl = isAndroid ? androidIntentUrl() : APP_SCHEME_URL;
+    navigateToApp(targetUrl);
   }
 
   async function copyPageLink() {
@@ -123,25 +141,24 @@
     openButton.addEventListener('click', () => openApp('manual'));
     copyButton.addEventListener('click', copyPageLink);
 
-    if (isWeChat) {
-      setMode('wechat');
-      wechatGuide.hidden = false;
-      setStatus('微信内请先选择“在浏览器打开”，打开后会自动尝试启动 App。', 'warning');
+    if (isInAppBrowser) {
+      setMode('in-app');
+      setStatus('请先在右上角菜单中选择“在浏览器打开”。', 'warning');
       return;
     }
 
     if (params.get('fallback') === '1') {
-      setMode('fallback');
-      setStatus('没有检测到已安装的 Trace，可以先下载 Android APK。', 'warning');
+      setMode('browser');
+      setStatus('没有检测到已安装的骑行软件，可以先下载 Android APK。', 'warning');
       return;
     }
 
     if (!isAndroid && !isIos) {
-      setMode('desktop');
+      setMode('browser');
       return;
     }
 
-    window.setTimeout(() => openApp('auto'), 650);
+    openApp('auto');
   }
 
   boot();

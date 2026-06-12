@@ -8,11 +8,13 @@ import 'pages/main_app_page.dart';
 import 'pages/home_page.dart';
 import 'pages/monitor_page.dart';
 import 'pages/saved_devices_page.dart';
+import 'pages/speedometer_page.dart';
 import 'pages/test_notification_page.dart';
 import 'services/database_service.dart';
 import 'services/scan_settings_service.dart';
 import 'services/alert_service.dart';
 import 'services/background_optimization_service.dart';
+import 'services/deep_link_service.dart';
 import 'services/ota_service.dart';
 import 'services/bluetooth_service.dart' as bt_service;
 import 'services/responsive_service.dart';
@@ -102,6 +104,7 @@ class MyApp extends StatelessWidget {
             // 初始化通知服务
             Get.put(NotificationService(), permanent: true);
             Get.put(BackgroundTaskService(), permanent: true);
+            Get.put(DeepLinkService(), permanent: true);
 
             WidgetsBinding.instance.addPostFrameCallback((_) {
               Get.find<NotificationService>().initialize();
@@ -115,6 +118,8 @@ class MyApp extends StatelessWidget {
             GetPage(
                 name: '/test-notification',
                 page: () => const TestNotificationPage()),
+            GetPage(
+                name: '/speedometer', page: () => const SpeedometerPage()),
           ],
           debugShowCheckedModeBanner: false,
         );

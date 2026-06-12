@@ -1029,13 +1029,47 @@ svg {
   transform: rotate(45deg);
 }
 
-body[data-mode="wechat"] .guide-column--left .phone {
+body[data-mode="in-app"] .guide-panel {
+  grid-template-columns: minmax(520px, 1fr) 74px minmax(430px, 492px);
+  min-height: auto;
+}
+
+body[data-mode="in-app"] .guide-column--right,
+body[data-mode="in-app"] .instruction-board + .guide-chevron,
+body[data-mode="in-app"] .success-panel {
+  display: none;
+}
+
+body[data-mode="in-app"] .guide-column--left .phone {
   border-color: var(--green);
   box-shadow: 0 18px 48px rgba(16, 185, 101, 0.14);
 }
 
-body[data-mode="fallback"] .open-app-button {
-  background: linear-gradient(180deg, #19c96b 0%, #0aa44f 100%);
+body[data-mode="browser"] .page-shell {
+  padding-top: 52px;
+}
+
+body[data-mode="browser"] .page-header,
+body[data-mode="browser"] .guide-column--left,
+body[data-mode="browser"] .instruction-board,
+body[data-mode="browser"] .guide-chevron {
+  display: none;
+}
+
+body[data-mode="browser"] .guide-panel {
+  display: grid;
+  grid-template-columns: minmax(520px, 620px);
+  min-height: auto;
+  justify-content: center;
+  padding-top: 34px;
+}
+
+body[data-mode="browser"] .guide-column--right {
+  display: grid;
+}
+
+body[data-mode="browser"] .success-panel {
+  display: grid;
 }
 
 @keyframes spin {
@@ -1115,6 +1149,11 @@ body[data-mode="fallback"] .open-app-button {
     grid-template-columns: 1fr;
     gap: 36px;
     min-height: 0;
+  }
+
+  body[data-mode="in-app"] .guide-panel,
+  body[data-mode="browser"] .guide-panel {
+    grid-template-columns: 1fr;
   }
 
   .guide-chevron {
