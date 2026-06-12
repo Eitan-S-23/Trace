@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io' as io;
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -4663,11 +4666,15 @@ class _RoutesPage extends StatefulWidget {
 
 class _RoutesPageState extends State<_RoutesPage> {
   static const _favoriteRoutesPrefsKey = 'speedometer.favorite_routes';
+  static const _importedRoutesPrefsKey = 'speedometer.imported_routes';
 
   var _modeIndex = 0;
+  var _routeFabExpanded = false;
+  var _importingRoute = false;
   final _favoriteRouteTitles = <String>{};
+  final _importedRoutes = <_RouteListEntry>[];
 
-  static const _routes = <_RouteListEntry>[
+  static const _baseRoutes = <_RouteListEntry>[
     _RouteListEntry(
       title: '周末环山路线',
       date: '2024/05/18  08:32',
@@ -4707,29 +4714,43 @@ class _RoutesPageState extends State<_RoutesPage> {
       difficulty: '简单',
       difficultyColor: Color(0xFF62D729),
       variant: 3,
-      imported: true,
     ),
   ];
 
+  List<_RouteListEntry> get _allRoutes => [
+        ..._importedRoutes,
+        ..._baseRoutes,
+      ];
+
   List<_RouteListEntry> get _visibleRoutes {
+    final routes = _allRoutes;
     return switch (_modeIndex) {
-      1 => _routes
+      1 => routes
           .where((route) => _favoriteRouteTitles.contains(route.title))
           .toList(),
-      2 => _routes.where((route) => route.imported).toList(),
-      _ => _routes,
+      2 => _importedRoutes,
+      _ => routes,
     };
   }
 
   @override
   void initState() {
     super.initState();
-    unawaited(_loadFavoriteRoutes());
+    unawaited(_loadRouteState());
   }
 
-  Future<void> _loadFavoriteRoutes() async {
+  Future<void> _loadRouteState() async {
     final prefs = await SharedPreferences.getInstance();
-    final knownTitles = _routes.map((route) => route.title).toSet();
+    final importedRoutes = prefs
+            .getStringList(_importedRoutesPrefsKey)
+            ?.map(_RouteListEntry.tryFromJson)
+            .whereType<_RouteListEntry>()
+            .toList() ??
+        <_RouteListEntry>[];
+    final knownTitles = [
+      ...importedRoutes,
+      ..._baseRoutes,
+    ].map((route) => route.title).toSet();
     final titles = prefs
             .getStringList(_favoriteRoutesPrefsKey)
             ?.where(knownTitles.contains)
@@ -4737,6 +4758,9 @@ class _RoutesPageState extends State<_RoutesPage> {
         <String>{};
     if (!mounted) return;
     setState(() {
+      _importedRoutes
+        ..clear()
+        ..addAll(importedRoutes);
       _favoriteRouteTitles
         ..clear()
         ..addAll(titles);
@@ -4749,6 +4773,14 @@ class _RoutesPageState extends State<_RoutesPage> {
     await prefs.setStringList(_favoriteRoutesPrefsKey, titles);
   }
 
+  Future<void> _saveImportedRoutes() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _importedRoutesPrefsKey,
+      _importedRoutes.map((route) => jsonEncode(route.toJson())).toList(),
+    );
+  }
+
   void _toggleFavorite(_RouteListEntry route) {
     setState(() {
       if (!_favoriteRouteTitles.add(route.title)) {
@@ -4758,75 +4790,169 @@ class _RoutesPageState extends State<_RoutesPage> {
     unawaited(_saveFavoriteRoutes());
   }
 
+  Future<void> _importGpxRoute() async {
+    if (_importingRoute) return;
+    setState(() {
+      _importingRoute = true;
+      _routeFabExpanded = false;
+    });
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['gpx'],
+        allowMultiple: false,
+        withData: true,
+        dialogTitle: '选择 GPX 路书',
+      );
+      if (result == null || result.files.isEmpty) return;
+      if (!mounted) return;
+
+      final file = result.files.single;
+      final content = await _readPickedGpxFile(file);
+      final parsed = _parseGpxRoute(
+        content,
+        fileName: file.name,
+        fallbackVariant: _allRoutes.length,
+      );
+      final route = parsed.copyWith(title: _uniqueRouteTitle(parsed.title));
+      if (!mounted) return;
+
+      setState(() {
+        _importedRoutes.insert(0, route);
+        _modeIndex = 2;
+        _routeFabExpanded = false;
+      });
+      await _saveImportedRoutes();
+      _showUiMessage('导入路线', '已导入 ${route.title}');
+    } on FormatException catch (error) {
+      _showUiMessage('导入失败', error.message);
+    } catch (_) {
+      _showUiMessage('导入失败', '请选择有效的 GPX 文件');
+    } finally {
+      if (mounted) {
+        setState(() => _importingRoute = false);
+      }
+    }
+  }
+
+  Future<String> _readPickedGpxFile(PlatformFile file) async {
+    final bytes = file.bytes;
+    if (bytes != null) {
+      return utf8.decode(bytes, allowMalformed: true);
+    }
+
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      throw const FormatException('无法读取所选 GPX 文件');
+    }
+    return io.File(path).readAsString();
+  }
+
+  String _uniqueRouteTitle(String title) {
+    final existingTitles = _allRoutes.map((route) => route.title).toSet();
+    if (!existingTitles.contains(title)) return title;
+
+    var index = 2;
+    while (existingTitles.contains('$title ($index)')) {
+      index += 1;
+    }
+    return '$title ($index)';
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleRoutes = _visibleRoutes;
-    final importedCount = _routes.where((route) => route.imported).length;
+    final routes = _allRoutes;
+    final importedCount = _importedRoutes.length;
     final routeCountLabel = switch (_modeIndex) {
       1 => '收藏路线（${_favoriteRouteTitles.length}）',
       2 => '导入路线（$importedCount）',
-      _ => '我的路线（${_routes.length}）',
+      _ => '我的路线（${routes.length}）',
     };
 
-    return Column(
+    return Stack(
       children: [
-        // 固定子头：模式分段 + 搜索 + 计数（无第二顶部栏）
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
-          child: Column(
-            children: [
-              _RouteModeTabs(
-                selectedIndex: _modeIndex,
-                counts: [
-                  _routes.length,
-                  _favoriteRouteTitles.length,
-                  importedCount,
-                ],
-                onSelect: (index) => setState(() => _modeIndex = index),
-              ),
-              const SizedBox(height: 12),
-              const _RouteSearchBar(),
-              const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  routeCountLabel,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+        Column(
+          children: [
+            // 固定子头：模式分段 + 搜索 + 计数（无第二顶部栏）
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+              child: Column(
+                children: [
+                  _RouteModeTabs(
+                    selectedIndex: _modeIndex,
+                    counts: [
+                      routes.length,
+                      _favoriteRouteTitles.length,
+                      importedCount,
+                    ],
+                    onSelect: (index) => setState(() => _modeIndex = index),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  const _RouteSearchBar(),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      routeCountLabel,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.72),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            // 单一滚动区：路线卡片列表
+            Expanded(
+              child: visibleRoutes.isEmpty
+                  ? _RouteEmptyState(
+                      modeIndex: _modeIndex,
+                      onImport: _importGpxRoute,
+                    )
+                  : ListView.separated(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 112),
+                      itemCount: visibleRoutes.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final route = visibleRoutes[index];
+                        return _RouteListCard(
+                          title: route.title,
+                          date: route.date,
+                          distance: route.distance,
+                          climb: route.climb,
+                          duration: route.duration,
+                          difficulty: route.difficulty,
+                          difficultyColor: route.difficultyColor,
+                          variant: route.variant,
+                          favorited: _favoriteRouteTitles.contains(route.title),
+                          onFavoriteToggle: () => _toggleFavorite(route),
+                        );
+                      },
+                    ),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        // 单一滚动区：路线卡片列表
-        Expanded(
-          child: visibleRoutes.isEmpty
-              ? _RouteEmptyState(modeIndex: _modeIndex)
-              : ListView.separated(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-                  itemCount: visibleRoutes.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final route = visibleRoutes[index];
-                    return _RouteListCard(
-                      title: route.title,
-                      date: route.date,
-                      distance: route.distance,
-                      climb: route.climb,
-                      duration: route.duration,
-                      difficulty: route.difficulty,
-                      difficultyColor: route.difficultyColor,
-                      variant: route.variant,
-                      favorited: _favoriteRouteTitles.contains(route.title),
-                      onFavoriteToggle: () => _toggleFavorite(route),
-                    );
-                  },
-                ),
+        Positioned(
+          right: 18,
+          bottom: 18,
+          child: _RouteImportFab(
+            expanded: _routeFabExpanded,
+            busy: _importingRoute,
+            onToggle: () {
+              setState(() => _routeFabExpanded = !_routeFabExpanded);
+            },
+            onImportGpx: _importGpxRoute,
+            onCreateRoute: () {
+              setState(() => _routeFabExpanded = false);
+              _showUiMessage('创建路书', '创建路书功能入口已打开');
+            },
+          ),
         ),
       ],
     );
@@ -4855,12 +4981,466 @@ class _RouteListEntry {
   final Color difficultyColor;
   final int variant;
   final bool imported;
+
+  _RouteListEntry copyWith({
+    String? title,
+    String? date,
+    String? distance,
+    String? climb,
+    String? duration,
+    String? difficulty,
+    Color? difficultyColor,
+    int? variant,
+    bool? imported,
+  }) {
+    return _RouteListEntry(
+      title: title ?? this.title,
+      date: date ?? this.date,
+      distance: distance ?? this.distance,
+      climb: climb ?? this.climb,
+      duration: duration ?? this.duration,
+      difficulty: difficulty ?? this.difficulty,
+      difficultyColor: difficultyColor ?? this.difficultyColor,
+      variant: variant ?? this.variant,
+      imported: imported ?? this.imported,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'title': title,
+      'date': date,
+      'distance': distance,
+      'climb': climb,
+      'duration': duration,
+      'difficulty': difficulty,
+      'difficultyColor': difficultyColor.value,
+      'variant': variant,
+      'imported': imported,
+    };
+  }
+
+  static _RouteListEntry? tryFromJson(String source) {
+    try {
+      final data = jsonDecode(source);
+      if (data is! Map<String, dynamic>) return null;
+
+      return _RouteListEntry(
+        title: _stringValue(data['title'], '导入路线'),
+        date: _stringValue(data['date'], '未知时间'),
+        distance: _stringValue(data['distance'], '0.00'),
+        climb: _stringValue(data['climb'], '0'),
+        duration: _stringValue(data['duration'], '00:00:00'),
+        difficulty: _stringValue(data['difficulty'], '简单'),
+        difficultyColor: Color(_intValue(data['difficultyColor'], 0xFF62D729)),
+        variant: _intValue(data['variant'], 0),
+        imported: _boolValue(data['imported'], true),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _stringValue(Object? value, String fallback) {
+    if (value is String && value.trim().isNotEmpty) return value;
+    return fallback;
+  }
+
+  static int _intValue(Object? value, int fallback) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
+  }
+
+  static bool _boolValue(Object? value, bool fallback) {
+    if (value is bool) return value;
+    if (value is String) return value.toLowerCase() == 'true';
+    return fallback;
+  }
+}
+
+class _RouteImportFab extends StatelessWidget {
+  const _RouteImportFab({
+    required this.expanded,
+    required this.busy,
+    required this.onToggle,
+    required this.onImportGpx,
+    required this.onCreateRoute,
+  });
+
+  final bool expanded;
+  final bool busy;
+  final VoidCallback onToggle;
+  final VoidCallback onImportGpx;
+  final VoidCallback onCreateRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          child: expanded
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _RouteFabAction(
+                      label: '导入 GPX',
+                      icon: Icons.file_upload_outlined,
+                      color: _RideColors.orange,
+                      busy: busy,
+                      onTap: busy ? null : onImportGpx,
+                    ),
+                    const SizedBox(height: 12),
+                    _RouteFabAction(
+                      label: '创建路书',
+                      icon: Icons.edit,
+                      color: const Color(0xFFFFB000),
+                      onTap: onCreateRoute,
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                )
+              : const SizedBox.shrink(),
+        ),
+        _RouteFabButton(
+          icon: expanded ? Icons.close : Icons.add,
+          color: const Color(0xFFFFB000),
+          size: 64,
+          onTap: onToggle,
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteFabAction extends StatelessWidget {
+  const _RouteFabAction({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+    this.busy = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFF101720).withOpacity(0.92),
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(color: Colors.white.withOpacity(0.10)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.24),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        _RouteFabButton(
+          icon: icon,
+          color: color,
+          size: 56,
+          busy: busy,
+          onTap: onTap,
+        ),
+      ],
+    );
+  }
+}
+
+class _RouteFabButton extends StatelessWidget {
+  const _RouteFabButton({
+    required this.icon,
+    required this.color,
+    required this.size,
+    required this.onTap,
+    this.busy = false,
+  });
+
+  final IconData icon;
+  final Color color;
+  final double size;
+  final VoidCallback? onTap;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      shape: const CircleBorder(),
+      elevation: 10,
+      shadowColor: Colors.black.withOpacity(0.52),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Center(
+            child: busy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Icon(icon, color: Colors.white, size: size * 0.44),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+_RouteListEntry _parseGpxRoute(
+  String source, {
+  required String fileName,
+  required int fallbackVariant,
+}) {
+  final points = _extractGpxPoints(source);
+  if (points.length < 2) {
+    throw const FormatException('GPX 文件中没有足够的路线点');
+  }
+
+  final distanceKm = _calculateRouteDistanceKm(points);
+  final climbMeters = _calculateRouteClimbMeters(points);
+  final startedAt = _firstGpxTime(source) ?? DateTime.now();
+  final endedAt = _lastGpxTime(source);
+  final duration = endedAt != null && endedAt.isAfter(startedAt)
+      ? endedAt.difference(startedAt)
+      : Duration(minutes: math.max(1, (distanceKm / 22 * 60).round()));
+
+  return _RouteListEntry(
+    title: _extractGpxRouteName(source, fileName),
+    date: _formatImportedRouteDate(startedAt),
+    distance: distanceKm.toStringAsFixed(2),
+    climb: climbMeters.round().toString(),
+    duration: _formatRouteDuration(duration),
+    difficulty: _routeDifficulty(distanceKm, climbMeters),
+    difficultyColor: _routeDifficultyColor(distanceKm, climbMeters),
+    variant: fallbackVariant % 6,
+    imported: true,
+  );
+}
+
+List<_GpxPoint> _extractGpxPoints(String source) {
+  final matches = RegExp(
+    r'<(?:\w+:)?(?:trkpt|rtept)\b([^>]*)>([\s\S]*?)</(?:\w+:)?(?:trkpt|rtept)>',
+    caseSensitive: false,
+  ).allMatches(source);
+  final points = <_GpxPoint>[];
+
+  for (final match in matches) {
+    final attributes = match.group(1) ?? '';
+    final body = match.group(2) ?? '';
+    final lat = _extractGpxAttribute(attributes, 'lat');
+    final lon = _extractGpxAttribute(attributes, 'lon');
+    if (lat == null || lon == null) continue;
+
+    points.add(
+      _GpxPoint(
+        lat: lat,
+        lon: lon,
+        ele: _extractGpxTagDouble(body, 'ele'),
+      ),
+    );
+  }
+
+  return points;
+}
+
+double? _extractGpxAttribute(String attributes, String name) {
+  final match = RegExp(
+    '$name\\s*=\\s*["\\\']([^"\\\']+)["\\\']',
+    caseSensitive: false,
+  ).firstMatch(attributes);
+  if (match == null) return null;
+  return double.tryParse(match.group(1) ?? '');
+}
+
+double? _extractGpxTagDouble(String source, String tagName) {
+  final match = RegExp(
+    '<(?:\\w+:)?$tagName[^>]*>([^<]+)</(?:\\w+:)?$tagName>',
+    caseSensitive: false,
+  ).firstMatch(source);
+  if (match == null) return null;
+  return double.tryParse((match.group(1) ?? '').trim());
+}
+
+String _extractGpxRouteName(String source, String fileName) {
+  for (final pattern in const [
+    r'<(?:\w+:)?trk\b[\s\S]*?<(?:\w+:)?name[^>]*>([^<]+)</(?:\w+:)?name>',
+    r'<(?:\w+:)?rte\b[\s\S]*?<(?:\w+:)?name[^>]*>([^<]+)</(?:\w+:)?name>',
+    r'<(?:\w+:)?metadata\b[\s\S]*?<(?:\w+:)?name[^>]*>([^<]+)</(?:\w+:)?name>',
+  ]) {
+    final match = RegExp(pattern, caseSensitive: false).firstMatch(source);
+    final value = match?.group(1)?.trim();
+    if (value != null && value.isNotEmpty) {
+      return _decodeXmlText(value);
+    }
+  }
+
+  final dotIndex = fileName.lastIndexOf('.');
+  final name = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+  return name.trim().isEmpty ? '导入路线' : name.trim();
+}
+
+String _decodeXmlText(String source) {
+  return source
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&apos;', "'");
+}
+
+DateTime? _firstGpxTime(String source) {
+  final match = RegExp(
+    r'<(?:\w+:)?time[^>]*>([^<]+)</(?:\w+:)?time>',
+    caseSensitive: false,
+  ).firstMatch(source);
+  return _parseGpxTime(match?.group(1));
+}
+
+DateTime? _lastGpxTime(String source) {
+  final matches = RegExp(
+    r'<(?:\w+:)?time[^>]*>([^<]+)</(?:\w+:)?time>',
+    caseSensitive: false,
+  ).allMatches(source);
+  if (matches.isEmpty) return null;
+  return _parseGpxTime(matches.last.group(1));
+}
+
+DateTime? _parseGpxTime(String? source) {
+  if (source == null) return null;
+  return DateTime.tryParse(source.trim())?.toLocal();
+}
+
+double _calculateRouteDistanceKm(List<_GpxPoint> points) {
+  var meters = 0.0;
+  for (var i = 1; i < points.length; i++) {
+    meters += _haversineMeters(points[i - 1], points[i]);
+  }
+  return meters / 1000;
+}
+
+double _calculateRouteClimbMeters(List<_GpxPoint> points) {
+  var climb = 0.0;
+  for (var i = 1; i < points.length; i++) {
+    final previous = points[i - 1].ele;
+    final current = points[i].ele;
+    if (previous == null || current == null) continue;
+
+    final gain = current - previous;
+    if (gain > 1.5) {
+      climb += gain;
+    }
+  }
+  return climb;
+}
+
+double _haversineMeters(_GpxPoint a, _GpxPoint b) {
+  const earthRadiusMeters = 6371000.0;
+  final lat1 = _degreesToRadians(a.lat);
+  final lat2 = _degreesToRadians(b.lat);
+  final dLat = _degreesToRadians(b.lat - a.lat);
+  final dLon = _degreesToRadians(b.lon - a.lon);
+  final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(lat1) *
+          math.cos(lat2) *
+          math.sin(dLon / 2) *
+          math.sin(dLon / 2);
+  return earthRadiusMeters * 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h));
+}
+
+double _degreesToRadians(double degrees) {
+  return degrees * math.pi / 180;
+}
+
+String _formatImportedRouteDate(DateTime date) {
+  return '${date.year.toString().padLeft(4, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}/'
+      '${date.day.toString().padLeft(2, '0')}  '
+      '${date.hour.toString().padLeft(2, '0')}:'
+      '${date.minute.toString().padLeft(2, '0')}';
+}
+
+String _formatRouteDuration(Duration duration) {
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+  final seconds = duration.inSeconds.remainder(60);
+  return '${hours.toString().padLeft(2, '0')}:'
+      '${minutes.toString().padLeft(2, '0')}:'
+      '${seconds.toString().padLeft(2, '0')}';
+}
+
+String _routeDifficulty(double distanceKm, double climbMeters) {
+  if (distanceKm >= 90 || climbMeters >= 1000) return '困难';
+  if (distanceKm >= 45 || climbMeters >= 450) return '中等';
+  return '简单';
+}
+
+Color _routeDifficultyColor(double distanceKm, double climbMeters) {
+  if (distanceKm >= 90 || climbMeters >= 1000) {
+    return const Color(0xFFFF3B5F);
+  }
+  if (distanceKm >= 45 || climbMeters >= 450) {
+    return const Color(0xFFA46AFF);
+  }
+  return const Color(0xFF62D729);
+}
+
+class _GpxPoint {
+  const _GpxPoint({
+    required this.lat,
+    required this.lon,
+    required this.ele,
+  });
+
+  final double lat;
+  final double lon;
+  final double? ele;
 }
 
 class _RouteEmptyState extends StatelessWidget {
-  const _RouteEmptyState({required this.modeIndex});
+  const _RouteEmptyState({
+    required this.modeIndex,
+    required this.onImport,
+  });
 
   final int modeIndex;
+  final VoidCallback onImport;
 
   @override
   Widget build(BuildContext context) {
@@ -4880,6 +5460,28 @@ class _RouteEmptyState extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
           ),
+          if (modeIndex == 2) ...[
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onImport,
+              style: FilledButton.styleFrom(
+                backgroundColor: _RideColors.orange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              icon: const Icon(Icons.file_upload_outlined, size: 20),
+              label: const Text(
+                '导入 GPX 路书',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
         ],
       ),
     );

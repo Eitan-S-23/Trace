@@ -1,5 +1,9 @@
 # BLE 广播接收器
 
+## Build Policy
+
+This project must not be built locally. Use GitHub Actions for all compile/build verification and release artifacts. Do not run local build or packaging commands such as `flutter build`, `gradle build`, `./gradlew assemble*`, `xcodebuild`, `dart compile`, or platform package/signing commands.
+
 一个美观的 Flutter BLE (蓝牙低功耗) 广播接收应用，支持扫描、连接和查看附近蓝牙设备的详细信息。
 
 ## 功能特性
