@@ -4790,16 +4790,25 @@ class _RoutesPageState extends State<_RoutesPage> {
     unawaited(_saveFavoriteRoutes());
   }
 
-  Future<void> _importGpxRoute({bool collapseFabOnSuccess = false}) async {
+  Future<void> _importGpxRoute() async {
     if (_importingRoute) return;
 
-    setState(() => _importingRoute = true);
+    final waitForFabCollapse = _routeFabExpanded;
+    setState(() {
+      _importingRoute = true;
+      _routeFabExpanded = false;
+    });
+    if (waitForFabCollapse) {
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      if (!mounted) return;
+    }
 
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['gpx'],
         allowMultiple: false,
+        withData: true,
         dialogTitle: '选择路书文件',
       );
       if (result == null || result.files.isEmpty) return;
@@ -4818,9 +4827,6 @@ class _RoutesPageState extends State<_RoutesPage> {
       setState(() {
         _importedRoutes.insert(0, route);
         _modeIndex = 2;
-        if (collapseFabOnSuccess) {
-          _routeFabExpanded = false;
-        }
       });
       await _saveImportedRoutes();
       _showUiMessage('导入路线', '已导入 ${route.title}');
@@ -4949,7 +4955,7 @@ class _RoutesPageState extends State<_RoutesPage> {
               setState(() => _routeFabExpanded = !_routeFabExpanded);
             },
             onImportGpx: () {
-              unawaited(_importGpxRoute(collapseFabOnSuccess: true));
+              unawaited(_importGpxRoute());
             },
             onCreateRoute: () {
               setState(() => _routeFabExpanded = false);
@@ -5091,7 +5097,8 @@ class _RouteImportFabState extends State<_RouteImportFab>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 170),
+      reverseDuration: const Duration(milliseconds: 130),
       value: widget.expanded ? 1 : 0,
     );
   }
