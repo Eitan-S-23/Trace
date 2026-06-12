@@ -4792,22 +4792,21 @@ class _RoutesPageState extends State<_RoutesPage> {
 
   Future<void> _importGpxRoute() async {
     if (_importingRoute) return;
-
-    setState(() {
-      _importingRoute = true;
-      _routeFabExpanded = false;
-    });
+    _importingRoute = true;
 
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['gpx'],
+        type: FileType.any,
         allowMultiple: false,
         withData: true,
         dialogTitle: '选择路书文件',
       );
       if (result == null || result.files.isEmpty) return;
       if (!mounted) return;
+
+      setState(() {
+        _routeFabExpanded = false;
+      });
 
       final file = result.files.single;
       final content = await _readPickedGpxFile(file);
@@ -4827,11 +4826,16 @@ class _RoutesPageState extends State<_RoutesPage> {
       _showUiMessage('导入路线', '已导入 ${route.title}');
     } on FormatException catch (error) {
       _showUiMessage('导入失败', error.message);
+    } on MissingPluginException {
+      _showUiMessage('导入失败', '文件选择器插件未注册，请安装最新构建');
+    } on PlatformException catch (error) {
+      _showUiMessage('导入失败', error.message ?? error.code);
     } catch (_) {
       _showUiMessage('导入失败', '请选择有效的 GPX 文件');
     } finally {
+      _importingRoute = false;
       if (mounted) {
-        setState(() => _importingRoute = false);
+        setState(() {});
       }
     }
   }
@@ -5253,12 +5257,14 @@ class _RouteFabAction extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              _RouteFabButton(
-                icon: icon,
-                color: color,
-                size: 56,
-                busy: busy,
-                onTap: null,
+              IgnorePointer(
+                child: _RouteFabButton(
+                  icon: icon,
+                  color: color,
+                  size: 56,
+                  busy: busy,
+                  onTap: null,
+                ),
               ),
             ],
           ),
