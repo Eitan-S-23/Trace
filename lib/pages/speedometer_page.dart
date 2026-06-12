@@ -4793,15 +4793,10 @@ class _RoutesPageState extends State<_RoutesPage> {
   Future<void> _importGpxRoute() async {
     if (_importingRoute) return;
 
-    final waitForFabCollapse = _routeFabExpanded;
     setState(() {
       _importingRoute = true;
       _routeFabExpanded = false;
     });
-    if (waitForFabCollapse) {
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-      if (!mounted) return;
-    }
 
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -5097,8 +5092,8 @@ class _RouteImportFabState extends State<_RouteImportFab>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 170),
-      reverseDuration: const Duration(milliseconds: 130),
+      duration: const Duration(milliseconds: 120),
+      reverseDuration: const Duration(milliseconds: 90),
       value: widget.expanded ? 1 : 0,
     );
   }
@@ -5226,43 +5221,47 @@ class _RouteFabAction extends StatelessWidget {
             ),
           );
         },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFF101720).withOpacity(0.92),
-                borderRadius: BorderRadius.circular(17),
-                border: Border.all(color: Colors.white.withOpacity(0.10)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.24),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 34,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF101720).withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(17),
+                  border: Border.all(color: Colors.white.withOpacity(0.10)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.24),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
                   ),
-                ],
-              ),
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            _RouteFabButton(
-              icon: icon,
-              color: color,
-              size: 56,
-              busy: busy,
-              onTap: onTap,
-            ),
-          ],
+              const SizedBox(width: 10),
+              _RouteFabButton(
+                icon: icon,
+                color: color,
+                size: 56,
+                busy: busy,
+                onTap: null,
+              ),
+            ],
+          ),
         ),
       ),
     );
