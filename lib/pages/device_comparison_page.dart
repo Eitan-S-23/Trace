@@ -332,33 +332,9 @@ class _DeviceComparisonPageState extends State<DeviceComparisonPage>
   }
 
   Widget _buildLineChart(String dataType) {
-    List<LineChartBarData> lineBarsData = [];
+    final seriesList = _buildChartSeries(dataType);
 
-    for (String deviceId in _selectedDeviceIds) {
-      final device = _getDeviceById(deviceId);
-      if (device == null) continue;
-
-      final color = _deviceColors[deviceId] ?? Colors.grey;
-      final data = _getChartData(device.dataHistory, dataType);
-
-      if (data.isNotEmpty) {
-        lineBarsData.add(
-          LineChartBarData(
-            spots: data,
-            isCurved: true,
-            color: color,
-            barWidth: 2,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: false,
-            ),
-          ),
-        );
-      }
-    }
-
-    if (lineBarsData.isEmpty) {
+    if (seriesList.isEmpty) {
       return const Center(
         child: Text(
           '暂无数据',
@@ -368,6 +344,32 @@ class _DeviceComparisonPageState extends State<DeviceComparisonPage>
           ),
         ),
       );
+    }
+
+    final lineBarsData = [
+      for (final series in seriesList)
+        LineChartBarData(
+          spots: series.spots,
+          isCurved: false,
+          color: series.color,
+          barWidth: 2,
+          isStrokeCapRound: true,
+          dotData: const FlDotData(show: false),
+          belowBarData: BarAreaData(
+            show: false,
+          ),
+        ),
+    ];
+    final minX = seriesList
+        .expand((series) => series.spots)
+        .map((spot) => spot.x)
+        .reduce((a, b) => a < b ? a : b);
+    var maxX = seriesList
+        .expand((series) => series.spots)
+        .map((spot) => spot.x)
+        .reduce((a, b) => a > b ? a : b);
+    if (maxX <= minX) {
+      maxX = minX + 1;
     }
 
     // 计算Y轴范围
@@ -388,20 +390,29 @@ class _DeviceComparisonPageState extends State<DeviceComparisonPage>
     } else {
       // 添加一些边距
       final range = maxY - minY;
-      minY = minY - range * 0.1;
-      maxY = maxY + range * 0.1;
+      if (range <= 0) {
+        maxY += maxY == 0 ? 1 : maxY.abs() * 0.1;
+        minY = minY - (minY == 0 ? 0 : minY.abs() * 0.1);
+      } else {
+        minY = minY - range * 0.1;
+        maxY = maxY + range * 0.1;
+      }
       if (minY < 0) minY = 0; // 确保最小值不小于0
     }
+    final yInterval = _safeInterval(maxY - minY, targetDivisions: 5);
+    final xInterval = _safeInterval(maxX - minX, targetDivisions: 4);
 
     return LineChart(
       LineChartData(
+        minX: minX,
+        maxX: maxX,
         minY: minY,
         maxY: maxY,
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
-          horizontalInterval: (maxY - minY) / 5,
-          verticalInterval: 10,
+          horizontalInterval: yInterval,
+          verticalInterval: xInterval,
           getDrawingHorizontalLine: (value) {
             return FlLine(
               color: Colors.grey.shade200,
@@ -420,7 +431,7 @@ class _DeviceComparisonPageState extends State<DeviceComparisonPage>
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 60,
-              interval: (maxY - minY) / 5,
+              interval: yInterval,
               getTitlesWidget: (value, meta) {
                 if (value == minY && value == 0) return const SizedBox.shrink();
                 String unit = _getUnitForDataType(dataType);
@@ -442,12 +453,16 @@ class _DeviceComparisonPageState extends State<DeviceComparisonPage>
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 30,
-              interval: 10,
+              reservedSize: 38,
+              interval: xInterval,
               getTitlesWidget: (value, meta) {
-                return Text(
-                  value.toInt().toString(),
-                  style: const TextStyle(fontSize: 10),
+                final label = _formatElapsedLabel(value);
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    label,
+                    style: const TextStyle(fontSize: 10),
+                  ),
                 );
               },
             ),
@@ -587,30 +602,100 @@ class _DeviceComparisonPageState extends State<DeviceComparisonPage>
     });
   }
 
-  List<FlSpot> _getChartData(List<DeviceData> data, String dataType) {
-    if (data.isEmpty) return [];
+  List<_ComparisonSeries> _buildChartSeries(String dataType) {
+    final devices = <SelectedDevice>[];
+    for (final deviceId in _selectedDeviceIds) {
+      final device = _getDeviceById(deviceId);
+      if (device == null || device.dataHistory.isEmpty) continue;
+      devices.add(device);
+    }
+    if (devices.isEmpty) return const [];
 
-    return data.asMap().entries.map((entry) {
-      final index = entry.key;
-      final deviceData = entry.value;
+    final allPoints = devices.expand((device) => device.dataHistory);
+    final globalStart = _globalStartTime(allPoints);
+    final seriesList = <_ComparisonSeries>[];
 
-      double value;
-      switch (dataType) {
-        case 'current':
-          value = deviceData.current;
-          break;
-        case 'voltage':
-          value = deviceData.voltage;
-          break;
-        case 'power':
-          value = deviceData.power;
-          break;
-        default:
-          value = 0;
+    for (final device in devices) {
+      final spots =
+          _buildSpotsForDevice(device.dataHistory, dataType, globalStart);
+      if (spots.isEmpty) continue;
+      seriesList.add(
+        _ComparisonSeries(
+          color: _deviceColors[device.deviceId] ?? Colors.grey,
+          spots: spots,
+        ),
+      );
+    }
+
+    return seriesList;
+  }
+
+  List<FlSpot> _buildSpotsForDevice(
+    Iterable<DeviceData> data,
+    String dataType,
+    DateTime globalStart,
+  ) {
+    final orderedData = data
+        .where((item) => _valueForDataType(item, dataType).isFinite)
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    final spots = <FlSpot>[];
+    var lastX = double.negativeInfinity;
+    for (final deviceData in orderedData) {
+      final x = deviceData.timestamp
+              .difference(globalStart)
+              .inMilliseconds
+              .toDouble() /
+          1000.0;
+      final y = _valueForDataType(deviceData, dataType);
+      if (!x.isFinite || !y.isFinite) continue;
+
+      // fl_chart 要求同一条线的 x 单调递增；同一毫秒多包时做微小偏移。
+      final safeX = x <= lastX ? lastX + 0.001 : x;
+      spots.add(FlSpot(safeX, y));
+      lastX = safeX;
+    }
+    return spots;
+  }
+
+  DateTime _globalStartTime(Iterable<DeviceData> data) {
+    DateTime? start;
+    for (final item in data) {
+      if (start == null || item.timestamp.isBefore(start)) {
+        start = item.timestamp;
       }
+    }
+    return start ?? DateTime.now();
+  }
 
-      return FlSpot(index.toDouble(), value);
-    }).toList();
+  double _valueForDataType(DeviceData data, String dataType) {
+    switch (dataType) {
+      case 'current':
+        return _currentToMilliAmps(data.current, data.currentUnit);
+      case 'voltage':
+        return data.voltage;
+      case 'power':
+        return data.power;
+      default:
+        return 0;
+    }
+  }
+
+  double _currentToMilliAmps(double current, String unit) {
+    switch (unit) {
+      case 'nA':
+        return current / 1000000.0;
+      case 'uA':
+      case 'µA':
+        return current / 1000.0;
+      case 'mA':
+        return current;
+      case 'A':
+        return current * 1000.0;
+      default:
+        return current;
+    }
   }
 
   String _getChartTitle(String dataType) {
@@ -653,4 +738,32 @@ class _DeviceComparisonPageState extends State<DeviceComparisonPage>
         return '数值';
     }
   }
+
+  double _safeInterval(double range, {required int targetDivisions}) {
+    if (!range.isFinite || range <= 0 || targetDivisions <= 0) return 1;
+    final rawInterval = range / targetDivisions;
+    if (rawInterval <= 0 || !rawInterval.isFinite) return 1;
+    return rawInterval;
+  }
+
+  String _formatElapsedLabel(double seconds) {
+    final totalSeconds = seconds.round().clamp(0, 1 << 31).toInt();
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final secs = totalSeconds % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
+    return '$minutes:${secs.toString().padLeft(2, '0')}';
+  }
+}
+
+class _ComparisonSeries {
+  const _ComparisonSeries({
+    required this.color,
+    required this.spots,
+  });
+
+  final Color color;
+  final List<FlSpot> spots;
 }
