@@ -2334,6 +2334,8 @@ class _StatisticsPage extends StatefulWidget {
 }
 
 class _StatisticsPageState extends State<_StatisticsPage> {
+  static const _periodCount = 4;
+
   var _periodIndex = 1; // 0 周 / 1 月 / 2 年 / 3 全部
   DateTime _selectedWeekStart = DateTime(2024, 5, 12);
   DateTime _selectedMonth = DateTime(2024, 5);
@@ -2375,6 +2377,20 @@ class _StatisticsPageState extends State<_StatisticsPage> {
   }
 
   bool get _canShiftDate => _periodIndex != 3;
+
+  void _selectPeriod(int index) {
+    if (index == _periodIndex) return;
+    setState(() => _periodIndex = index);
+  }
+
+  void _handlePeriodSwipe(DragEndDetails details) {
+    final nextIndex = _nextHorizontalSwipeIndex(
+      details,
+      currentIndex: _periodIndex,
+      itemCount: _periodCount,
+    );
+    if (nextIndex != null) _selectPeriod(nextIndex);
+  }
 
   void _shiftDate(int delta) {
     if (!_canShiftDate) return;
@@ -2448,8 +2464,11 @@ class _StatisticsPageState extends State<_StatisticsPage> {
   Widget build(BuildContext context) {
     return Obx(() {
       final monthStats = _RideStats.from(widget.controller);
-      return Column(
-        children: [
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: _handlePeriodSwipe,
+        child: Column(
+          children: [
           // 固定子头：周期分段 + 日期选择器（无第二顶部栏）
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
@@ -2457,7 +2476,7 @@ class _StatisticsPageState extends State<_StatisticsPage> {
               children: [
                 _PeriodSegment(
                   selectedIndex: _periodIndex,
-                  onSelect: (index) => setState(() => _periodIndex = index),
+                  onSelect: _selectPeriod,
                 ),
                 const SizedBox(height: 14),
                 _MonthSelector(
@@ -2478,7 +2497,8 @@ class _StatisticsPageState extends State<_StatisticsPage> {
               child: Column(children: _panelsForPeriod(monthStats)),
             ),
           ),
-        ],
+          ],
+        ),
       );
     });
   }
@@ -4667,6 +4687,7 @@ class _RoutesPage extends StatefulWidget {
 class _RoutesPageState extends State<_RoutesPage> {
   static const _favoriteRoutesPrefsKey = 'speedometer.favorite_routes';
   static const _importedRoutesPrefsKey = 'speedometer.imported_routes';
+  static const _routeModeCount = 3;
 
   var _modeIndex = 0;
   var _routeFabExpanded = false;
@@ -4685,6 +4706,20 @@ class _RoutesPageState extends State<_RoutesPage> {
       2 => _importedRoutes,
       _ => routes,
     };
+  }
+
+  void _selectRouteMode(int index) {
+    if (index == _modeIndex) return;
+    setState(() => _modeIndex = index);
+  }
+
+  void _handleRouteModeSwipe(DragEndDetails details) {
+    final nextIndex = _nextHorizontalSwipeIndex(
+      details,
+      currentIndex: _modeIndex,
+      itemCount: _routeModeCount,
+    );
+    if (nextIndex != null) _selectRouteMode(nextIndex);
   }
 
   @override
@@ -4847,8 +4882,11 @@ class _RoutesPageState extends State<_RoutesPage> {
       _ => '我的路线（${routes.length}）',
     };
 
-    return Stack(
-      children: [
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: _handleRouteModeSwipe,
+      child: Stack(
+        children: [
         Column(
           children: [
             // 固定子头：模式分段 + 搜索 + 计数（无第二顶部栏）
@@ -4863,7 +4901,7 @@ class _RoutesPageState extends State<_RoutesPage> {
                       _favoriteRouteTitles.length,
                       importedCount,
                     ],
-                    onSelect: (index) => setState(() => _modeIndex = index),
+                    onSelect: _selectRouteMode,
                   ),
                   const SizedBox(height: 12),
                   const _RouteSearchBar(),
@@ -4938,7 +4976,8 @@ class _RoutesPageState extends State<_RoutesPage> {
             },
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -9079,6 +9118,22 @@ class _RadarPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RadarPainter oldDelegate) =>
       oldDelegate.sweepStart != sweepStart || oldDelegate.active != active;
+}
+
+int? _nextHorizontalSwipeIndex(
+  DragEndDetails details, {
+  required int currentIndex,
+  required int itemCount,
+}) {
+  if (itemCount <= 1) return null;
+
+  final velocity = details.primaryVelocity ?? 0;
+  const minSwipeVelocity = 220.0;
+  if (velocity.abs() < minSwipeVelocity) return null;
+
+  final nextIndex = velocity < 0 ? currentIndex + 1 : currentIndex - 1;
+  if (nextIndex < 0 || nextIndex >= itemCount) return null;
+  return nextIndex;
 }
 
 void _showUiMessage(String title, String message) {
