@@ -4674,53 +4674,7 @@ class _RoutesPageState extends State<_RoutesPage> {
   final _favoriteRouteTitles = <String>{};
   final _importedRoutes = <_RouteListEntry>[];
 
-  static const _baseRoutes = <_RouteListEntry>[
-    _RouteListEntry(
-      title: '周末环山路线',
-      date: '2024/05/18  08:32',
-      distance: '102.63',
-      climb: '1268',
-      duration: '03:45:28',
-      difficulty: '中等',
-      difficultyColor: Color(0xFFA46AFF),
-      variant: 0,
-    ),
-    _RouteListEntry(
-      title: '滨海骑行路线',
-      date: '2024/05/12  07:15',
-      distance: '65.28',
-      climb: '512',
-      duration: '02:28:16',
-      difficulty: '简单',
-      difficultyColor: Color(0xFF62D729),
-      variant: 1,
-    ),
-    _RouteListEntry(
-      title: '城市探索路线',
-      date: '2024/05/05  09:42',
-      distance: '88.47',
-      climb: '876',
-      duration: '03:12:45',
-      difficulty: '困难',
-      difficultyColor: Color(0xFFFF3B5F),
-      variant: 2,
-    ),
-    _RouteListEntry(
-      title: '晨间训练路线',
-      date: '2024/04/28  06:30',
-      distance: '45.16',
-      climb: '321',
-      duration: '01:48:22',
-      difficulty: '简单',
-      difficultyColor: Color(0xFF62D729),
-      variant: 3,
-    ),
-  ];
-
-  List<_RouteListEntry> get _allRoutes => [
-        ..._importedRoutes,
-        ..._baseRoutes,
-      ];
+  List<_RouteListEntry> get _allRoutes => _importedRoutes;
 
   List<_RouteListEntry> get _visibleRoutes {
     final routes = _allRoutes;
@@ -4747,10 +4701,7 @@ class _RoutesPageState extends State<_RoutesPage> {
             .whereType<_RouteListEntry>()
             .toList() ??
         <_RouteListEntry>[];
-    final knownTitles = [
-      ...importedRoutes,
-      ..._baseRoutes,
-    ].map((route) => route.title).toSet();
+    final knownTitles = importedRoutes.map((route) => route.title).toSet();
     final titles = prefs
             .getStringList(_favoriteRoutesPrefsKey)
             ?.where(knownTitles.contains)
@@ -4790,12 +4741,18 @@ class _RoutesPageState extends State<_RoutesPage> {
     unawaited(_saveFavoriteRoutes());
   }
 
-  void _deleteImportedRoute(_RouteListEntry route) {
+  Future<void> _confirmDeleteImportedRoute(_RouteListEntry route) async {
     if (!route.imported) {
       _showUiMessage('删除路线', '默认路线不能删除');
       return;
     }
 
+    final confirmed = await _showRouteDeleteConfirmDialog(context, route.title);
+    if (!confirmed || !mounted) return;
+    _deleteImportedRoute(route);
+  }
+
+  void _deleteImportedRoute(_RouteListEntry route) {
     setState(() {
       _importedRoutes.removeWhere((item) => item.title == route.title);
       _favoriteRouteTitles.remove(route.title);
@@ -4955,7 +4912,7 @@ class _RoutesPageState extends State<_RoutesPage> {
                           favorited: _favoriteRouteTitles.contains(route.title),
                           onFavoriteToggle: () => _toggleFavorite(route),
                           onDelete: route.imported
-                              ? () => _deleteImportedRoute(route)
+                              ? () => unawaited(_confirmDeleteImportedRoute(route))
                               : null,
                         );
                       },
@@ -9309,6 +9266,62 @@ Future<void> _showRouteMoreActions(
       );
     },
   );
+}
+
+Future<bool> _showRouteDeleteConfirmDialog(
+  BuildContext context,
+  String title,
+) async {
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    builder: (dialogContext) {
+      return AlertDialog(
+        backgroundColor: const Color(0xFF171D27),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+        title: const Text(
+          '删除路线？',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        content: Text(
+          '确认删除「$title」？删除后无法恢复。',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.72),
+            height: 1.4,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              '取消',
+              style: TextStyle(color: Colors.white.withOpacity(0.72)),
+            ),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFF3B5F),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              '确认删除',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+  return result ?? false;
 }
 
 class _RouteMoreAction extends StatelessWidget {
