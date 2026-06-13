@@ -2336,6 +2336,7 @@ class _StatisticsPage extends StatefulWidget {
 class _StatisticsPageState extends State<_StatisticsPage> {
   static const _periodCount = 4;
 
+  late final PageController _periodPageController;
   var _periodIndex = 1; // 0 周 / 1 月 / 2 年 / 3 全部
   DateTime _selectedWeekStart = DateTime(2024, 5, 12);
   DateTime _selectedMonth = DateTime(2024, 5);
@@ -2378,18 +2379,35 @@ class _StatisticsPageState extends State<_StatisticsPage> {
 
   bool get _canShiftDate => _periodIndex != 3;
 
-  void _selectPeriod(int index) {
-    if (index == _periodIndex) return;
-    setState(() => _periodIndex = index);
+  @override
+  void initState() {
+    super.initState();
+    _periodPageController = PageController(initialPage: _periodIndex);
   }
 
-  void _handlePeriodSwipe(DragEndDetails details) {
-    final nextIndex = _nextHorizontalSwipeIndex(
-      details,
-      currentIndex: _periodIndex,
-      itemCount: _periodCount,
+  @override
+  void dispose() {
+    _periodPageController.dispose();
+    super.dispose();
+  }
+
+  void _selectPeriod(int index) {
+    if (index < 0 || index >= _periodCount) return;
+    if (index == _periodIndex) return;
+    setState(() => _periodIndex = index);
+    if (!_periodPageController.hasClients) return;
+    unawaited(
+      _periodPageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      ),
     );
-    if (nextIndex != null) _selectPeriod(nextIndex);
+  }
+
+  void _handlePeriodPageChanged(int index) {
+    if (index == _periodIndex) return;
+    setState(() => _periodIndex = index);
   }
 
   void _shiftDate(int delta) {
@@ -2464,11 +2482,8 @@ class _StatisticsPageState extends State<_StatisticsPage> {
   Widget build(BuildContext context) {
     return Obx(() {
       final monthStats = _RideStats.from(widget.controller);
-      return GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragEnd: _handlePeriodSwipe,
-        child: Column(
-          children: [
+      return Column(
+        children: [
           // 固定子头：周期分段 + 日期选择器（无第二顶部栏）
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
@@ -2491,20 +2506,29 @@ class _StatisticsPageState extends State<_StatisticsPage> {
           ),
           // 单一滚动区：按周期切换面板
           Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
-              child: Column(children: _panelsForPeriod(monthStats)),
+            child: PageView.builder(
+              controller: _periodPageController,
+              physics: const PageScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              itemCount: _periodCount,
+              onPageChanged: _handlePeriodPageChanged,
+              itemBuilder: (context, index) {
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+                  child: Column(children: _panelsForPeriod(index, monthStats)),
+                );
+              },
             ),
           ),
-          ],
-        ),
+        ],
       );
     });
   }
 
-  List<Widget> _panelsForPeriod(_RideStats monthStats) {
-    switch (_periodIndex) {
+  List<Widget> _panelsForPeriod(int index, _RideStats monthStats) {
+    switch (index) {
       case 0:
         return _trendPanels(_weekStats, isWeek: true);
       case 2:
@@ -4689,6 +4713,7 @@ class _RoutesPageState extends State<_RoutesPage> {
   static const _importedRoutesPrefsKey = 'speedometer.imported_routes';
   static const _routeModeCount = 3;
 
+  late final PageController _routePageController;
   var _modeIndex = 0;
   var _routeFabExpanded = false;
   var _importingRoute = false;
@@ -4697,9 +4722,9 @@ class _RoutesPageState extends State<_RoutesPage> {
 
   List<_RouteListEntry> get _allRoutes => _importedRoutes;
 
-  List<_RouteListEntry> get _visibleRoutes {
+  List<_RouteListEntry> _routesForMode(int index) {
     final routes = _allRoutes;
-    return switch (_modeIndex) {
+    return switch (index) {
       1 => routes
           .where((route) => _favoriteRouteTitles.contains(route.title))
           .toList(),
@@ -4709,23 +4734,35 @@ class _RoutesPageState extends State<_RoutesPage> {
   }
 
   void _selectRouteMode(int index) {
+    if (index < 0 || index >= _routeModeCount) return;
     if (index == _modeIndex) return;
     setState(() => _modeIndex = index);
+    if (!_routePageController.hasClients) return;
+    unawaited(
+      _routePageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      ),
+    );
   }
 
-  void _handleRouteModeSwipe(DragEndDetails details) {
-    final nextIndex = _nextHorizontalSwipeIndex(
-      details,
-      currentIndex: _modeIndex,
-      itemCount: _routeModeCount,
-    );
-    if (nextIndex != null) _selectRouteMode(nextIndex);
+  void _handleRouteModePageChanged(int index) {
+    if (index == _modeIndex) return;
+    setState(() => _modeIndex = index);
   }
 
   @override
   void initState() {
     super.initState();
+    _routePageController = PageController(initialPage: _modeIndex);
     unawaited(_loadRouteState());
+  }
+
+  @override
+  void dispose() {
+    _routePageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRouteState() async {
@@ -4827,8 +4864,8 @@ class _RoutesPageState extends State<_RoutesPage> {
 
       setState(() {
         _importedRoutes.insert(0, route);
-        _modeIndex = 2;
       });
+      _selectRouteMode(2);
       await _saveImportedRoutes();
       _showUiMessage('导入路线', '已导入 ${route.title}');
     } on FormatException catch (error) {
@@ -4873,7 +4910,6 @@ class _RoutesPageState extends State<_RoutesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleRoutes = _visibleRoutes;
     final routes = _allRoutes;
     final importedCount = _importedRoutes.length;
     final routeCountLabel = switch (_modeIndex) {
@@ -4882,11 +4918,8 @@ class _RoutesPageState extends State<_RoutesPage> {
       _ => '我的路线（${routes.length}）',
     };
 
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onHorizontalDragEnd: _handleRouteModeSwipe,
-      child: Stack(
-        children: [
+    return Stack(
+      children: [
         Column(
           children: [
             // 固定子头：模式分段 + 搜索 + 计数（无第二顶部栏）
@@ -4923,38 +4956,15 @@ class _RoutesPageState extends State<_RoutesPage> {
             const SizedBox(height: 12),
             // 单一滚动区：路线卡片列表
             Expanded(
-              child: visibleRoutes.isEmpty
-                  ? _RouteEmptyState(
-                      modeIndex: _modeIndex,
-                      onImport: () {
-                        unawaited(_importGpxRoute());
-                      },
-                    )
-                  : ListView.separated(
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 112),
-                      itemCount: visibleRoutes.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final route = visibleRoutes[index];
-                        return _RouteListCard(
-                          title: route.title,
-                          date: route.date,
-                          distance: route.distance,
-                          climb: route.climb,
-                          duration: route.duration,
-                          difficulty: route.difficulty,
-                          difficultyColor: route.difficultyColor,
-                          variant: route.variant,
-                          track: route.track,
-                          favorited: _favoriteRouteTitles.contains(route.title),
-                          onFavoriteToggle: () => _toggleFavorite(route),
-                          onDelete: route.imported
-                              ? () => unawaited(_confirmDeleteImportedRoute(route))
-                              : null,
-                        );
-                      },
-                    ),
+              child: PageView.builder(
+                controller: _routePageController,
+                physics: const PageScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                itemCount: _routeModeCount,
+                onPageChanged: _handleRouteModePageChanged,
+                itemBuilder: (context, index) => _buildRouteModePage(index),
+              ),
             ),
           ],
         ),
@@ -4976,8 +4986,45 @@ class _RoutesPageState extends State<_RoutesPage> {
             },
           ),
         ),
-        ],
-      ),
+      ],
+    );
+  }
+
+  Widget _buildRouteModePage(int modeIndex) {
+    final visibleRoutes = _routesForMode(modeIndex);
+    if (visibleRoutes.isEmpty) {
+      return _RouteEmptyState(
+        modeIndex: modeIndex,
+        onImport: () {
+          unawaited(_importGpxRoute());
+        },
+      );
+    }
+
+    return ListView.separated(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 112),
+      itemCount: visibleRoutes.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final route = visibleRoutes[index];
+        return _RouteListCard(
+          title: route.title,
+          date: route.date,
+          distance: route.distance,
+          climb: route.climb,
+          duration: route.duration,
+          difficulty: route.difficulty,
+          difficultyColor: route.difficultyColor,
+          variant: route.variant,
+          track: route.track,
+          favorited: _favoriteRouteTitles.contains(route.title),
+          onFavoriteToggle: () => _toggleFavorite(route),
+          onDelete: route.imported
+              ? () => unawaited(_confirmDeleteImportedRoute(route))
+              : null,
+        );
+      },
     );
   }
 }
@@ -6603,12 +6650,9 @@ class _RideRouteDetailPage extends StatelessWidget {
                           const SizedBox(height: 12),
                           SizedBox(
                             height: 120,
-                            child: CustomPaint(
-                              painter: _SparklinePainter(
-                                values: _routeElevationValues(track),
-                                color: const Color(0xFFA533FF),
-                              ),
-                              child: const SizedBox.expand(),
+                            child: _InteractiveElevationChart(
+                              values: _routeElevationValues(track),
+                              color: const Color(0xFFA533FF),
                             ),
                           ),
                         ],
@@ -8476,6 +8520,321 @@ class _SparklinePainter extends CustomPainter {
   }
 }
 
+class _InteractiveElevationChart extends StatefulWidget {
+  const _InteractiveElevationChart({
+    required this.values,
+    required this.color,
+  });
+
+  final List<double> values;
+  final Color color;
+
+  @override
+  State<_InteractiveElevationChart> createState() =>
+      _InteractiveElevationChartState();
+}
+
+class _InteractiveElevationChartState
+    extends State<_InteractiveElevationChart> {
+  Timer? _hideTimer;
+  double? _selectedT;
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _hideSelection() {
+    if (_selectedT == null) return;
+    _hideTimer?.cancel();
+    setState(() => _selectedT = null);
+  }
+
+  void _selectAt(Offset localPosition, Size size) {
+    final t = _tForPosition(localPosition, size);
+    if (t == null) {
+      _hideSelection();
+      return;
+    }
+    _hideTimer?.cancel();
+    setState(() => _selectedT = t);
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _selectedT = null);
+    });
+  }
+
+  double? _tForPosition(Offset localPosition, Size size) {
+    if (widget.values.length < 2) return null;
+    final rect = _elevationChartRect(size);
+    if (rect.width <= 0) return null;
+    return ((localPosition.dx - rect.left) / rect.width)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        return TapRegion(
+          onTapOutside: (_) => _hideSelection(),
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (event) => _selectAt(event.localPosition, size),
+            onPointerMove: (event) => _selectAt(event.localPosition, size),
+            onPointerCancel: (_) => _hideSelection(),
+            child: CustomPaint(
+              painter: _ElevationLineChartPainter(
+                values: widget.values,
+                color: widget.color,
+                selectedT: _selectedT,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+Rect _elevationChartRect(Size size) =>
+    Rect.fromLTRB(28, 10, size.width - 14, size.height - 20);
+
+class _ElevationLineChartPainter extends CustomPainter {
+  const _ElevationLineChartPainter({
+    required this.values,
+    required this.color,
+    this.selectedT,
+  });
+
+  final List<double> values;
+  final Color color;
+  final double? selectedT;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+    final rect = _elevationChartRect(size);
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    final minValue = values.reduce(math.min);
+    final maxValue = values.reduce(math.max);
+    final range = math.max(1.0, maxValue - minValue);
+
+    _drawGrid(canvas, rect);
+    _drawAxisLabels(canvas, size, rect, minValue, maxValue);
+
+    final path = Path();
+    for (var i = 0; i < values.length; i++) {
+      final point = _pointForIndex(i, rect, minValue, range);
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+
+    final fill = Path.from(path)
+      ..lineTo(rect.right, rect.bottom)
+      ..lineTo(rect.left, rect.bottom)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [color.withOpacity(0.34), color.withOpacity(0.02)],
+        ).createShader(rect),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..strokeWidth = 2.2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    _drawSelection(canvas, size, rect, minValue, range);
+  }
+
+  Offset _pointForIndex(
+    int index,
+    Rect rect,
+    double minValue,
+    double range,
+  ) {
+    final x = rect.left + rect.width * index / (values.length - 1);
+    final normalized = (values[index] - minValue) / range;
+    final y = rect.bottom - rect.height * normalized.clamp(0.0, 1.0);
+    return Offset(x, y);
+  }
+
+  void _drawGrid(Canvas canvas, Rect rect) {
+    final grid = Paint()
+      ..color = Colors.white.withOpacity(0.08)
+      ..strokeWidth = 1;
+    for (var i = 0; i <= 2; i++) {
+      final y = rect.bottom - rect.height * i / 2;
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), grid);
+    }
+  }
+
+  void _drawAxisLabels(
+    Canvas canvas,
+    Size size,
+    Rect rect,
+    double minValue,
+    double maxValue,
+  ) {
+    _drawLabel(
+      canvas,
+      '${_formatChartValue(maxValue, 'm')}m',
+      Offset(0, rect.top - 2),
+      color: Colors.white.withOpacity(0.44),
+      size: 10,
+    );
+    _drawLabel(
+      canvas,
+      '${_formatChartValue(minValue, 'm')}m',
+      Offset(0, rect.bottom - 10),
+      color: Colors.white.withOpacity(0.44),
+      size: 10,
+    );
+
+    const progressLabels = ['0%', '50%', '100%'];
+    for (var i = 0; i < progressLabels.length; i++) {
+      final x = rect.left + rect.width * i / (progressLabels.length - 1);
+      _drawLabel(
+        canvas,
+        progressLabels[i],
+        Offset(x, size.height - 13),
+        color: Colors.white.withOpacity(0.42),
+        size: 10,
+        center: true,
+      );
+    }
+  }
+
+  void _drawSelection(
+    Canvas canvas,
+    Size size,
+    Rect rect,
+    double minValue,
+    double range,
+  ) {
+    final t = selectedT;
+    if (t == null) return;
+    final index = (t.clamp(0.0, 1.0) * (values.length - 1))
+        .round()
+        .clamp(0, values.length - 1)
+        .toInt();
+    final point = _pointForIndex(index, rect, minValue, range);
+
+    canvas.drawLine(
+      Offset(point.dx, rect.top),
+      Offset(point.dx, rect.bottom),
+      Paint()
+        ..color = Colors.white.withOpacity(0.16)
+        ..strokeWidth = 1,
+    );
+    canvas.drawCircle(point, 5.5, Paint()..color = color);
+    canvas.drawCircle(
+      point,
+      2.6,
+      Paint()..color = Colors.white.withOpacity(0.92),
+    );
+
+    _drawTooltip(
+      canvas,
+      size: size,
+      anchor: point,
+      title: '路线点 ${index + 1}/${values.length}',
+      value: '${_formatChartValue(values[index], 'm')} m',
+    );
+  }
+
+  void _drawTooltip(
+    Canvas canvas, {
+    required Size size,
+    required Offset anchor,
+    required String title,
+    required String value,
+  }) {
+    final titlePainter = _textPainter(
+      title,
+      color: Colors.white.withOpacity(0.66),
+      size: 10,
+      weight: FontWeight.w700,
+    );
+    final valuePainter = _textPainter(
+      value,
+      color: Colors.white,
+      size: 13,
+      weight: FontWeight.w900,
+    );
+    final width = math.max(titlePainter.width, valuePainter.width) + 24;
+    const height = 48.0;
+    final centerX = _clampDouble(anchor.dx, width / 2, size.width - width / 2);
+    final top = _clampDouble(anchor.dy - height - 14, 4, size.height - height - 4);
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(centerX - width / 2, top, width, height),
+      const Radius.circular(9),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()..color = const Color(0xFF303744).withOpacity(0.96),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = color.withOpacity(0.32)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    titlePainter.paint(
+      canvas,
+      Offset(centerX - titlePainter.width / 2, top + 7),
+    );
+    valuePainter.paint(
+      canvas,
+      Offset(centerX - valuePainter.width / 2, top + 25),
+    );
+  }
+
+  void _drawLabel(
+    Canvas canvas,
+    String text,
+    Offset offset, {
+    required Color color,
+    required double size,
+    bool center = false,
+  }) {
+    final painter = _textPainter(
+      text,
+      color: color,
+      size: size,
+      weight: FontWeight.w700,
+    );
+    painter.paint(
+      canvas,
+      Offset(offset.dx - (center ? painter.width / 2 : 0), offset.dy),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ElevationLineChartPainter oldDelegate) {
+    return oldDelegate.values != values ||
+        oldDelegate.color != color ||
+        oldDelegate.selectedT != selectedT;
+  }
+}
+
 class _InteractiveDualLineChart extends StatefulWidget {
   const _InteractiveDualLineChart({
     required this.speed,
@@ -9118,22 +9477,6 @@ class _RadarPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RadarPainter oldDelegate) =>
       oldDelegate.sweepStart != sweepStart || oldDelegate.active != active;
-}
-
-int? _nextHorizontalSwipeIndex(
-  DragEndDetails details, {
-  required int currentIndex,
-  required int itemCount,
-}) {
-  if (itemCount <= 1) return null;
-
-  final velocity = details.primaryVelocity ?? 0;
-  const minSwipeVelocity = 220.0;
-  if (velocity.abs() < minSwipeVelocity) return null;
-
-  final nextIndex = velocity < 0 ? currentIndex + 1 : currentIndex - 1;
-  if (nextIndex < 0 || nextIndex >= itemCount) return null;
-  return nextIndex;
 }
 
 void _showUiMessage(String title, String message) {
