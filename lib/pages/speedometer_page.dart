@@ -2491,6 +2491,7 @@ class _StatisticsPageState extends State<_StatisticsPage> {
               children: [
                 _PeriodSegment(
                   selectedIndex: _periodIndex,
+                  controller: _periodPageController,
                   onSelect: _selectPeriod,
                 ),
                 const SizedBox(height: 14),
@@ -2652,10 +2653,12 @@ class _StatisticsPageState extends State<_StatisticsPage> {
 class _PeriodSegment extends StatelessWidget {
   const _PeriodSegment({
     required this.selectedIndex,
+    required this.controller,
     required this.onSelect,
   });
 
   final int selectedIndex;
+  final PageController controller;
   final ValueChanged<int> onSelect;
 
   @override
@@ -2668,35 +2671,126 @@ class _PeriodSegment extends StatelessWidget {
         color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Expanded(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: () => onSelect(i),
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: i == selectedIndex
-                        ? Colors.white.withOpacity(0.08)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: i == selectedIndex
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.62),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
+      child: _AnimatedSegmentTabs(
+        labels: labels,
+        selectedIndex: selectedIndex,
+        controller: controller,
+        height: 39,
+        borderRadius: BorderRadius.circular(14),
+        indicatorColor: Colors.white.withOpacity(0.08),
+        activeColor: Colors.white,
+        inactiveColor: Colors.white.withOpacity(0.62),
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        onSelect: onSelect,
+      ),
+    );
+  }
+}
+
+class _AnimatedSegmentTabs extends StatelessWidget {
+  const _AnimatedSegmentTabs({
+    required this.labels,
+    required this.selectedIndex,
+    required this.controller,
+    required this.height,
+    required this.borderRadius,
+    required this.indicatorColor,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.fontSize,
+    required this.fontWeight,
+    required this.onSelect,
+    this.indicatorBorder,
+  });
+
+  final List<String> labels;
+  final int selectedIndex;
+  final PageController controller;
+  final double height;
+  final BorderRadius borderRadius;
+  final Color indicatorColor;
+  final Color activeColor;
+  final Color inactiveColor;
+  final double fontSize;
+  final FontWeight fontWeight;
+  final ValueChanged<int> onSelect;
+  final Border? indicatorBorder;
+
+  double _pagePosition() {
+    if (labels.isEmpty) return 0;
+    if (!controller.hasClients) return selectedIndex.toDouble();
+    final page = controller.page ?? selectedIndex.toDouble();
+    return page.clamp(0.0, labels.length - 1.0).toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (labels.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: height,
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) {
+          final position = _pagePosition();
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final tabWidth = constraints.maxWidth / labels.length;
+              return Stack(
+                children: [
+                  Positioned(
+                    left: tabWidth * position,
+                    top: 0,
+                    bottom: 0,
+                    width: tabWidth,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: indicatorColor,
+                        borderRadius: borderRadius,
+                        border: indicatorBorder,
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ),
-        ],
+                  Row(
+                    children: [
+                      for (var i = 0; i < labels.length; i++)
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: borderRadius,
+                            onTap: () => onSelect(i),
+                            child: Center(
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    labels[i],
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      color: Color.lerp(
+                                        inactiveColor,
+                                        activeColor,
+                                        (1 - (position - i).abs())
+                                            .clamp(0.0, 1.0)
+                                            .toDouble(),
+                                      ),
+                                      fontSize: fontSize,
+                                      fontWeight: fontWeight,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -4929,6 +5023,7 @@ class _RoutesPageState extends State<_RoutesPage> {
                 children: [
                   _RouteModeTabs(
                     selectedIndex: _modeIndex,
+                    controller: _routePageController,
                     counts: [
                       routes.length,
                       _favoriteRouteTitles.length,
@@ -5860,61 +5955,40 @@ class _RouteEmptyState extends StatelessWidget {
 class _RouteModeTabs extends StatelessWidget {
   const _RouteModeTabs({
     required this.selectedIndex,
+    required this.controller,
     required this.counts,
     required this.onSelect,
   });
 
   final int selectedIndex;
+  final PageController controller;
   final List<int> counts;
   final ValueChanged<int> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    const labels = ['我的路线', '收藏路线', '导入路线'];
+    final labels = [
+      '我的路线（${counts[0]}）',
+      '收藏路线（${counts[1]}）',
+      '导入路线（${counts[2]}）',
+    ];
     return _OuterFrame(
       padding: const EdgeInsets.all(4),
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Expanded(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(10),
-                onTap: () => onSelect(i),
-                child: Container(
-                  height: 48,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: i == selectedIndex
-                        ? _RideColors.orange.withOpacity(0.13)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                    border: i == selectedIndex
-                        ? Border.all(
-                            color: _RideColors.orange.withOpacity(0.85),
-                          )
-                        : null,
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        '${labels[i]}（${counts[i]}）',
-                        maxLines: 1,
-                        style: TextStyle(
-                          color: i == selectedIndex
-                              ? _RideColors.orange
-                              : Colors.white.withOpacity(0.70),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
+      child: _AnimatedSegmentTabs(
+        labels: labels,
+        selectedIndex: selectedIndex,
+        controller: controller,
+        height: 48,
+        borderRadius: BorderRadius.circular(10),
+        indicatorColor: _RideColors.orange.withOpacity(0.13),
+        indicatorBorder: Border.all(
+          color: _RideColors.orange.withOpacity(0.85),
+        ),
+        activeColor: _RideColors.orange,
+        inactiveColor: Colors.white.withOpacity(0.70),
+        fontSize: 14,
+        fontWeight: FontWeight.w900,
+        onSelect: onSelect,
       ),
     );
   }
