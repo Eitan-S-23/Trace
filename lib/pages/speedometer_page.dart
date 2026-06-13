@@ -104,15 +104,8 @@ class _TopChrome extends StatelessWidget {
   final int selectedIndex;
   final bool isConnected;
 
-  String? get _title {
-    if (selectedIndex == 2) return '路线';
-    if (selectedIndex == 3) return '设备';
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final title = _title;
     return SizedBox(
       height: 54,
       child: Row(
@@ -174,19 +167,6 @@ class _TopChrome extends StatelessWidget {
               ),
             ),
           ),
-          if (title != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 13),
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -4817,6 +4797,8 @@ class _RoutesPage extends StatefulWidget {
   State<_RoutesPage> createState() => _RoutesPageState();
 }
 
+const _routeFilterLabels = <String>['全部', '简单', '中等', '困难'];
+
 class _RoutesPageState extends State<_RoutesPage> {
   static const _favoriteRoutesPrefsKey = 'speedometer.favorite_routes';
   static const _importedRoutesPrefsKey = 'speedometer.imported_routes';
@@ -4824,6 +4806,7 @@ class _RoutesPageState extends State<_RoutesPage> {
 
   late final PageController _routePageController;
   var _modeIndex = 0;
+  var _routeFilterIndex = 0;
   var _routeFabExpanded = false;
   var _importingRoute = false;
   final _favoriteRouteTitles = <String>{};
@@ -4831,15 +4814,22 @@ class _RoutesPageState extends State<_RoutesPage> {
 
   List<_RouteListEntry> get _allRoutes => _importedRoutes;
 
+  String get _routeFilterLabel => _routeFilterLabels[_routeFilterIndex];
+
   List<_RouteListEntry> _routesForMode(int index) {
     final routes = _allRoutes;
-    return switch (index) {
+    final modeRoutes = switch (index) {
       1 => routes
           .where((route) => _favoriteRouteTitles.contains(route.title))
           .toList(),
       2 => _importedRoutes,
       _ => routes,
     };
+    if (_routeFilterIndex == 0) return modeRoutes;
+    final difficulty = _routeFilterLabel;
+    return modeRoutes
+        .where((route) => route.difficulty == difficulty)
+        .toList(growable: false);
   }
 
   void _selectRouteMode(int index) {
@@ -4859,6 +4849,22 @@ class _RoutesPageState extends State<_RoutesPage> {
   void _handleRouteModePageChanged(int index) {
     if (index == _modeIndex) return;
     setState(() => _modeIndex = index);
+  }
+
+  void _selectRouteFilter(int index) {
+    if (index < 0 || index >= _routeFilterLabels.length) return;
+    if (index == _routeFilterIndex) return;
+    setState(() => _routeFilterIndex = index);
+  }
+
+  void _openRouteFilterSheet() {
+    unawaited(
+      _showRouteFilterActions(
+        context,
+        selectedIndex: _routeFilterIndex,
+        onSelect: _selectRouteFilter,
+      ),
+    );
   }
 
   @override
@@ -5021,10 +5027,12 @@ class _RoutesPageState extends State<_RoutesPage> {
   Widget build(BuildContext context) {
     final routes = _allRoutes;
     final importedCount = _importedRoutes.length;
+    final visibleCount = _routesForMode(_modeIndex).length;
+    final filterPrefix = _routeFilterIndex == 0 ? '' : '$_routeFilterLabel ';
     final routeCountLabel = switch (_modeIndex) {
-      1 => '收藏路线（${_favoriteRouteTitles.length}）',
-      2 => '导入路线（$importedCount）',
-      _ => '我的路线（${routes.length}）',
+      1 => '$filterPrefix收藏路线（$visibleCount）',
+      2 => '$filterPrefix导入路线（$visibleCount）',
+      _ => '$filterPrefix我的路线（$visibleCount）',
     };
 
     return Stack(
@@ -5047,7 +5055,10 @@ class _RoutesPageState extends State<_RoutesPage> {
                     onSelect: _selectRouteMode,
                   ),
                   const SizedBox(height: 12),
-                  const _RouteSearchBar(),
+                  _RouteSearchBar(
+                    filterLabel: _routeFilterLabel,
+                    onFilterTap: _openRouteFilterSheet,
+                  ),
                   const SizedBox(height: 14),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -6010,7 +6021,13 @@ class _RouteModeTabs extends StatelessWidget {
 }
 
 class _RouteSearchBar extends StatelessWidget {
-  const _RouteSearchBar();
+  const _RouteSearchBar({
+    required this.filterLabel,
+    required this.onFilterTap,
+  });
+
+  final String filterLabel;
+  final VoidCallback onFilterTap;
 
   @override
   Widget build(BuildContext context) {
@@ -6045,29 +6062,33 @@ class _RouteSearchBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Container(
-          height: 48,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Row(
-            children: [
-              const Text(
-                '全部',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
+        InkWell(
+          borderRadius: BorderRadius.circular(15),
+          onTap: onFilterTap,
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  filterLabel,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                Icons.keyboard_arrow_down,
-                color: Colors.white.withOpacity(0.78),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  color: Colors.white.withOpacity(0.78),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -6891,6 +6912,15 @@ class _DevicesPageState extends State<_DevicesPage>
     _showUiMessage('刷新设备', '正在重新扫描可用设备...');
   }
 
+  void _openMissingDeviceHelp() {
+    unawaited(
+      _showMissingDeviceActions(
+        context,
+        onRefresh: _refreshDevices,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -6910,7 +6940,10 @@ class _DevicesPageState extends State<_DevicesPage>
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-            child: _AvailableDevicesPanel(onRefresh: _refreshDevices),
+            child: _AvailableDevicesPanel(
+              onRefresh: _refreshDevices,
+              onMissingDevice: _openMissingDeviceHelp,
+            ),
           ),
         ),
       ],
@@ -7006,9 +7039,13 @@ class _ScanPanel extends StatelessWidget {
 }
 
 class _AvailableDevicesPanel extends StatelessWidget {
-  const _AvailableDevicesPanel({required this.onRefresh});
+  const _AvailableDevicesPanel({
+    required this.onRefresh,
+    required this.onMissingDevice,
+  });
 
   final VoidCallback onRefresh;
+  final VoidCallback onMissingDevice;
 
   @override
   Widget build(BuildContext context) {
@@ -7072,19 +7109,29 @@ class _AvailableDevicesPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              Text(
-                '未找到我的设备',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.68),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                ),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: onMissingDevice,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  Text(
+                    '未找到我的设备',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.68),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right,
+                    color: Colors.white.withOpacity(0.82),
+                  ),
+                ],
               ),
-              const Spacer(),
-              Icon(Icons.chevron_right, color: Colors.white.withOpacity(0.82)),
-            ],
+            ),
           ),
         ],
       ),
@@ -9742,6 +9789,64 @@ Future<void> _showDeviceMoreActions(BuildContext context) {
         onTap: () {
           Navigator.of(sheetContext).pop();
           _showUiMessage('解除绑定', '已打开设备解绑确认');
+        },
+      ),
+    ],
+  );
+}
+
+Future<void> _showRouteFilterActions(
+  BuildContext context, {
+  required int selectedIndex,
+  required ValueChanged<int> onSelect,
+}) {
+  return _showDeviceActionSheet(
+    context,
+    actionsBuilder: (sheetContext) => [
+      for (var i = 0; i < _routeFilterLabels.length; i++)
+        _RouteMoreAction(
+          icon: i == selectedIndex
+              ? Icons.check_circle
+              : Icons.radio_button_unchecked,
+          label: _routeFilterLabels[i],
+          onTap: () {
+            Navigator.of(sheetContext).pop();
+            onSelect(i);
+          },
+        ),
+    ],
+  );
+}
+
+Future<void> _showMissingDeviceActions(
+  BuildContext context, {
+  required VoidCallback onRefresh,
+}) {
+  return _showDeviceActionSheet(
+    context,
+    actionsBuilder: (sheetContext) => [
+      _RouteMoreAction(
+        icon: Icons.refresh,
+        label: '重新扫描',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          onRefresh();
+        },
+      ),
+      _RouteMoreAction(
+        icon: Icons.add_link,
+        label: '手动添加设备',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('手动添加设备', '已打开设备名称或序列号添加入口');
+        },
+      ),
+      _RouteMoreAction(
+        icon: Icons.help_outline,
+        label: '连接帮助',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('连接帮助', '请确认设备已开机、蓝牙已开启并靠近手机');
         },
       ),
     ],
