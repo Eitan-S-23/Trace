@@ -104,80 +104,95 @@ class _TopChrome extends StatelessWidget {
   final int selectedIndex;
   final bool isConnected;
 
-  String get _title {
+  String? get _title {
     if (selectedIndex == 2) return '路线';
     if (selectedIndex == 3) return '设备';
-    return '码表';
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = _title;
     return SizedBox(
       height: 54,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Row(
-              children: [
-                Container(
-                  width: 24,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: Colors.white.withOpacity(0.78)),
-                  ),
-                  child: const Icon(
-                    Icons.more_vert,
-                    color: Colors.white,
-                    size: 15,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _openConnectedDeviceDetail,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 4, 10, 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.78),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.more_vert,
+                          color: Colors.white,
+                          size: 15,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            isConnected ? '已连接' : '未连接',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.90),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'iGPSPORT BSC300',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.70),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      isConnected ? '已连接' : '未连接',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.90),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'iGPSPORT BSC300',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.70),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 13),
-            child: Text(
-              _title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.2,
               ),
             ),
           ),
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 13),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
-                  onPressed: () => _showUiMessage('数据同步', '正在准备同步码表数据'),
+                  onPressed: () => _showDeviceSyncActions(context),
                   icon: const Icon(
                     Icons.cloud_sync_outlined,
                     color: Colors.white,
@@ -185,7 +200,7 @@ class _TopChrome extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () => _showUiMessage('更多操作', '码表更多操作入口已激活'),
+                  onPressed: () => _showDeviceMoreActions(context),
                   icon: const Icon(
                     Icons.more_horiz,
                     color: Colors.white,
@@ -9648,6 +9663,123 @@ $title
 用时: $duration
 难度: $difficulty
 ''';
+}
+
+void _openConnectedDeviceDetail() {
+  _openRidePage(
+    () => const _RideDeviceDetailPage(
+      name: 'iGPSPORT BSC300_1234',
+      type: '码表',
+    ),
+  );
+}
+
+Future<void> _showDeviceSyncActions(BuildContext context) {
+  return _showDeviceActionSheet(
+    context,
+    actionsBuilder: (sheetContext) => [
+      _RouteMoreAction(
+        icon: Icons.sync,
+        label: '同步骑行记录',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('同步骑行记录', '正在同步码表中的骑行记录');
+        },
+      ),
+      _RouteMoreAction(
+        icon: Icons.settings_backup_restore,
+        label: '同步设备配置',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('同步设备配置', '正在同步页面、传感器与骑行设置');
+        },
+      ),
+      _RouteMoreAction(
+        icon: Icons.system_update_alt,
+        label: '检查固件更新',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('固件更新', '正在检查 iGPSPORT BSC300 固件版本');
+        },
+      ),
+    ],
+  );
+}
+
+Future<void> _showDeviceMoreActions(BuildContext context) {
+  return _showDeviceActionSheet(
+    context,
+    actionsBuilder: (sheetContext) => [
+      _RouteMoreAction(
+        icon: Icons.info_outline,
+        label: '设备详情',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _openConnectedDeviceDetail();
+        },
+      ),
+      _RouteMoreAction(
+        icon: Icons.grid_view,
+        label: '页面配置',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('页面配置', '已打开码表页面配置');
+        },
+      ),
+      _RouteMoreAction(
+        icon: Icons.sensors,
+        label: '传感器管理',
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('传感器管理', '已打开已配对传感器列表');
+        },
+      ),
+      Divider(color: Colors.white.withOpacity(0.08), height: 8),
+      _RouteMoreAction(
+        icon: Icons.link_off,
+        label: '解除绑定',
+        color: const Color(0xFFFF3B5F),
+        onTap: () {
+          Navigator.of(sheetContext).pop();
+          _showUiMessage('解除绑定', '已打开设备解绑确认');
+        },
+      ),
+    ],
+  );
+}
+
+Future<void> _showDeviceActionSheet(
+  BuildContext context, {
+  required List<Widget> Function(BuildContext sheetContext) actionsBuilder,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      return SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF171D27),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.42),
+                blurRadius: 28,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: actionsBuilder(sheetContext),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 Future<void> _showRouteMoreActions(
