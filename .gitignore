@@ -37,6 +37,7 @@ lib/generated_plugin_registrant.dart
 # Node/Cloudflare related
 node_modules/
 **/node_modules/
+cloudflare/update-service/.bootstrap/
 
 # Symbolication related
 app.*.symbols

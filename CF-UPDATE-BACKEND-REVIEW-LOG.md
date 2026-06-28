@@ -220,10 +220,12 @@ Implemented:
 - Added invariant tests for the required Phase 1 safety cases.
 - Added a GitHub Actions workflow to run the Cloudflare Worker typecheck and invariant tests on Linux without deploying Cloudflare resources.
 - Fixed the first GitHub Actions invariant failures by replacing `meta.changes` CAS detection with `UPDATE ... RETURNING`, disabling automatic redirect following in the fake GitHub fallback test, and exercising D1 fail-closed behavior through the Worker/Hono error handler.
+- Added staging bootstrap tooling and an operator guide: `bootstrap-staging.ps1`, `bootstrap-staging.mjs`, and `docs/STAGING-SETUP.md`. The script is staging-only, requires explicit confirmation, and automates D1/KV/R2 creation, Wrangler config update, migration apply, Worker deploy, secret writes, and smoke checks.
 
 Residual risks and follow-up:
 
 - No Cloudflare resources or Access application were created. Direct Worker admin mutation routes remain disabled until an Access-protected Pages Functions facade or equivalent safe entry point is implemented.
+- The staging bootstrap has not been run against a real Cloudflare account in this session because no account ID or API token was provided.
 - Local Worker runtime tests remain blocked by a Miniflare/workerd access violation on Windows before any test files execute. Linux GitHub Actions is the current runtime verification source.
 - R2 primary download, R2 upload verification, retention, restore, and Pages admin UI are not implemented in this phase.
 
@@ -235,3 +237,34 @@ Validation recorded:
 - `npm run check` was re-run after the CAS/test-harness fixes and passed.
 - GitHub Actions `Cloudflare Update Service Checks` passed on Linux for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141952`.
 - GitHub Actions `Build APK and EXE Release` passed for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141953`. Android APK, Windows package, and Pages jobs passed; the formal GitHub Release job was skipped on branch push.
+- Staging bootstrap validation was limited to syntax/static checks and dry-run/help execution. No real Cloudflare API mutation or deploy was run.
+
+### Phase 1 follow-up — staging deployment and CI candidate registration wiring — 2026-06-29
+
+Status: implemented locally, pending GitHub Actions formal release verification.
+
+Implemented:
+
+- Added `.gitignore` coverage for `cloudflare/update-service/.bootstrap/` so bootstrap summaries containing raw deploy tokens stay local.
+- Recorded staging D1/KV/R2 binding IDs in `worker/wrangler.jsonc`; production remains unconfigured.
+- Added `build-github-release-metadata.mjs` to validate release assets and generate the `/api/ci/releases` payload from `ble-monitor-update.json`, APK, and patch files.
+- Updated the Android GitHub Actions build to compile `TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL` from the `TRACE_UPDATE_SERVICE_URL` repository secret when present.
+- Updated the formal release job to generate candidate metadata after GitHub Release upload and call `register-release.mjs` with `TRACE_UPDATE_SERVICE_URL` and `TRACE_DEPLOY_TOKEN`.
+- Preserved the Phase 0 safety gate: only `v*` tags or `workflow_dispatch publish_release=true` can reach release creation and Cloudflare candidate registration.
+- Updated staging docs to describe current CI registration verification and the remaining publish boundary.
+
+Residual risks and follow-up:
+
+- CI uses a staging-only placeholder `payloadSignature` until a real Ed25519 signing secret and matching client public key are configured. Do not publish those candidates to clients.
+- The Access-protected admin facade is still required before candidates can be safely published to `stable` or `beta`.
+- R2 primary distribution is still deferred to Phase 2; registered assets remain immutable GitHub tag URLs in Phase 1.
+- A formal GitHub Actions run must still verify candidate registration against the deployed staging Worker.
+
+Validation recorded:
+
+- `node --check` passed for `build-github-release-metadata.mjs`, `register-release.mjs`, and `bootstrap-staging.mjs`.
+- Synthetic metadata generation with temporary dummy release assets succeeded.
+- `npm run check` passed in `cloudflare/update-service/worker`.
+- `git diff --check` passed with only line-ending warnings.
+- `npm test` is still blocked locally by the known Windows workerd `0xc0000005` crash before test execution.
+- Local Flutter/Gradle build/package commands were not run.

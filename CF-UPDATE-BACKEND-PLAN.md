@@ -497,10 +497,12 @@ Implemented:
 - Added invariant tests covering CAS conflict, disabled release invisibility/download rejection, gated GitHub fallback D1 checks, archived rollback rejection, v1/v2 compatibility, token failure, stop switches, D1 fail-closed behavior, and releaseNotes/signature separation.
 - Added a GitHub Actions workflow for `cloudflare/update-service` that runs `npm ci`, Env-only Wrangler type generation, `tsc --noEmit`, and Worker invariant tests on Linux without deploying Cloudflare resources.
 - Fixed the initial Linux invariant failures by using `UPDATE ... RETURNING` for CAS success detection, preventing test fetches from following fake GitHub redirect targets, and verifying D1 fail-closed behavior through the Worker/Hono error handler.
+- Added staging setup automation and operator documentation: `bootstrap-staging.ps1`, `bootstrap-staging.mjs`, and `docs/STAGING-SETUP.md`. The bootstrap is staging-only, requires explicit `--yes`, creates/reuses D1/KV/R2, updates non-secret Wrangler IDs, applies migrations, deploys staging Worker, writes Worker secrets, and smoke-tests `/healthz` plus public latest.
 
 Remaining risks:
 
 - No real Cloudflare D1/KV/R2/DO/Pages resources were created, no Access application was configured, and no production deployment was performed.
+- The new staging bootstrap has not been run against a real Cloudflare account in this repository session because no account ID or API token was provided.
 - Worker runtime tests still cannot execute locally because Miniflare/workerd crashes on this Windows host with `0xc0000005` access violation before running test files. The same local runtime crash affected full `wrangler types`; Env-only `wrangler types --include-runtime false` succeeds. Linux GitHub Actions is the runtime verification path for this host.
 - Admin mutation placement still needs the planned Access-protected Pages Functions facade before any real admin operations are enabled.
 - Phase 1 still uses immutable GitHub tag assets as the actual file source. R2 upload, R2 streaming, retention, and restore workflows remain Phase 2+.
@@ -515,4 +517,35 @@ Validation:
 - `npm test` was attempted twice locally but blocked before test execution by local Miniflare/workerd `0xc0000005` access violation.
 - GitHub Actions `Cloudflare Update Service Checks` passed on Linux for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141952`. The run completed `npm ci`, `npm run cf-typegen`, `npm run check`, and `npm test`.
 - GitHub Actions `Build APK and EXE Release` passed for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141953`. Android APK, Windows EXE/zip, and Pages jobs passed; the formal GitHub Release job was skipped on branch push.
+- Staging bootstrap validation was limited to static/syntax checks and dry-run/help invocation. No real Cloudflare resource creation, migration, secret write, or deploy was executed.
 - Local build/package commands were not run.
+
+### Phase 1 follow-up — staging deployment and CI candidate registration wiring on 2026-06-29
+
+Implemented:
+
+- Staging bootstrap output is now explicitly ignored via `cloudflare/update-service/.bootstrap/`, so local summary files containing raw deploy tokens are not committed.
+- The staging Worker/D1/KV/R2 IDs produced by bootstrap are recorded in `cloudflare/update-service/worker/wrangler.jsonc`; production bindings remain placeholders.
+- Added `cloudflare/update-service/scripts/build-github-release-metadata.mjs`, which derives Cloudflare candidate metadata from the GitHub Release assets, validates APK/patch SHA-256 and sizes, emits immutable GitHub tag asset URLs, and prepares the `/api/ci/releases` payload.
+- The formal GitHub Release job now compiles Android with `TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL=${TRACE_UPDATE_SERVICE_URL}/api/public/latest` when the repository secret is present.
+- After uploading GitHub Release assets, the formal release job generates Cloudflare metadata and calls `register-release.mjs` with `TRACE_UPDATE_SERVICE_URL` and `TRACE_DEPLOY_TOKEN`.
+- Ordinary branch pushes and pull requests still do not create formal GitHub Releases and still cannot register Cloudflare candidates.
+- Staging documentation now explains bootstrap, GitHub Secrets, candidate registration verification, and the current publish boundary.
+
+Remaining risks:
+
+- A real Ed25519 payload signing key is not configured yet. CI currently uses an explicit staging-only placeholder `payloadSignature` for candidate registration; those candidates must not be published to clients until real signing and the matching client public key are configured.
+- Access-protected admin mutation placement is still not implemented, so candidates remain invisible to `/api/public/latest` until a safe Pages Functions facade or equivalent Access-protected entry is added.
+- R2 primary upload/download remains Phase 2; Phase 1 candidates still point to immutable GitHub tag assets through Worker-gated download URLs.
+- A formal GitHub Actions release run still needs to verify the full GitHub Release upload -> Cloudflare candidate registration path against staging.
+
+Validation:
+
+- `node --check cloudflare/update-service/scripts/build-github-release-metadata.mjs` passed.
+- `node --check cloudflare/update-service/scripts/register-release.mjs` passed.
+- `node --check cloudflare/update-service/scripts/bootstrap-staging.mjs` passed.
+- A synthetic metadata generation run using temporary dummy release assets succeeded and produced the expected candidate payload shape.
+- `npm run check` passed in `cloudflare/update-service/worker`.
+- `git diff --check` passed with only line-ending warnings.
+- `npm test` remains blocked locally by the known Windows workerd `0xc0000005` runtime crash before tests execute.
+- Local Flutter/Gradle build/package commands were not run.

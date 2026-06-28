@@ -144,9 +144,20 @@ jobs:
 
       - name: Build release APK
         shell: bash
+        env:
+          TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
         run: |
           set +e
-          flutter build apk --release 2>&1 | tee android-build.log
+          build_args=(apk --release)
+          if [[ -n "${TRACE_UPDATE_SERVICE_URL:-}" ]]; then
+            update_service_url="${TRACE_UPDATE_SERVICE_URL%/}"
+            build_args+=(--dart-define="TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL=${update_service_url}/api/public/latest")
+            echo "Cloudflare update manifest URL is configured for this APK."
+          else
+            echo "Cloudflare update manifest URL is not configured; APK will use the legacy GitHub latest manifest."
+          fi
+
+          flutter build "${build_args[@]}" 2>&1 | tee android-build.log
           status=${PIPESTATUS[0]}
 
           if [[ "$status" -ne 0 ]]; then
@@ -450,3 +461,31 @@ jobs:
           fi
 
           gh release upload "${RELEASE_TAG}" release-assets/* --clobber
+
+      - name: Build Cloudflare candidate metadata
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+          FIXED_SIGNING_CONFIGURED: ${{ needs.android.outputs.fixed_signing_configured }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node cloudflare/update-service/scripts/build-github-release-metadata.mjs \
+            --assets-dir release-assets \
+            --release-tag "${RELEASE_TAG}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --commit-sha "${GITHUB_SHA}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --fixed-signing-configured "${FIXED_SIGNING_CONFIGURED}" \
+            --output release-assets/cloudflare-release-metadata.json \
+            --allow-placeholder-signature
+
+      - name: Register Cloudflare candidate
+        env:
+          TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
+          TRACE_DEPLOY_TOKEN: ${{ secrets.TRACE_DEPLOY_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          node cloudflare/update-service/scripts/register-release.mjs release-assets/cloudflare-release-metadata.json

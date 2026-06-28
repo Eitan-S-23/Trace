@@ -6,7 +6,8 @@
   "scripts": {
     "cf-typegen": "wrangler types --include-runtime false worker-configuration.d.ts",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bootstrap:staging": "node ../scripts/bootstrap-staging.mjs"
   },
   "dependencies": {
     "hono": "4.12.27"

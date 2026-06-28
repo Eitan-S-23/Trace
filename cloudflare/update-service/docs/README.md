@@ -25,6 +25,44 @@ npm test
 
 These are non-build validation commands. Do not run production deploys until Cloudflare account, Access, D1, KV, R2, DO, and secret values are confirmed.
 
+## Staging Bootstrap
+
+Use the staging guide when you are ready to create real Cloudflare staging resources:
+
+```text
+cloudflare/update-service/docs/STAGING-SETUP.md
+```
+
+The bootstrap scripts are:
+
+```text
+cloudflare/update-service/scripts/bootstrap-staging.ps1
+cloudflare/update-service/scripts/bootstrap-staging.mjs
+```
+
+They are staging-only and require an explicit `-Yes` / `--yes` flag before creating Cloudflare resources or deploying the Worker.
+
+## GitHub Release Candidate Registration
+
+Formal GitHub Releases now register an Android Cloudflare `candidate` after release assets are uploaded. This only runs for `v*` tag builds or `workflow_dispatch publish_release=true`; ordinary push builds still cannot register candidates.
+
+The GitHub repository must define:
+
+- `TRACE_UPDATE_SERVICE_URL`
+- `TRACE_DEPLOY_TOKEN`
+- Fixed Android release signing secrets
+
+The workflow uses:
+
+```text
+cloudflare/update-service/scripts/build-github-release-metadata.mjs
+cloudflare/update-service/scripts/register-release.mjs
+```
+
+Phase 1 candidate registration still uses immutable GitHub tag asset URLs as the download source. It does not publish the candidate to `stable` or `beta`.
+
+Until a real `TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64` signing secret and matching client public key are configured, CI emits a staging-only placeholder `payloadSignature`. Do not publish those candidates to clients; the placeholder is intended to fail closed if accidentally exposed.
+
 ## Required Secrets
 
 Set real values with `wrangler secret put` per environment before any remote deployment:

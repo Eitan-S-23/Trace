@@ -3,7 +3,9 @@
   "name": "trace-update-service-dev",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-28",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
   "vars": {
     "ENVIRONMENT": "dev",
@@ -48,7 +50,9 @@
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["RateLimiter"]
+      "new_sqlite_classes": [
+        "RateLimiter"
+      ]
     }
   ],
   "observability": {
@@ -74,14 +78,14 @@
         {
           "binding": "DB",
           "database_name": "trace-update-staging",
-          "database_id": "00000000-0000-0000-0000-000000000002",
+          "database_id": "0133ad9e-d4a2-4fef-a659-4f2bf3d3a645",
           "migrations_dir": "../migrations"
         }
       ],
       "kv_namespaces": [
         {
           "binding": "MANIFEST_CACHE",
-          "id": "00000000000000000000000000000002"
+          "id": "fe3b08f2e0774072a44bdf140c44174a"
         }
       ],
       "r2_buckets": [
@@ -94,8 +98,7 @@
         "bindings": [
           {
             "name": "RATE_LIMITER",
-            "class_name": "RateLimiter",
-            "environment": "staging"
+            "class_name": "RateLimiter"
           }
         ]
       }
@@ -138,8 +141,7 @@
         "bindings": [
           {
             "name": "RATE_LIMITER",
-            "class_name": "RateLimiter",
-            "environment": "prod"
+            "class_name": "RateLimiter"
           }
         ]
       }
