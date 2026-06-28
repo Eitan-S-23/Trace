@@ -190,3 +190,18 @@ Validation recorded:
 - `git diff --check` passed with only line-ending warnings.
 - Text searches confirmed the app update service no longer constructs patch/full fallback URLs from GitHub `/latest/download`; it derives immutable tag asset URLs from `releaseTag`.
 - Text searches confirmed the release job condition no longer includes ordinary branch `push`.
+
+### Phase 0 follow-up — update check UX
+
+Status: implemented after device feedback that manual "检查更新" could appear stuck at "获取更新清单" or finish without visible output.
+
+Changes:
+
+- Manual update checks now apply a 30-second hard timeout around manifest retrieval and cancel the underlying Dio request on timeout.
+- The checking dialog now shows the active manifest source and includes a cancel button.
+- Manual "already latest" and failure outcomes now use explicit dialogs instead of relying only on snackbars, so the user always gets visible output after the loading dialog closes.
+
+Validation required:
+
+- Install the next GitHub Actions Android artifact and tap "检查更新" on a network that can access GitHub; expected result for the current latest version is an "已是最新版本" dialog.
+- Repeat with GitHub blocked or offline; expected result is a visible timeout/network failure dialog within 30 seconds, with a retry action.

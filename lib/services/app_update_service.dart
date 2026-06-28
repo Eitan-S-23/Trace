@@ -71,6 +71,7 @@ class AppUpdateService extends GetxService {
 
     isChecking.value = true;
     var checkingDialogOpen = false;
+    final manifestCancelToken = CancelToken();
 
     void closeCheckingDialog() {
       if (checkingDialogOpen && Get.isDialogOpen == true) {
@@ -79,11 +80,16 @@ class AppUpdateService extends GetxService {
       checkingDialogOpen = false;
     }
 
+    void cancelChecking() {
+      manifestCancelToken.cancel('用户取消检查更新');
+      closeCheckingDialog();
+    }
+
     updateProgress.value = 0;
     updateStatus.value = '正在检查更新...';
     if (manual) {
       checkingDialogOpen = true;
-      _showCheckingDialog();
+      _showCheckingDialog(onCancel: cancelChecking);
     }
 
     try {
@@ -94,12 +100,29 @@ class AppUpdateService extends GetxService {
       final localApkSha256 = await _sha256File(File(localInfo.sourceApkPath));
 
       updateStatus.value = '获取更新清单...';
-      final updateInfo = await _fetchUpdateInfo(localInfo);
+      final updateInfo = await _fetchUpdateInfo(
+        localInfo,
+        cancelToken: manifestCancelToken,
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          manifestCancelToken.cancel('获取更新清单超时');
+          throw const _UpdateException(
+            'MANIFEST_TIMEOUT',
+            '获取更新清单超时，请检查网络后重试',
+          );
+        },
+      );
 
       if (updateInfo.versionCode <= localInfo.versionCode) {
         closeCheckingDialog();
         if (manual) {
-          Get.snackbar('已是最新版本', '当前版本 ${localInfo.versionName}');
+          _showCheckResultDialog(
+            title: '已是最新版本',
+            message: '当前版本 ${localInfo.versionName} '
+                '(${localInfo.versionCode})\n'
+                '清单来源：${updateInfo.source.label}',
+          );
         }
         return;
       }
@@ -119,17 +142,17 @@ class AppUpdateService extends GetxService {
     } on DioException catch (e) {
       closeCheckingDialog();
       if (manual) {
-        Get.snackbar('检查更新失败', _formatDioException(e));
+        _showCheckFailedDialog(_formatDioException(e));
       }
     } on _UpdateException catch (e) {
       closeCheckingDialog();
       if (manual) {
-        Get.snackbar('检查更新失败', e.messageWithCode);
+        _showCheckFailedDialog(e.messageWithCode);
       }
     } catch (e) {
       closeCheckingDialog();
       if (manual) {
-        Get.snackbar('检查更新失败', '$e');
+        _showCheckFailedDialog('$e');
       }
     } finally {
       closeCheckingDialog();
@@ -145,7 +168,10 @@ class AppUpdateService extends GetxService {
     return _LocalAppInfo.fromMap(result);
   }
 
-  Future<_RemoteUpdateInfo> _fetchUpdateInfo(_LocalAppInfo localInfo) async {
+  Future<_RemoteUpdateInfo> _fetchUpdateInfo(
+    _LocalAppInfo localInfo, {
+    required CancelToken cancelToken,
+  }) async {
     final requests = <_ManifestRequest>[
       if (ShareLinks.cloudflareUpdateManifestUrl.isNotEmpty)
         _ManifestRequest(
@@ -168,8 +194,10 @@ class AppUpdateService extends GetxService {
     StackTrace? lastStackTrace;
     for (final request in requests) {
       try {
+        updateStatus.value = '获取更新清单...\n${request.source.label}';
         final response = await _dio.get<String>(
           request.url,
+          cancelToken: cancelToken,
           options: Options(responseType: ResponseType.plain),
         );
         final raw = response.data;
@@ -655,6 +683,46 @@ class AppUpdateService extends GetxService {
     );
   }
 
+  void _showCheckResultDialog({
+    required String title,
+    required String message,
+  }) {
+    Get.dialog<void>(
+      AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Get.back<void>(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCheckFailedDialog(String message) {
+    Get.dialog<void>(
+      AlertDialog(
+        title: const Text('检查更新失败'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<void>(),
+            child: const Text('稍后'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Get.back<void>();
+              unawaited(checkForUpdates());
+            },
+            child: const Text('重试'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showProgressDialog() {
     Get.dialog<void>(
       Obx(
@@ -677,26 +745,40 @@ class AppUpdateService extends GetxService {
     );
   }
 
-  void _showCheckingDialog() {
+  void _showCheckingDialog({required VoidCallback onCancel}) {
     Get.dialog<void>(
       Obx(
         () => AlertDialog(
           title: const Text('检查更新'),
-          content: Row(
+          content: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2.6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2.6),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(child: Text(updateStatus.value)),
+                ],
               ),
-              const SizedBox(width: 16),
-              SizedBox(
-                width: 220,
-                child: Text(updateStatus.value),
+              const SizedBox(height: 12),
+              const Text(
+                '如果网络无法访问 GitHub，最多等待 30 秒后会返回错误。',
+                style: TextStyle(fontSize: 12),
               ),
             ],
           ),
+          actions: [
+            TextButton(
+              onPressed: onCancel,
+              child: const Text('取消'),
+            ),
+          ],
         ),
       ),
       barrierDismissible: false,
@@ -1272,6 +1354,19 @@ enum _ManifestSource {
   cloudflare,
   emergency,
   legacyGithubLatest,
+}
+
+extension _ManifestSourceLabel on _ManifestSource {
+  String get label {
+    switch (this) {
+      case _ManifestSource.cloudflare:
+        return 'Cloudflare 更新服务';
+      case _ManifestSource.emergency:
+        return '紧急更新清单';
+      case _ManifestSource.legacyGithubLatest:
+        return 'GitHub latest 兼容清单';
+    }
+  }
 }
 
 class _ManifestRequest {
