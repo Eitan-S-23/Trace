@@ -1,8 +1,58 @@
 // android/app/build.gradle.kts
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+fun signingProperty(name: String, vararg envNames: String): String? {
+    keystoreProperties.getProperty(name)?.takeIf { it.isNotBlank() }?.let { return it }
+    return envNames.asSequence()
+        .mapNotNull { envName -> System.getenv(envName)?.takeIf { it.isNotBlank() } }
+        .firstOrNull()
+}
+
+val releaseStoreFile = signingProperty("storeFile", "ANDROID_RELEASE_STORE_FILE", "SIDELOAD_STORE_FILE")
+val releaseStorePassword =
+    signingProperty("storePassword", "ANDROID_RELEASE_KEYSTORE_PASSWORD", "SIDELOAD_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingProperty("keyAlias", "ANDROID_RELEASE_KEY_ALIAS", "SIDELOAD_KEY_ALIAS")
+val releaseKeyPassword = signingProperty("keyPassword", "ANDROID_RELEASE_KEY_PASSWORD", "SIDELOAD_KEY_PASSWORD")
+val releaseKeystoreFile = releaseStoreFile?.let { rootProject.file(it) }
+val releaseSigningRequested =
+    keystorePropertiesFile.exists() ||
+        listOf(
+            "ANDROID_RELEASE_STORE_FILE",
+            "ANDROID_RELEASE_KEYSTORE_BASE64",
+            "ANDROID_RELEASE_KEYSTORE_PASSWORD",
+            "ANDROID_RELEASE_KEY_ALIAS",
+            "ANDROID_RELEASE_KEY_PASSWORD",
+            "SIDELOAD_STORE_FILE",
+            "SIDELOAD_KEYSTORE_BASE64",
+            "SIDELOAD_KEYSTORE_PASSWORD",
+            "SIDELOAD_KEY_ALIAS",
+            "SIDELOAD_KEY_PASSWORD",
+        ).any { !System.getenv(it).isNullOrBlank() }
+val hasReleaseSigningConfig =
+    releaseKeystoreFile?.exists() == true &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
+
+if (releaseSigningRequested && !hasReleaseSigningConfig) {
+    error(
+        "Android release signing is incomplete. Provide android/key.properties with " +
+            "storeFile, storePassword, keyAlias, keyPassword, or configure the fixed signing " +
+            "GitHub Actions secrets and ensure the keystore file exists."
+    )
 }
 
 android {
@@ -28,9 +78,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseSigningConfig) {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("debug") // 发布时需改为正式签名
+            signingConfig = if (hasReleaseSigningConfig) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "Android release signing is not configured; falling back to debug signing. " +
+                        "Configure android/key.properties or fixed GitHub Actions secrets for reliable updates."
+                )
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

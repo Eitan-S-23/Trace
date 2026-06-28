@@ -69,6 +69,64 @@ jobs:
           printf 'flutter.sdk=%s\n' "$FLUTTER_ROOT" > local.properties
           gradle wrapper --gradle-version 8.12 --distribution-type all
 
+      - name: Configure Android release signing
+        shell: bash
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          SIDELOAD_KEYSTORE_BASE64: ${{ secrets.SIDELOAD_KEYSTORE_BASE64 }}
+          SIDELOAD_KEYSTORE_PASSWORD: ${{ secrets.SIDELOAD_KEYSTORE_PASSWORD }}
+          SIDELOAD_KEY_ALIAS: ${{ secrets.SIDELOAD_KEY_ALIAS }}
+          SIDELOAD_KEY_PASSWORD: ${{ secrets.SIDELOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          android_release_signing_present=false
+          sideload_signing_present=false
+
+          if [[ -n "${ANDROID_RELEASE_KEYSTORE_BASE64:-}" || -n "${ANDROID_RELEASE_KEYSTORE_PASSWORD:-}" || -n "${ANDROID_RELEASE_KEY_ALIAS:-}" || -n "${ANDROID_RELEASE_KEY_PASSWORD:-}" ]]; then
+            android_release_signing_present=true
+          fi
+
+          if [[ -n "${SIDELOAD_KEYSTORE_BASE64:-}" || -n "${SIDELOAD_KEYSTORE_PASSWORD:-}" || -n "${SIDELOAD_KEY_ALIAS:-}" || -n "${SIDELOAD_KEY_PASSWORD:-}" ]]; then
+            sideload_signing_present=true
+          fi
+
+          if [[ "${android_release_signing_present}" == "false" && "${sideload_signing_present}" == "false" ]]; then
+            echo "::warning title=Android release signing::No fixed signing secrets are configured; release APK will use CI debug signing and cannot reliably update previous CI APKs."
+            exit 0
+          fi
+
+          if [[ "${android_release_signing_present}" == "true" ]]; then
+            keystore_base64="${ANDROID_RELEASE_KEYSTORE_BASE64:?Missing ANDROID_RELEASE_KEYSTORE_BASE64 secret}"
+            keystore_password="${ANDROID_RELEASE_KEYSTORE_PASSWORD:?Missing ANDROID_RELEASE_KEYSTORE_PASSWORD secret}"
+            key_alias="${ANDROID_RELEASE_KEY_ALIAS:?Missing ANDROID_RELEASE_KEY_ALIAS secret}"
+            key_password="${ANDROID_RELEASE_KEY_PASSWORD:?Missing ANDROID_RELEASE_KEY_PASSWORD secret}"
+          else
+            keystore_base64="${SIDELOAD_KEYSTORE_BASE64:?Missing SIDELOAD_KEYSTORE_BASE64 secret}"
+            keystore_password="${SIDELOAD_KEYSTORE_PASSWORD:?Missing SIDELOAD_KEYSTORE_PASSWORD secret}"
+            key_alias="${SIDELOAD_KEY_ALIAS:?Missing SIDELOAD_KEY_ALIAS secret}"
+            key_password="${SIDELOAD_KEY_PASSWORD:?Missing SIDELOAD_KEY_PASSWORD secret}"
+          fi
+
+          if ! printf '%s' "${keystore_base64}" | base64 --decode > android/release-keystore.jks; then
+            rm -f android/release-keystore.jks
+            echo "::error title=Android release signing::Failed to decode fixed signing keystore secret."
+            exit 1
+          fi
+
+          {
+            printf 'storePassword=%s\n' "${keystore_password}"
+            printf 'keyPassword=%s\n' "${key_password}"
+            printf 'keyAlias=%s\n' "${key_alias}"
+            printf 'storeFile=%s\n' "release-keystore.jks"
+          } > android/key.properties
+
+          chmod 600 android/release-keystore.jks android/key.properties
+          echo "Android release signing configured with a fixed keystore."
+
       - name: Analyze project
         continue-on-error: true
         run: flutter analyze
