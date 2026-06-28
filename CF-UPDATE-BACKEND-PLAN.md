@@ -549,3 +549,38 @@ Validation:
 - `git diff --check` passed with only line-ending warnings.
 - `npm test` remains blocked locally by the known Windows workerd `0xc0000005` runtime crash before tests execute.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 1 follow-up — Access admin facade and payload signing wiring on 2026-06-29
+
+Implemented:
+
+- Added `cloudflare/update-service/admin` as the Phase 1 Pages Functions admin facade. It is a minimal API surface, not the final React console.
+- Direct Worker `/api/admin/*` remains disabled. Admin mutations are implemented only under the Pages Functions same-origin facade.
+- Added Access JWT verification for the admin facade: issuer, audience, expiry, optional `nbf`, RS256 signature via Cloudflare Access JWKS, email allowlist, and role derivation.
+- Added role gates: `viewer` can list session/channels/releases, `publisher` can edit release notes and publish/rollback beta, and `owner` can publish/rollback stable or disable unpublished releases.
+- Added same-origin `Origin` enforcement and CSRF double-submit token for all admin mutations.
+- Added admin endpoints for session, channel listing, release listing, publish/rollback, release note edits, and disabling unpublished releases.
+- The admin facade publishes channels through D1 CAS revision updates and uses existing triggers for `channel_history` and append-only `audit_logs`.
+- Added `generate-payload-signing-key.mjs` to create an Ed25519 PKCS#8 private key for CI and a raw 32-byte public key for the Flutter client.
+- GitHub Actions now passes `TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64` into Android builds when configured, and passes `TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64` plus `TRACE_UPDATE_PAYLOAD_KEY_VERSION` into Cloudflare candidate metadata generation.
+- Cloudflare checks now typecheck both the Worker and the Pages admin facade.
+
+Remaining risks:
+
+- The admin Pages project has not been deployed because the Cloudflare Access application issuer, audience, and role email lists are account-specific and must be configured first.
+- The Access admin facade has not been runtime-tested against a real Access JWT yet.
+- GitHub repository secrets for real payload signing still need to be generated and configured before any candidate is published to phones.
+- There is still no final admin React UI; current operations use the JSON API.
+- R2 primary distribution remains Phase 2.
+
+Validation:
+
+- `npm install` was run in `cloudflare/update-service/admin` to generate `package-lock.json`.
+- `npm run check` passed in `cloudflare/update-service/admin`.
+- `npm run check` passed in `cloudflare/update-service/worker`.
+- `node --check cloudflare/update-service/scripts/generate-payload-signing-key.mjs` passed.
+- `node --check cloudflare/update-service/scripts/build-github-release-metadata.mjs` passed.
+- `generate-payload-signing-key.mjs` was run with output redirected to a temporary file and removed; its internal sign/verify self-check passed.
+- `git diff --check` passed with only line-ending warnings.
+- `npm test` was attempted in `cloudflare/update-service/worker` and remains blocked before test execution by the known Windows workerd `0xc0000005` runtime crash.
+- Local Flutter/Gradle build/package commands were not run.

@@ -191,7 +191,38 @@ These are not enough to publish production updates. They allow the formal GitHub
 
 Phase 1 still uses immutable GitHub tag asset URLs as the file source. R2 upload and R2 primary downloads are Phase 2.
 
-## Step 7: Client Activation Boundary
+## Step 7: Configure Payload Signing For Client-Visible Updates
+
+Generate an Ed25519 signing key pair:
+
+```powershell
+node .\cloudflare\update-service\scripts\generate-payload-signing-key.mjs
+```
+
+The script prints:
+
+```text
+TRACE_UPDATE_PAYLOAD_KEY_VERSION=<key-version>
+TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64=<pkcs8-der-private-key>
+TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64=<raw-32-byte-public-key>
+```
+
+Add the private key and public key as GitHub repository secrets:
+
+```text
+TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64
+TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64
+```
+
+Add the key version as a GitHub repository variable:
+
+```text
+TRACE_UPDATE_PAYLOAD_KEY_VERSION
+```
+
+Do not publish Cloudflare candidates to phones until these are configured. Without the signing secrets, CI uses a staging-only placeholder `payloadSignature` that is intended to fail closed in clients.
+
+## Step 8: Client Activation Boundary
 
 The Android client only uses Cloudflare primary when the app build includes:
 
@@ -207,7 +238,7 @@ Before enabling this for normal users:
 - Verify old clients are still safe.
 - Verify the Cloudflare manifest returns v1-compatible output for clients without `schemaVersion` and `capabilities`.
 
-## Step 8: Verify Candidate Registration
+## Step 9: Verify Candidate Registration
 
 After the GitHub Secrets are configured and the CI workflow changes are pushed, trigger a formal test release from GitHub Actions:
 
@@ -233,6 +264,84 @@ Invoke-RestMethod "$worker/api/public/latest?appId=trace&platform=android&channe
 ```
 
 Current Phase 1 registration allows a staging-only placeholder `payloadSignature` when no real payload signing key is configured. Do not publish those candidates to clients. Configure real Ed25519 payload signing before using Cloudflare latest for production updates.
+
+## Step 10: Configure Access-Protected Admin Facade
+
+The Phase 1 admin facade lives in:
+
+```text
+cloudflare/update-service/admin
+```
+
+Before deploying it, create a Cloudflare Access application for the Pages project URL and collect:
+
+```text
+ACCESS_JWT_ISSUER=https://<team-name>.cloudflareaccess.com
+ACCESS_JWT_AUD=<Access application AUD tag>
+```
+
+Configure Pages variables for the admin project:
+
+```text
+ACCESS_JWT_ISSUER
+ACCESS_JWT_AUD
+ADMIN_VIEWER_EMAILS
+ADMIN_PUBLISHER_EMAILS
+ADMIN_OWNER_EMAILS
+ADMIN_ALLOWED_ORIGINS
+```
+
+At least your email must be in `ADMIN_OWNER_EMAILS` for stable publish, rollback, and disable operations. The facade fails closed while `ACCESS_JWT_ISSUER` or `ACCESS_JWT_AUD` is empty.
+
+Run local non-build checks:
+
+```powershell
+Set-Location D:\github\my\bluetooth_flutter_Trace\cloudflare\update-service\admin
+npm ci
+npm run check
+Set-Location D:\github\my\bluetooth_flutter_Trace
+```
+
+Deploy the staging Pages project only after Access is configured:
+
+```powershell
+Set-Location D:\github\my\bluetooth_flutter_Trace\cloudflare\update-service\admin
+npx wrangler pages deploy .\public --project-name trace-update-admin-staging
+Set-Location D:\github\my\bluetooth_flutter_Trace
+```
+
+Then protect the resulting Pages URL with the Access application before using mutation endpoints.
+
+## Step 11: Publish A Candidate To Beta
+
+Open the protected Pages URL in a browser first so Cloudflare Access sets the session. Call:
+
+```text
+GET /api/admin/session
+GET /api/admin/channels?appId=trace&platform=android
+GET /api/admin/releases?appId=trace&platform=android
+```
+
+Use the `csrfToken` from `/api/admin/session`, the current `beta` channel `revision`, and the target `releaseId`:
+
+```text
+POST /api/admin/channels/beta/publish
+{
+  "appId": "trace",
+  "platform": "android",
+  "releaseId": "<candidate release id>",
+  "expectedRevision": <current beta revision>,
+  "rollback": false
+}
+```
+
+Expected result:
+
+- The API returns `{ "ok": true, "revision": <new revision> }`.
+- D1 `channels.beta.current_release_id` points to the candidate.
+- `/api/public/latest?...channel=beta...` returns an update manifest for clients below the target `versionCode`.
+
+Do not publish to `stable` until beta verification succeeds on a real phone.
 
 ## Failure Handling
 

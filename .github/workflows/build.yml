@@ -146,6 +146,7 @@ jobs:
         shell: bash
         env:
           TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
+          TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64: ${{ secrets.TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64 }}
         run: |
           set +e
           build_args=(apk --release)
@@ -155,6 +156,12 @@ jobs:
             echo "Cloudflare update manifest URL is configured for this APK."
           else
             echo "Cloudflare update manifest URL is not configured; APK will use the legacy GitHub latest manifest."
+          fi
+          if [[ -n "${TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64:-}" ]]; then
+            build_args+=(--dart-define="TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64=${TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64}")
+            echo "Cloudflare update payload public key is configured for this APK."
+          else
+            echo "Cloudflare update payload public key is not configured; signed Cloudflare manifests will fail closed."
           fi
 
           flutter build "${build_args[@]}" 2>&1 | tee android-build.log
@@ -466,6 +473,8 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
           FIXED_SIGNING_CONFIGURED: ${{ needs.android.outputs.fixed_signing_configured }}
+          TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64: ${{ secrets.TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64 }}
+          TRACE_UPDATE_PAYLOAD_KEY_VERSION: ${{ vars.TRACE_UPDATE_PAYLOAD_KEY_VERSION || 'staging' }}
         shell: bash
         run: |
           set -euo pipefail

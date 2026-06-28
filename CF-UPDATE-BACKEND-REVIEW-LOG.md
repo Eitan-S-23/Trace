@@ -268,3 +268,37 @@ Validation recorded:
 - `git diff --check` passed with only line-ending warnings.
 - `npm test` is still blocked locally by the known Windows workerd `0xc0000005` crash before test execution.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 1 follow-up — Access admin facade and payload signing wiring — 2026-06-29
+
+Status: implemented locally, pending Cloudflare Access configuration, Pages deployment, and real release verification.
+
+Implemented:
+
+- Added a Phase 1 Pages Functions admin facade under `cloudflare/update-service/admin`.
+- Kept direct Worker admin routes disabled; admin mutations now exist only behind the intended Pages Functions same-origin surface.
+- Implemented Cloudflare Access JWT verification with issuer/audience/expiry/`nbf` checks, RS256 JWKS verification, email allowlist, and role derivation.
+- Implemented CSRF token issuance through `/api/admin/session` and required same-origin `Origin` plus `X-CSRF-Token` for mutations.
+- Added JSON admin API endpoints for session, channels, releases, publish/rollback, release notes, and disable-unpublished-release operations.
+- Added a staging Pages `wrangler.jsonc` with D1 binding and fail-closed empty Access variables.
+- Added Ed25519 payload signing key generation, and wired GitHub Actions to use public/private signing secrets when present.
+- Added admin facade typecheck to the Cloudflare Update Service Checks workflow.
+
+Residual risks and follow-up:
+
+- A Cloudflare Access application must be created and its issuer, AUD tag, and role email variables must be configured before deploying the admin Pages project.
+- The admin facade has not been exercised against a real Cloudflare Access JWT.
+- Real payload signing secrets must be generated and added to GitHub before any candidate is published to phones.
+- The final React admin UI remains Phase 3; current admin operations are JSON API calls.
+- R2 primary distribution remains Phase 2.
+
+Validation recorded:
+
+- `npm install` generated `cloudflare/update-service/admin/package-lock.json`.
+- `npm run check` passed for `cloudflare/update-service/admin`.
+- `npm run check` passed for `cloudflare/update-service/worker`.
+- `node --check` passed for the payload signing key generator and candidate metadata generator.
+- The payload signing key generator self-check passed with output redirected to a temporary file and removed.
+- `git diff --check` passed with only line-ending warnings.
+- `npm test` was attempted in `cloudflare/update-service/worker` and remains blocked before test execution by the known Windows workerd `0xc0000005` runtime crash.
+- Local Flutter/Gradle build/package commands were not run.

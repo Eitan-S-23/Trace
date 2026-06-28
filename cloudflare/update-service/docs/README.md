@@ -63,6 +63,24 @@ Phase 1 candidate registration still uses immutable GitHub tag asset URLs as the
 
 Until a real `TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64` signing secret and matching client public key are configured, CI emits a staging-only placeholder `payloadSignature`. Do not publish those candidates to clients; the placeholder is intended to fail closed if accidentally exposed.
 
+Generate payload signing keys with:
+
+```text
+cloudflare/update-service/scripts/generate-payload-signing-key.mjs
+```
+
+## Admin Facade
+
+The Phase 1 admin facade lives in:
+
+```text
+cloudflare/update-service/admin
+```
+
+It exposes Access-protected Pages Functions under `/api/admin/*` for listing releases/channels, editing release notes, publishing to `beta`/`stable`, and disabling unpublished releases.
+
+Direct Worker `/api/admin/*` remains disabled. Do not deploy the admin Pages project until a Cloudflare Access application is configured with issuer, audience, and email role variables.
+
 ## Required Secrets
 
 Set real values with `wrangler secret put` per environment before any remote deployment:
