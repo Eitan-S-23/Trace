@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
-import { SELF } from "cloudflare:test";
+import { SELF, createExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { editReleaseNotes, publishRelease } from "../src/admin_actions";
 import { signDownloadToken } from "../src/downloads";
-import { handleLatest } from "../src/latest";
+import worker from "../src/index";
 import type { Platform, SecurityPayload, WorkerEnv } from "../src/types";
 
 const APK_SHA = "a".repeat(64);
@@ -75,7 +75,9 @@ describe("Phase 1 update-service invariants", () => {
     await seedChannel(appId, release.releaseId, 0);
     const token = await tokenQuery(release.assetId, release.releaseId);
 
-    const allowed = await SELF.fetch(`http://example.com/api/public/github-fallback?${token}`);
+    const allowed = await SELF.fetch(`http://example.com/api/public/github-fallback?${token}`, {
+      redirect: "manual"
+    });
     expect(allowed.status).toBe(302);
     expect(allowed.headers.get("Location")).toContain("/releases/download/v3.0.0/");
     expect(allowed.headers.get("Location")).not.toContain("/latest/download/");
@@ -215,12 +217,13 @@ describe("Phase 1 update-service invariants", () => {
     };
     const fakeEnv: WorkerEnv = { ...env, DB: failingDb };
 
-    const response = await handleLatest(
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
       new Request(
         "http://example.com/api/public/latest?appId=trace&platform=android&channel=stable&versionCode=1"
       ),
       fakeEnv,
-      "d1-fail"
+      ctx
     );
     const body = await response.json<{ errorCode: string }>();
     expect(response.status).toBe(503);

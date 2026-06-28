@@ -54,7 +54,7 @@ export async function publishRelease(env: WorkerEnv, input: PublishInput): Promi
 
   const beforeJson = canonicalJson(channel);
   const afterJson = canonicalJson({ ...channel, current_release_id: target.id });
-  const result = await env.DB.prepare(
+  const updatedChannel = await env.DB.prepare(
     `
       UPDATE channels
       SET
@@ -68,6 +68,7 @@ export async function publishRelease(env: WorkerEnv, input: PublishInput): Promi
         last_after_json = ?,
         updated_at = datetime('now')
       WHERE id = ? AND revision = ? AND disable_latest = 0
+      RETURNING revision
     `
   )
     .bind(
@@ -81,9 +82,9 @@ export async function publishRelease(env: WorkerEnv, input: PublishInput): Promi
       channel.id,
       input.expectedRevision
     )
-    .run();
+    .first<{ revision: number }>();
 
-  if (result.meta.changes !== 1) {
+  if (!updatedChannel) {
     return { ok: false, errorCode: "CAS_CONFLICT", status: 409 };
   }
   return { ok: true };
