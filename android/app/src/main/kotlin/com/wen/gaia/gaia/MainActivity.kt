@@ -95,7 +95,7 @@ class MainActivity: FlutterActivity() {
 
         val uri = FileProvider.getUriForFile(
             this,
-            "${BuildConfig.APPLICATION_ID}.fileprovider",
+            "$packageName.fileprovider",
             apkFile
         )
         val installIntent = Intent(Intent.ACTION_VIEW).apply {
