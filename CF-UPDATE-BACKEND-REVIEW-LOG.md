@@ -206,9 +206,9 @@ Validation required:
 - Install the next GitHub Actions Android artifact and tap "检查更新" on a network that can access GitHub; expected result for the current latest version is an "已是最新版本" dialog.
 - Repeat with GitHub blocked or offline; expected result is a visible timeout/network failure dialog within 30 seconds, with a retry action.
 
-### Phase 1 local scaffold — 2026-06-28
+### Phase 1 scaffold and GitHub Actions verification — 2026-06-28
 
-Status: local scaffold code-complete, pending Worker runtime verification.
+Status: code-complete and verified by GitHub Actions on Linux.
 
 Implemented:
 
@@ -219,11 +219,12 @@ Implemented:
 - Added D1 schema constraints, indexes, `channel_history`, CAS revision update support via channel update predicates/triggers, append-only audit/history triggers, and disabled-release channel guards.
 - Added invariant tests for the required Phase 1 safety cases.
 - Added a GitHub Actions workflow to run the Cloudflare Worker typecheck and invariant tests on Linux without deploying Cloudflare resources.
+- Fixed the first GitHub Actions invariant failures by replacing `meta.changes` CAS detection with `UPDATE ... RETURNING`, disabling automatic redirect following in the fake GitHub fallback test, and exercising D1 fail-closed behavior through the Worker/Hono error handler.
 
 Residual risks and follow-up:
 
 - No Cloudflare resources or Access application were created. Direct Worker admin mutation routes remain disabled until an Access-protected Pages Functions facade or equivalent safe entry point is implemented.
-- Local Worker runtime tests were blocked by a Miniflare/workerd access violation on Windows before any test files executed. Re-run with the new Linux GitHub Actions workflow or after fixing the local workerd runtime dependency.
+- Local Worker runtime tests remain blocked by a Miniflare/workerd access violation on Windows before any test files execute. Linux GitHub Actions is the current runtime verification source.
 - R2 primary download, R2 upload verification, retention, restore, and Pages admin UI are not implemented in this phase.
 
 Validation recorded:
@@ -231,3 +232,6 @@ Validation recorded:
 - `npm run cf-typegen` succeeded with `wrangler types --include-runtime false worker-configuration.d.ts`.
 - `npm run check` passed with `tsc --noEmit`.
 - `npm test` was attempted and failed before executing tests due to local workerd `0xc0000005` access violation.
+- `npm run check` was re-run after the CAS/test-harness fixes and passed.
+- GitHub Actions `Cloudflare Update Service Checks` passed on Linux for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141952`.
+- GitHub Actions `Build APK and EXE Release` passed for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141953`. Android APK, Windows package, and Pages jobs passed; the formal GitHub Release job was skipped on branch push.

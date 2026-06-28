@@ -479,7 +479,7 @@ Validation:
 - `flutter pub get` could not run locally for the same PATH reason; `pubspec.lock` was updated from the official `pub.dev` package metadata for `cryptography` 2.9.0.
 - Required external validation: run the GitHub Actions workflow for a branch push, a `v*` tag push, a manual `publish_release=false`, and a manual `publish_release=true + release_tag`; confirm only the allowed cases create formal GitHub Releases and that missing fixed Android signing fails the release job.
 
-### Phase 1 — local scaffold code-complete on 2026-06-28
+### Phase 1 — scaffold and GitHub Actions verified on 2026-06-28
 
 Implemented:
 
@@ -496,11 +496,12 @@ Implemented:
 - Migration includes foreign keys, `ON DELETE` strategies, enum `CHECK` constraints, Android `UNIQUE(app_id, platform, version_code)`, asset/channel/patch/history/audit indexes, channel disabled-release guard triggers, CAS revision-compatible channel update triggers, and append-only triggers for `channel_history` and `audit_logs`.
 - Added invariant tests covering CAS conflict, disabled release invisibility/download rejection, gated GitHub fallback D1 checks, archived rollback rejection, v1/v2 compatibility, token failure, stop switches, D1 fail-closed behavior, and releaseNotes/signature separation.
 - Added a GitHub Actions workflow for `cloudflare/update-service` that runs `npm ci`, Env-only Wrangler type generation, `tsc --noEmit`, and Worker invariant tests on Linux without deploying Cloudflare resources.
+- Fixed the initial Linux invariant failures by using `UPDATE ... RETURNING` for CAS success detection, preventing test fetches from following fake GitHub redirect targets, and verifying D1 fail-closed behavior through the Worker/Hono error handler.
 
 Remaining risks:
 
 - No real Cloudflare D1/KV/R2/DO/Pages resources were created, no Access application was configured, and no production deployment was performed.
-- Worker runtime tests could not execute locally because Miniflare/workerd crashes on this Windows host with `0xc0000005` access violation before running test files. The same local runtime crash affected full `wrangler types`; Env-only `wrangler types --include-runtime false` succeeds. The new GitHub Actions workflow is the intended runtime verification path for this host.
+- Worker runtime tests still cannot execute locally because Miniflare/workerd crashes on this Windows host with `0xc0000005` access violation before running test files. The same local runtime crash affected full `wrangler types`; Env-only `wrangler types --include-runtime false` succeeds. Linux GitHub Actions is the runtime verification path for this host.
 - Admin mutation placement still needs the planned Access-protected Pages Functions facade before any real admin operations are enabled.
 - Phase 1 still uses immutable GitHub tag assets as the actual file source. R2 upload, R2 streaming, retention, and restore workflows remain Phase 2+.
 - The generated CI security payload canonicalization must be verified against the Android client's `_canonicalJson` before publishing signed v2 or emergency manifests.
@@ -510,5 +511,8 @@ Validation:
 - `npm install` was run in `cloudflare/update-service/worker` to create `package-lock.json`.
 - `npm run cf-typegen` succeeded after switching to Env-only generation with `wrangler types --include-runtime false worker-configuration.d.ts`.
 - `npm run check` succeeded with `tsc --noEmit`.
-- `npm test` was attempted but blocked before test execution by local Miniflare/workerd `0xc0000005` access violation. Required follow-up: push or dispatch the new GitHub Actions workflow and verify the same Worker tests on Linux, or re-run locally after updating the Microsoft Visual C++ Redistributable.
+- `npm run check` was re-run after the CAS/test-harness fixes and passed.
+- `npm test` was attempted twice locally but blocked before test execution by local Miniflare/workerd `0xc0000005` access violation.
+- GitHub Actions `Cloudflare Update Service Checks` passed on Linux for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141952`. The run completed `npm ci`, `npm run cf-typegen`, `npm run check`, and `npm test`.
+- GitHub Actions `Build APK and EXE Release` passed for commit `ab44e6e`: `https://github.com/Eitan-S-23/Trace/actions/runs/28325141953`. Android APK, Windows EXE/zip, and Pages jobs passed; the formal GitHub Release job was skipped on branch push.
 - Local build/package commands were not run.
