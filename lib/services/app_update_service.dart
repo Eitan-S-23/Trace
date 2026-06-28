@@ -19,7 +19,13 @@ class AppUpdateService extends GetxService {
   static const MethodChannel _platform = MethodChannel('trace/app_update');
   static const String _lastDailyCheckKey = 'app_update_last_daily_check';
 
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 12),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 12),
+    ),
+  );
 
   final isChecking = false.obs;
   final isUpdating = false.obs;
@@ -45,32 +51,79 @@ class AppUpdateService extends GetxService {
       return;
     }
 
-    if (isChecking.value || isUpdating.value) return;
+    if (isUpdating.value) {
+      if (manual) {
+        Get.snackbar('正在更新', '请等待当前增量更新完成');
+      }
+      return;
+    }
+
+    if (isChecking.value) {
+      if (manual) {
+        Get.snackbar('正在检查更新', '后台检查仍在进行，请稍候');
+      }
+      return;
+    }
 
     isChecking.value = true;
+    var checkingDialogOpen = false;
+
+    void closeCheckingDialog() {
+      if (checkingDialogOpen && Get.isDialogOpen == true) {
+        Get.back<void>();
+      }
+      checkingDialogOpen = false;
+    }
+
+    updateProgress.value = 0;
+    updateStatus.value = '正在检查更新...';
+    if (manual) {
+      checkingDialogOpen = true;
+      _showCheckingDialog();
+    }
+
     try {
+      updateStatus.value = '读取本机版本...';
       final localInfo = await _getLocalAppInfo();
+
+      updateStatus.value = '校验本机安装包...';
+      final localApkSha256 = await _sha256File(File(localInfo.sourceApkPath));
+
+      updateStatus.value = '获取更新清单...';
       final updateInfo = await _fetchUpdateInfo();
 
       if (updateInfo.versionCode <= localInfo.versionCode) {
+        closeCheckingDialog();
         if (manual) {
           Get.snackbar('已是最新版本', '当前版本 ${localInfo.versionName}');
         }
         return;
       }
 
-      final patch = updateInfo.patchFor(localInfo.versionCode);
+      final patch = updateInfo.patchFor(
+        versionCode: localInfo.versionCode,
+        oldSha256: localApkSha256,
+      );
       if (patch == null) {
+        closeCheckingDialog();
         _showNoIncrementalPatchDialog(localInfo, updateInfo);
         return;
       }
 
+      closeCheckingDialog();
       _showUpdateDialog(localInfo, updateInfo, patch);
+    } on DioException catch (e) {
+      closeCheckingDialog();
+      if (manual) {
+        Get.snackbar('检查更新失败', _formatDioException(e));
+      }
     } catch (e) {
+      closeCheckingDialog();
       if (manual) {
         Get.snackbar('检查更新失败', '$e');
       }
     } finally {
+      closeCheckingDialog();
       isChecking.value = false;
     }
   }
@@ -144,8 +197,9 @@ class AppUpdateService extends GetxService {
         title: const Text('发现新版本'),
         content: Text(
           '最新版本 ${updateInfo.versionName} 已发布，但当前版本 '
-          '${localInfo.versionName} 没有对应的增量更新包。请先安装包含增量更新能力的版本，'
-          '之后即可通过 App 内增量更新。',
+          '${localInfo.versionName} 没有匹配当前安装包的增量更新包。'
+          '如果这是旧版、非 GitHub Release 构建或同版本的不同安装包，'
+          '需要先安装一次新的发布包，之后即可通过 App 内增量更新。',
         ),
         actions: [
           TextButton(
@@ -248,6 +302,32 @@ class AppUpdateService extends GetxService {
     );
   }
 
+  void _showCheckingDialog() {
+    Get.dialog<void>(
+      Obx(
+        () => AlertDialog(
+          title: const Text('检查更新'),
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.6),
+              ),
+              const SizedBox(width: 16),
+              SizedBox(
+                width: 220,
+                child: Text(updateStatus.value),
+              ),
+            ],
+          ),
+        ),
+      ),
+      barrierDismissible: false,
+    );
+  }
+
   String _dateKey(DateTime value) {
     return '${value.year.toString().padLeft(4, '0')}-'
         '${value.month.toString().padLeft(2, '0')}-'
@@ -262,6 +342,28 @@ class AppUpdateService extends GetxService {
       return '${(bytes / 1024).toStringAsFixed(1)} KB';
     }
     return '$bytes B';
+  }
+
+  String _formatDioException(DioException error) {
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return '连接更新服务器超时，请检查网络后重试';
+      case DioExceptionType.badResponse:
+        final statusCode = error.response?.statusCode;
+        return statusCode == null
+            ? '更新服务器返回异常响应'
+            : '更新服务器返回 HTTP $statusCode';
+      case DioExceptionType.connectionError:
+        return '无法连接更新服务器，请检查网络或稍后重试';
+      case DioExceptionType.cancel:
+        return '检查更新已取消';
+      case DioExceptionType.badCertificate:
+        return '更新服务器证书校验失败';
+      case DioExceptionType.unknown:
+        return error.message ?? '未知网络错误';
+    }
   }
 
   Future<String> _sha256File(File file) async {
@@ -425,9 +527,14 @@ class _RemoteUpdateInfo {
     );
   }
 
-  _RemoteUpdatePatch? patchFor(int versionCode) {
+  _RemoteUpdatePatch? patchFor({
+    required int versionCode,
+    required String oldSha256,
+  }) {
+    final normalizedOldSha = oldSha256.toLowerCase();
     for (final patch in patches) {
-      if (patch.fromVersionCode == versionCode) {
+      if (patch.fromVersionCode == versionCode &&
+          patch.oldSha256.toLowerCase() == normalizedOldSha) {
         return patch;
       }
     }

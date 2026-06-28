@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../services/app_update_service.dart';
@@ -77,7 +79,7 @@ class ProfileTabPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'BLE Monitor v1.0.3',
+                          'BLE Monitor v1.0.4',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.white.withOpacity(0.8),
@@ -122,12 +124,7 @@ class ProfileTabPage extends StatelessWidget {
                     },
                   ),
                   _buildDivider(),
-                  _buildMenuItem(
-                    icon: Icons.system_update_alt,
-                    title: '检查更新',
-                    subtitle: '检查 GitHub 发布页增量更新',
-                    onTap: () => AppUpdateService.to.checkForUpdates(),
-                  ),
+                  _buildUpdateMenuItem(),
                   _buildDivider(),
                   _buildMenuItem(
                     icon: Icons.help_outline,
@@ -171,6 +168,7 @@ class ProfileTabPage extends StatelessWidget {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    Widget? trailing,
   }) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -201,13 +199,54 @@ class ProfileTabPage extends StatelessWidget {
           color: Colors.grey[600],
         ),
       ),
-      trailing: const Icon(
-        Icons.arrow_forward_ios,
-        size: 16,
-        color: Colors.grey,
-      ),
+      trailing: trailing ??
+          const Icon(
+            Icons.arrow_forward_ios,
+            size: 16,
+            color: Colors.grey,
+          ),
       onTap: onTap,
     );
+  }
+
+  Widget _buildUpdateMenuItem() {
+    if (!Get.isRegistered<AppUpdateService>()) {
+      return _buildMenuItem(
+        icon: Icons.system_update_alt,
+        title: '检查更新',
+        subtitle: '检查 GitHub 发布页增量更新',
+        onTap: _checkForUpdates,
+      );
+    }
+
+    final service = AppUpdateService.to;
+    return Obx(() {
+      final busy = service.isChecking.value || service.isUpdating.value;
+      return _buildMenuItem(
+        icon: busy ? Icons.sync : Icons.system_update_alt,
+        title: busy ? '正在检查更新' : '检查更新',
+        subtitle: busy
+            ? (service.updateStatus.value.isEmpty
+                ? '正在连接更新服务器'
+                : service.updateStatus.value)
+            : '检查 GitHub 发布页增量更新',
+        trailing: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              )
+            : null,
+        onTap: _checkForUpdates,
+      );
+    });
+  }
+
+  void _checkForUpdates() {
+    final service = Get.isRegistered<AppUpdateService>()
+        ? AppUpdateService.to
+        : Get.put(AppUpdateService(), permanent: true);
+    unawaited(service.checkForUpdates());
   }
 
   Widget _buildDivider() {
@@ -308,7 +347,7 @@ class ProfileTabPage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('BLE Monitor v1.0.3'),
+            Text('BLE Monitor v1.0.4'),
             SizedBox(height: 8),
             Text('智能蓝牙设备管理助手'),
             SizedBox(height: 16),

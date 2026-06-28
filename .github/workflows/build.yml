@@ -303,46 +303,69 @@ jobs:
           fi
 
           previous_dir="$(mktemp -d)"
-          patch_metadata=""
-          previous_tag="$(
-            gh release list --exclude-drafts --exclude-pre-releases --limit 20 --json tagName \
-              --jq '.[].tagName' | grep -vx "${RELEASE_TAG}" | head -n 1 || true
-          )"
+          patch_metadata_dir="${previous_dir}/patch-metadata"
+          mkdir -p "${patch_metadata_dir}"
+          release_count=0
 
-          if [[ -n "${previous_tag}" ]]; then
-            echo "Preparing incremental patch from previous release ${previous_tag}."
+          while IFS= read -r previous_tag; do
+            if [[ -z "${previous_tag}" ]]; then
+              continue
+            fi
+
+            release_count=$((release_count + 1))
+            release_dir="${previous_dir}/release-${release_count}"
+            mkdir -p "${release_dir}"
+
+            echo "Preparing incremental patch candidate from ${previous_tag}."
             gh release download "${previous_tag}" \
               --pattern "ble-monitor-android.apk" \
               --pattern "ble-monitor-update.json" \
-              --dir "${previous_dir}" || true
+              --dir "${release_dir}" || true
 
-            previous_apk="${previous_dir}/ble-monitor-android.apk"
-            previous_manifest="${previous_dir}/ble-monitor-update.json"
-            if [[ -f "${previous_apk}" && -f "${previous_manifest}" ]]; then
-              previous_version_code="$(
-                python -c "import json,sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['versionCode'])" "${previous_manifest}"
-              )"
-              if (( previous_version_code < version_code )); then
-                patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-to-${version_code}.tpatch"
-                patch_metadata="${previous_dir}/patch-metadata.json"
-                python .github/scripts/create_trace_patch.py \
-                  "${previous_apk}" \
-                  "${apk_path}" \
-                  "${patch_path}" \
-                  --from-version-code "${previous_version_code}" \
-                  --to-version-code "${version_code}" \
-                  --metadata-output "${patch_metadata}"
-              else
-                echo "Previous release versionCode ${previous_version_code} is not older than current ${version_code}; publishing metadata without patch."
-              fi
-            else
-              echo "Previous release is missing APK or update manifest; publishing metadata without patch."
+            previous_apk="${release_dir}/ble-monitor-android.apk"
+            previous_manifest="${release_dir}/ble-monitor-update.json"
+            if [[ ! -f "${previous_apk}" || ! -f "${previous_manifest}" ]]; then
+              echo "Release ${previous_tag} is missing APK or update manifest; skipping."
+              continue
             fi
-          else
+
+            previous_version_code="$(
+              python -c "import json,sys; print(int(json.load(open(sys.argv[1], encoding='utf-8'))['versionCode']))" "${previous_manifest}"
+            )"
+            if (( previous_version_code >= version_code )); then
+              echo "Release ${previous_tag} versionCode ${previous_version_code} is not older than current ${version_code}; skipping."
+              continue
+            fi
+
+            previous_apk_sha="$(
+              python -c "import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1], 'rb'); [h.update(c) for c in iter(lambda: f.read(1024*1024), b'')]; print(h.hexdigest())" "${previous_apk}"
+            )"
+            old_sha_prefix="${previous_apk_sha:0:12}"
+            patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-${old_sha_prefix}-to-${version_code}.tpatch"
+            patch_metadata="${patch_metadata_dir}/${previous_version_code}-${old_sha_prefix}.json"
+
+            if [[ -f "${patch_metadata}" ]]; then
+              echo "Patch for versionCode ${previous_version_code} and APK ${old_sha_prefix} already exists; skipping duplicate."
+              continue
+            fi
+
+            python .github/scripts/create_trace_patch.py \
+              "${previous_apk}" \
+              "${apk_path}" \
+              "${patch_path}" \
+              --from-version-code "${previous_version_code}" \
+              --to-version-code "${version_code}" \
+              --metadata-output "${patch_metadata}"
+          done < <(
+            gh release list --exclude-drafts --exclude-pre-releases --limit 20 --json tagName \
+              --jq '.[].tagName' | grep -vx "${RELEASE_TAG}" || true
+          )
+
+          if [[ "${release_count}" -eq 0 ]]; then
             echo "No previous release found; publishing metadata without patch."
           fi
 
-          python - <<'PY' "${apk_path}" "${version_name}" "${version_code}" "${RELEASE_TAG}" "${patch_metadata}" "release-assets/ble-monitor-update.json"
+          python - <<'PY' "${apk_path}" "${version_name}" "${version_code}" "${RELEASE_TAG}" "${patch_metadata_dir}" "release-assets/ble-monitor-update.json"
           import hashlib
           import json
           import sys
@@ -352,7 +375,7 @@ jobs:
           version_name = sys.argv[2]
           version_code = int(sys.argv[3])
           release_tag = sys.argv[4]
-          patch_metadata = Path(sys.argv[5]) if sys.argv[5] else None
+          patch_metadata_path = Path(sys.argv[5]) if sys.argv[5] else None
           output_path = Path(sys.argv[6])
 
           def sha256_file(path: Path) -> str:
@@ -363,9 +386,15 @@ jobs:
               return h.hexdigest()
 
           patches = []
-          if patch_metadata and patch_metadata.exists():
-              patch = json.loads(patch_metadata.read_text(encoding="utf-8"))
-              patches.append(patch)
+          if patch_metadata_path and patch_metadata_path.exists():
+              metadata_files = (
+                  sorted(patch_metadata_path.glob("*.json"))
+                  if patch_metadata_path.is_dir()
+                  else [patch_metadata_path]
+              )
+              for metadata_file in metadata_files:
+                  patches.append(json.loads(metadata_file.read_text(encoding="utf-8")))
+          patches.sort(key=lambda patch: (patch["fromVersionCode"], patch["oldSha256"]))
 
           manifest = {
               "schemaVersion": 1,
