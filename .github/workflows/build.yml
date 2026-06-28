@@ -322,15 +322,19 @@ jobs:
               previous_version_code="$(
                 python -c "import json,sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['versionCode'])" "${previous_manifest}"
               )"
-              patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-to-${version_code}.tpatch"
-              patch_metadata="${previous_dir}/patch-metadata.json"
-              python .github/scripts/create_trace_patch.py \
-                "${previous_apk}" \
-                "${apk_path}" \
-                "${patch_path}" \
-                --from-version-code "${previous_version_code}" \
-                --to-version-code "${version_code}" \
-                --metadata-output "${patch_metadata}"
+              if (( previous_version_code < version_code )); then
+                patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-to-${version_code}.tpatch"
+                patch_metadata="${previous_dir}/patch-metadata.json"
+                python .github/scripts/create_trace_patch.py \
+                  "${previous_apk}" \
+                  "${apk_path}" \
+                  "${patch_path}" \
+                  --from-version-code "${previous_version_code}" \
+                  --to-version-code "${version_code}" \
+                  --metadata-output "${patch_metadata}"
+              else
+                echo "Previous release versionCode ${previous_version_code} is not older than current ${version_code}; publishing metadata without patch."
+              fi
             else
               echo "Previous release is missing APK or update manifest; publishing metadata without patch."
             fi
