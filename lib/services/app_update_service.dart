@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
-import 'package:dio/dio.dart';
+import 'package:dio/dio.dart' hide Response;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -807,7 +807,7 @@ class AppUpdateService extends GetxService {
     }
   }
 
-  String? _errorCodeFromResponse(Response<dynamic>? response) {
+  String? _errorCodeFromResponse(dynamic response) {
     final data = response?.data;
     if (data is Map<String, dynamic>) {
       return data['errorCode'] as String?;
@@ -825,7 +825,7 @@ class AppUpdateService extends GetxService {
     return null;
   }
 
-  String? _messageFromResponse(Response<dynamic>? response) {
+  String? _messageFromResponse(dynamic response) {
     final data = response?.data;
     if (data is Map<String, dynamic>) {
       return (data['message'] ?? data['maintenanceMessage']) as String?;
