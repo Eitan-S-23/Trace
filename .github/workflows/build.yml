@@ -251,11 +251,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Download build artifacts
+      - name: Download Android build artifact
         uses: actions/download-artifact@v4
         with:
+          name: android-apk
           path: release-assets
-          merge-multiple: true
+
+      - name: Download Windows build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: release-assets
 
       - name: Resolve release tag
         id: release_tag
