@@ -478,3 +478,37 @@ Validation:
 - `git diff --check` was run and reported no whitespace errors, only line-ending warnings.
 - `flutter pub get` could not run locally for the same PATH reason; `pubspec.lock` was updated from the official `pub.dev` package metadata for `cryptography` 2.9.0.
 - Required external validation: run the GitHub Actions workflow for a branch push, a `v*` tag push, a manual `publish_release=false`, and a manual `publish_release=true + release_tag`; confirm only the allowed cases create formal GitHub Releases and that missing fixed Android signing fails the release job.
+
+### Phase 1 — local scaffold code-complete on 2026-06-28
+
+Implemented:
+
+- Added `cloudflare/update-service/` with Worker, D1 migration, admin placeholder, CI registration script, package metadata, generated Wrangler Env binding types, and local documentation.
+- Added Worker public routes for `/api/public/latest`, `/api/public/download`, and `/api/public/github-fallback`.
+- Public latest decisions are read from D1 `channels` and `releases`; unversioned channel state is not cached in KV.
+- Manifest render cache uses the required revision-keyed KV key shape: `manifest:{appId}:{platform}:{channel}:{revision}`. The cache stores v1/v2 render envelopes so old and new clients can share the same revision key without returning v2-only fields to v1 clients.
+- Phase 1 download and GitHub fallback endpoints both require short-lived HMAC tokens and re-check D1 release, asset, channel, and stop-switch state before redirecting to immutable GitHub tag asset URLs.
+- The Worker rejects `/latest/download` GitHub asset URLs during CI candidate registration and the D1 schema also has a `release_assets.github_url` check constraint against `/latest/download/`.
+- Added a Durable Object `RateLimiter`; KV is not used as a high-frequency rate-limit counter.
+- Added CI `/api/ci/releases` candidate registration with bearer deploy token hash verification, formal release intent requirement, fixed Android signing requirement, immutable GitHub URL validation, idempotency by release tag/run id/commit, and candidate-only inserts.
+- Direct Worker admin mutation routes are disabled. Internal publish/edit/disable functions exist for tests and future Access-protected Pages Functions integration, but are not exposed as public admin routes on `*.workers.dev`.
+- Added D1 migration with `apps`, `app_config`, `releases`, `release_assets`, `patches`, `channels`, `channel_history`, and `audit_logs`.
+- Migration includes foreign keys, `ON DELETE` strategies, enum `CHECK` constraints, Android `UNIQUE(app_id, platform, version_code)`, asset/channel/patch/history/audit indexes, channel disabled-release guard triggers, CAS revision-compatible channel update triggers, and append-only triggers for `channel_history` and `audit_logs`.
+- Added invariant tests covering CAS conflict, disabled release invisibility/download rejection, gated GitHub fallback D1 checks, archived rollback rejection, v1/v2 compatibility, token failure, stop switches, D1 fail-closed behavior, and releaseNotes/signature separation.
+- Added a GitHub Actions workflow for `cloudflare/update-service` that runs `npm ci`, Env-only Wrangler type generation, `tsc --noEmit`, and Worker invariant tests on Linux without deploying Cloudflare resources.
+
+Remaining risks:
+
+- No real Cloudflare D1/KV/R2/DO/Pages resources were created, no Access application was configured, and no production deployment was performed.
+- Worker runtime tests could not execute locally because Miniflare/workerd crashes on this Windows host with `0xc0000005` access violation before running test files. The same local runtime crash affected full `wrangler types`; Env-only `wrangler types --include-runtime false` succeeds. The new GitHub Actions workflow is the intended runtime verification path for this host.
+- Admin mutation placement still needs the planned Access-protected Pages Functions facade before any real admin operations are enabled.
+- Phase 1 still uses immutable GitHub tag assets as the actual file source. R2 upload, R2 streaming, retention, and restore workflows remain Phase 2+.
+- The generated CI security payload canonicalization must be verified against the Android client's `_canonicalJson` before publishing signed v2 or emergency manifests.
+
+Validation:
+
+- `npm install` was run in `cloudflare/update-service/worker` to create `package-lock.json`.
+- `npm run cf-typegen` succeeded after switching to Env-only generation with `wrangler types --include-runtime false worker-configuration.d.ts`.
+- `npm run check` succeeded with `tsc --noEmit`.
+- `npm test` was attempted but blocked before test execution by local Miniflare/workerd `0xc0000005` access violation. Required follow-up: push or dispatch the new GitHub Actions workflow and verify the same Worker tests on Linux, or re-run locally after updating the Microsoft Visual C++ Redistributable.
+- Local build/package commands were not run.

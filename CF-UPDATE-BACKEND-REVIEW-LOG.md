@@ -205,3 +205,29 @@ Validation required:
 
 - Install the next GitHub Actions Android artifact and tap "检查更新" on a network that can access GitHub; expected result for the current latest version is an "已是最新版本" dialog.
 - Repeat with GitHub blocked or offline; expected result is a visible timeout/network failure dialog within 30 seconds, with a retry action.
+
+### Phase 1 local scaffold — 2026-06-28
+
+Status: local scaffold code-complete, pending Worker runtime verification.
+
+Implemented:
+
+- Added `cloudflare/update-service/` scaffold with Worker, migration, scripts, admin placeholder, docs, TypeScript config, Wrangler config, package-lock, and generated Env binding types.
+- Implemented public latest, primary download, and GitHub gated fallback routes. Download and fallback both validate HMAC token and D1 state before redirecting to immutable GitHub tag asset URLs.
+- Implemented CI candidate registration with deploy token hash verification, fixed Android signing gate, formal release intent gate, immutable GitHub URL validation, idempotency, and candidate-only D1 writes.
+- Added Durable Object rate limiter. KV is only used for revision-keyed manifest cache and is not used as a high-frequency counter.
+- Added D1 schema constraints, indexes, `channel_history`, CAS revision update support via channel update predicates/triggers, append-only audit/history triggers, and disabled-release channel guards.
+- Added invariant tests for the required Phase 1 safety cases.
+- Added a GitHub Actions workflow to run the Cloudflare Worker typecheck and invariant tests on Linux without deploying Cloudflare resources.
+
+Residual risks and follow-up:
+
+- No Cloudflare resources or Access application were created. Direct Worker admin mutation routes remain disabled until an Access-protected Pages Functions facade or equivalent safe entry point is implemented.
+- Local Worker runtime tests were blocked by a Miniflare/workerd access violation on Windows before any test files executed. Re-run with the new Linux GitHub Actions workflow or after fixing the local workerd runtime dependency.
+- R2 primary download, R2 upload verification, retention, restore, and Pages admin UI are not implemented in this phase.
+
+Validation recorded:
+
+- `npm run cf-typegen` succeeded with `wrangler types --include-runtime false worker-configuration.d.ts`.
+- `npm run check` passed with `tsc --noEmit`.
+- `npm test` was attempted and failed before executing tests due to local workerd `0xc0000005` access violation.
