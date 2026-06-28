@@ -289,7 +289,17 @@ class _ActivityHeroCard extends StatelessWidget {
                     children: [
                       _RoundIconButton(
                         icon: Icons.fullscreen,
-                        onTap: () => _showUiMessage('地图全屏', '已聚焦路线预览'),
+                        onTap: () => _openRidePage(
+                          () => _RideFullscreenMapPage(
+                            title: '户外骑行',
+                            date: '2024/05/18  08:32',
+                            distance: sample.distanceText,
+                            climb: sample.climbText,
+                            duration: sample.durationText,
+                            variant: 0,
+                            track: controller.points,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       _RoundIconButton(
@@ -6624,8 +6634,17 @@ class _RideRouteDetailPage extends StatelessWidget {
                               top: 10,
                               child: _RoundIconButton(
                                 icon: Icons.fullscreen,
-                                onTap: () =>
-                                    _showUiMessage('地图全屏', '已聚焦路线预览'),
+                                onTap: () => _openRidePage(
+                                  () => _RideFullscreenMapPage(
+                                    title: title,
+                                    date: date,
+                                    distance: distance,
+                                    climb: climb,
+                                    duration: duration,
+                                    variant: variant,
+                                    gpxTrack: track,
+                                  ),
+                                ),
                               ),
                             ),
                             Positioned(
@@ -6853,6 +6872,271 @@ class _RideRouteDetailPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RideFullscreenMapPage extends StatelessWidget {
+  const _RideFullscreenMapPage({
+    required this.title,
+    required this.date,
+    required this.distance,
+    required this.climb,
+    required this.duration,
+    required this.variant,
+    this.track = const <RidePoint>[],
+    this.gpxTrack = const <_GpxPoint>[],
+  });
+
+  final String title;
+  final String date;
+  final String distance;
+  final String climb;
+  final String duration;
+  final int variant;
+  final List<RidePoint> track;
+  final List<_GpxPoint> gpxTrack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _RideColors.background,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _DetailTopBar(
+              title: '地图全屏',
+              actions: [
+                IconButton(
+                  onPressed: () => _shareRouteSummary(context, title: title),
+                  icon: Icon(
+                    Icons.share_outlined,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _GlassPanel(
+                        padding: EdgeInsets.zero,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(15),
+                          child: CustomPaint(
+                            painter: _RouteMapPainter(
+                              variant: variant,
+                              track: track,
+                              gpxTrack: gpxTrack,
+                            ),
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      top: 16,
+                      child: _MapHeaderOverlay(title: title, date: date),
+                    ),
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: _MapStatsOverlay(
+                        distance: distance,
+                        climb: climb,
+                        duration: duration,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MapHeaderOverlay extends StatelessWidget {
+  const _MapHeaderOverlay({
+    required this.title,
+    required this.date,
+  });
+
+  final String title;
+  final String date;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF101720).withOpacity(0.74),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.10)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: _RideColors.orange.withOpacity(0.16),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.directions_bike,
+                color: _RideColors.orange,
+                size: 19,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    date,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.62),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MapStatsOverlay extends StatelessWidget {
+  const _MapStatsOverlay({
+    required this.distance,
+    required this.climb,
+    required this.duration,
+  });
+
+  final String distance;
+  final String climb;
+  final String duration;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF101720).withOpacity(0.78),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.10)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Row(
+          children: [
+            _MapStatItem(label: '距离', value: distance, unit: 'km'),
+            const _MapStatDivider(),
+            _MapStatItem(label: '爬升', value: climb, unit: 'm'),
+            const _MapStatDivider(),
+            _MapStatItem(label: '用时', value: duration, unit: ''),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MapStatItem extends StatelessWidget {
+  const _MapStatItem({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  final String label;
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.50),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          RichText(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (unit.isNotEmpty)
+                  TextSpan(
+                    text: ' $unit',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.62),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MapStatDivider extends StatelessWidget {
+  const _MapStatDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 34,
+      color: Colors.white.withOpacity(0.10),
     );
   }
 }

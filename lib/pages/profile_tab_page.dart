@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../services/app_update_service.dart';
 import '../services/database_service.dart';
 
 class ProfileTabPage extends StatelessWidget {
@@ -76,7 +77,7 @@ class ProfileTabPage extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'BLE Monitor v1.0.0',
+                          'BLE Monitor v1.0.3',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.white.withOpacity(0.8),
@@ -119,6 +120,13 @@ class ProfileTabPage extends StatelessWidget {
                     onTap: () {
                       Get.snackbar('提示', '设置功能开发中');
                     },
+                  ),
+                  _buildDivider(),
+                  _buildMenuItem(
+                    icon: Icons.system_update_alt,
+                    title: '检查更新',
+                    subtitle: '检查 GitHub 发布页增量更新',
+                    onTap: () => AppUpdateService.to.checkForUpdates(),
                   ),
                   _buildDivider(),
                   _buildMenuItem(
@@ -300,7 +308,7 @@ class ProfileTabPage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('BLE Monitor v1.0.0'),
+            Text('BLE Monitor v1.0.3'),
             SizedBox(height: 8),
             Text('智能蓝牙设备管理助手'),
             SizedBox(height: 16),

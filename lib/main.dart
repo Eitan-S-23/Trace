@@ -13,6 +13,7 @@ import 'pages/test_notification_page.dart';
 import 'services/database_service.dart';
 import 'services/scan_settings_service.dart';
 import 'services/alert_service.dart';
+import 'services/app_update_service.dart';
 import 'services/background_optimization_service.dart';
 import 'services/deep_link_service.dart';
 import 'services/ota_service.dart';
@@ -95,6 +96,7 @@ class MyApp extends StatelessWidget {
             Get.put(ScanSettingsService(), permanent: true);
             Get.put(AlertService(), permanent: true);
             Get.put(OtaService(), permanent: true);
+            Get.put(AppUpdateService(), permanent: true);
             Get.put(bt_service.BluetoothService(),
                 permanent: true); // 注册跨平台蓝牙服务
             Get.put(BleController(), permanent: true);
@@ -108,6 +110,7 @@ class MyApp extends StatelessWidget {
 
             WidgetsBinding.instance.addPostFrameCallback((_) {
               Get.find<NotificationService>().initialize();
+              Get.find<AppUpdateService>().checkDailyOnStartup();
             });
           }),
           getPages: [
