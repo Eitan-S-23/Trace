@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +19,9 @@ class AppUpdateService extends GetxService {
 
   static const MethodChannel _platform = MethodChannel('trace/app_update');
   static const String _lastDailyCheckKey = 'app_update_last_daily_check';
+  static const int _manifestSchemaVersion = 2;
+  static const String _clientCapabilities =
+      'patch,full,fallback,errorCode,payloadSignature';
 
   final Dio _dio = Dio(
     BaseOptions(
@@ -90,7 +94,7 @@ class AppUpdateService extends GetxService {
       final localApkSha256 = await _sha256File(File(localInfo.sourceApkPath));
 
       updateStatus.value = '获取更新清单...';
-      final updateInfo = await _fetchUpdateInfo();
+      final updateInfo = await _fetchUpdateInfo(localInfo);
 
       if (updateInfo.versionCode <= localInfo.versionCode) {
         closeCheckingDialog();
@@ -117,6 +121,11 @@ class AppUpdateService extends GetxService {
       if (manual) {
         Get.snackbar('检查更新失败', _formatDioException(e));
       }
+    } on _UpdateException catch (e) {
+      closeCheckingDialog();
+      if (manual) {
+        Get.snackbar('检查更新失败', e.messageWithCode);
+      }
     } catch (e) {
       closeCheckingDialog();
       if (manual) {
@@ -136,18 +145,86 @@ class AppUpdateService extends GetxService {
     return _LocalAppInfo.fromMap(result);
   }
 
-  Future<_RemoteUpdateInfo> _fetchUpdateInfo() async {
-    final response = await _dio.get<String>(
-      ShareLinks.androidUpdateManifestUrl,
-      options: Options(responseType: ResponseType.plain),
-    );
-    final raw = response.data;
-    if (raw == null || raw.trim().isEmpty) {
-      throw Exception('更新清单为空');
+  Future<_RemoteUpdateInfo> _fetchUpdateInfo(_LocalAppInfo localInfo) async {
+    final requests = <_ManifestRequest>[
+      if (ShareLinks.cloudflareUpdateManifestUrl.isNotEmpty)
+        _ManifestRequest(
+          url: _cloudflareManifestUrl(localInfo),
+          source: _ManifestSource.cloudflare,
+        ),
+      if (ShareLinks.emergencyUpdateManifestUrl.isNotEmpty)
+        _ManifestRequest(
+          url: ShareLinks.emergencyUpdateManifestUrl,
+          source: _ManifestSource.emergency,
+        ),
+      if (ShareLinks.cloudflareUpdateManifestUrl.isEmpty)
+        _ManifestRequest(
+          url: ShareLinks.legacyGithubLatestManifestUrl,
+          source: _ManifestSource.legacyGithubLatest,
+        ),
+    ];
+
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    for (final request in requests) {
+      try {
+        final response = await _dio.get<String>(
+          request.url,
+          options: Options(responseType: ResponseType.plain),
+        );
+        final raw = response.data;
+        if (raw == null || raw.trim().isEmpty) {
+          throw _UpdateException('EMPTY_MANIFEST', '更新清单为空');
+        }
+        final json = jsonDecode(raw) as Map<String, dynamic>;
+        final updateInfo = _RemoteUpdateInfo.fromJson(
+          json,
+          source: request.source,
+          localVersionCode: localInfo.versionCode,
+        );
+        await _verifyPayloadSignature(updateInfo);
+        return updateInfo;
+      } on DioException catch (error, stackTrace) {
+        final errorCode = _errorCodeFromResponse(error.response);
+        if (_isTerminalPublicError(errorCode)) {
+          throw _UpdateException(
+            errorCode!,
+            _messageFromResponse(error.response) ?? '更新服务器拒绝当前请求',
+          );
+        }
+        lastError = error;
+        lastStackTrace = stackTrace;
+      } on _UpdateException catch (error, stackTrace) {
+        if (_isTerminalPublicError(error.errorCode) ||
+            request.source == _ManifestSource.legacyGithubLatest) {
+          rethrow;
+        }
+        lastError = error;
+        lastStackTrace = stackTrace;
+      } catch (error, stackTrace) {
+        lastError = error;
+        lastStackTrace = stackTrace;
+      }
     }
-    return _RemoteUpdateInfo.fromJson(
-      jsonDecode(raw) as Map<String, dynamic>,
-    );
+
+    if (lastError != null) {
+      Error.throwWithStackTrace(lastError, lastStackTrace ?? StackTrace.current);
+    }
+    throw _UpdateException('NO_MANIFEST_SOURCE', '没有可用的更新清单地址');
+  }
+
+  String _cloudflareManifestUrl(_LocalAppInfo localInfo) {
+    final uri = Uri.parse(ShareLinks.cloudflareUpdateManifestUrl);
+    final queryParameters = Map<String, String>.from(uri.queryParameters);
+    queryParameters.addAll({
+      'appId': ShareLinks.appId,
+      'platform': 'android',
+      'channel': ShareLinks.updateChannel,
+      'versionCode': localInfo.versionCode.toString(),
+      'schemaVersion': _manifestSchemaVersion.toString(),
+      'capabilities': _clientCapabilities,
+    });
+    return uri.replace(queryParameters: queryParameters).toString();
   }
 
   void _showUpdateDialog(
@@ -166,7 +243,17 @@ class AppUpdateService extends GetxService {
             const SizedBox(height: 6),
             Text('最新版本：${updateInfo.versionName} (${updateInfo.versionCode})'),
             const SizedBox(height: 12),
-            Text('增量包大小：${_formatBytes(patch.size)}'),
+            Text('推荐包类型：增量包 ${_formatBytes(patch.size)}'),
+            if (updateInfo.hasFullDownload) ...[
+              const SizedBox(height: 6),
+              Text('全量包大小：${_formatBytes(updateInfo.apkSize)}'),
+            ],
+            if (updateInfo.releaseNotes.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text('更新说明：'),
+              const SizedBox(height: 4),
+              Text(updateInfo.releaseNotes),
+            ],
             const SizedBox(height: 6),
             const Text('将下载增量包并在本机合成新版安装包。'),
           ],
@@ -176,6 +263,18 @@ class AppUpdateService extends GetxService {
             onPressed: () => Get.back<void>(),
             child: const Text('稍后'),
           ),
+          if (updateInfo.hasFullDownload)
+            TextButton(
+              onPressed: () {
+                Get.back<void>();
+                _showFullFallbackDialog(
+                  localInfo,
+                  updateInfo,
+                  reason: '你选择直接安装全量 APK。',
+                );
+              },
+              child: const Text('全量安装'),
+            ),
           FilledButton(
             onPressed: () {
               Get.back<void>();
@@ -196,15 +295,62 @@ class AppUpdateService extends GetxService {
       AlertDialog(
         title: const Text('发现新版本'),
         content: Text(
-          '最新版本 ${updateInfo.versionName} 已发布，但当前版本 '
-          '${localInfo.versionName} 没有匹配当前安装包的增量更新包。'
-          '如果这是旧版、非 GitHub Release 构建或同版本的不同安装包，'
-          '需要先安装一次新的发布包，之后即可通过 App 内增量更新。',
+          updateInfo.hasFullDownload
+              ? '最新版本 ${updateInfo.versionName} 已发布，但当前版本 '
+                  '${localInfo.versionName} 没有匹配当前安装包的增量更新包。'
+                  '可以改用全量 APK，大小约 ${_formatBytes(updateInfo.apkSize)}，'
+                  '建议在 Wi-Fi 下下载。'
+              : '最新版本 ${updateInfo.versionName} 已发布，但当前版本 '
+                  '${localInfo.versionName} 没有匹配当前安装包的增量更新包，'
+                  '且更新清单未提供可用的全量 APK 下载地址。',
         ),
         actions: [
           TextButton(
             onPressed: () => Get.back<void>(),
-            child: const Text('知道了'),
+            child: const Text('稍后'),
+          ),
+          if (updateInfo.hasFullDownload)
+            FilledButton(
+              onPressed: () {
+                Get.back<void>();
+                _showFullFallbackDialog(
+                  localInfo,
+                  updateInfo,
+                  reason: '当前安装包没有可用增量补丁。',
+                );
+              },
+              child: const Text('下载全量包'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullFallbackDialog(
+    _LocalAppInfo localInfo,
+    _RemoteUpdateInfo updateInfo, {
+    required String reason,
+  }) {
+    Get.dialog<void>(
+      AlertDialog(
+        title: const Text('改用全量包'),
+        content: Text(
+          '$reason\n\n'
+          '将下载完整 APK，大小约 ${_formatBytes(updateInfo.apkSize)}。'
+          '下载完成后会校验 SHA-256，再打开系统安装器。'
+          '建议在 Wi-Fi 下继续。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<void>(),
+            child: const Text('稍后'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Get.back<void>();
+              unawaited(_downloadAndInstallFullApk(localInfo, updateInfo));
+            },
+            child: const Text('继续下载'),
           ),
         ],
       ),
@@ -223,25 +369,37 @@ class AppUpdateService extends GetxService {
     updateStatus.value = '准备增量更新...';
     _showProgressDialog();
 
+    Object? failure;
     try {
+      if (patch.size <= 0 ||
+          patch.size > _TracePatchApplier.maxPatchSizeBytes) {
+        throw Exception('增量包大小超出安全限制');
+      }
+
       final tempDir = await getTemporaryDirectory();
+      final fileToken = DateTime.now().microsecondsSinceEpoch;
       final patchFile = File(
-        '${tempDir.path}/trace_${localInfo.versionCode}_${updateInfo.versionCode}.tpatch',
+        '${tempDir.path}/trace_${localInfo.versionCode}_${updateInfo.versionCode}_$fileToken.tpatch',
       );
       final outputApk = File(
-        '${tempDir.path}/trace_update_${updateInfo.versionCode}.apk',
+        '${tempDir.path}/trace_update_${updateInfo.versionCode}_$fileToken.apk',
       );
 
       updateStatus.value = '下载增量包...';
-      await _dio.download(
-        patch.downloadUrl,
-        patchFile.path,
+      await _downloadWithFallback(
+        urls: patch.downloadUrls,
+        savePath: patchFile.path,
+        phaseName: '下载增量包',
+        progressStart: 0,
+        progressSpan: 0.45,
         onReceiveProgress: (received, total) {
-          if (total <= 0) return;
-          updateProgress.value = (received / total * 0.45).clamp(0.0, 0.45);
+          if (total > 0) {
+            updateProgress.value = (received / total * 0.45).clamp(0.0, 0.45);
+          }
         },
       );
 
+      updateStatus.value = '校验增量包...';
       final patchSha = await _sha256File(patchFile);
       if (patchSha != patch.sha256) {
         throw Exception('增量包校验失败');
@@ -265,26 +423,243 @@ class AppUpdateService extends GetxService {
         'apkPath': outputApk.path,
       });
     } on PlatformException catch (e) {
-      if (e.code == 'UNKNOWN_APP_SOURCES') {
-        Get.snackbar('需要授权', '请允许安装未知来源应用后，再次点击检查更新');
-      } else {
-        Get.snackbar('更新失败', e.message ?? e.code);
-      }
+      failure = e;
     } catch (e) {
-      Get.snackbar('更新失败', '$e');
+      failure = e;
     } finally {
       if (Get.isDialogOpen == true) {
         Get.back<void>();
       }
       isUpdating.value = false;
     }
+
+    if (failure == null) return;
+    if (failure is PlatformException &&
+        (failure as PlatformException).code == 'UNKNOWN_APP_SOURCES') {
+      Get.snackbar('需要授权', '请允许安装未知来源应用后，再次点击检查更新');
+      return;
+    }
+    _showIncrementalUpdateFailedDialog(
+      localInfo,
+      updateInfo,
+      patch,
+      error: failure,
+    );
+  }
+
+  Future<void> _downloadAndInstallFullApk(
+    _LocalAppInfo localInfo,
+    _RemoteUpdateInfo updateInfo,
+  ) async {
+    if (isUpdating.value) return;
+    if (!updateInfo.hasFullDownload) {
+      Get.snackbar('无法全量更新', '更新清单未提供可用的全量 APK 下载地址');
+      return;
+    }
+
+    isUpdating.value = true;
+    updateProgress.value = 0;
+    updateStatus.value = '准备下载全量包...';
+    _showProgressDialog();
+
+    Object? failure;
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final fileToken = DateTime.now().microsecondsSinceEpoch;
+      final partialApk = File(
+        '${tempDir.path}/trace_full_${updateInfo.versionCode}_$fileToken.apk.part',
+      );
+      final outputApk = File(
+        '${tempDir.path}/trace_full_${updateInfo.versionCode}_$fileToken.apk',
+      );
+
+      try {
+        updateStatus.value = '下载全量包...';
+        await _downloadWithFallback(
+          urls: updateInfo.fullDownloadUrls,
+          savePath: partialApk.path,
+          phaseName: '下载全量包',
+          progressStart: 0,
+          progressSpan: 0.70,
+          onReceiveProgress: (received, total) {
+            if (total > 0) {
+              updateProgress.value = (received / total * 0.70).clamp(0.0, 0.70);
+            }
+          },
+        );
+
+        updateStatus.value = '校验安装包...';
+        updateProgress.value = 0.80;
+        final apkSha = await _sha256File(partialApk);
+        if (apkSha != updateInfo.apkSha256) {
+          throw Exception('全量安装包校验失败');
+        }
+
+        if (await outputApk.exists()) {
+          await outputApk.delete();
+        }
+        await partialApk.rename(outputApk.path);
+
+        updateStatus.value = '打开系统安装器...';
+        updateProgress.value = 1;
+        await _platform.invokeMethod<bool>('installApk', {
+          'apkPath': outputApk.path,
+        });
+      } catch (_) {
+        if (await partialApk.exists()) {
+          await partialApk.delete();
+        }
+        rethrow;
+      }
+    } on PlatformException catch (e) {
+      failure = e;
+    } catch (e) {
+      failure = e;
+    } finally {
+      if (Get.isDialogOpen == true) {
+        Get.back<void>();
+      }
+      isUpdating.value = false;
+    }
+
+    if (failure == null) return;
+    if (failure is PlatformException &&
+        (failure as PlatformException).code == 'UNKNOWN_APP_SOURCES') {
+      Get.snackbar('需要授权', '请允许安装未知来源应用后，再次点击检查更新');
+      return;
+    }
+    _showFullUpdateFailedDialog(localInfo, updateInfo, error: failure);
+  }
+
+  Future<void> _downloadWithFallback({
+    required List<String> urls,
+    required String savePath,
+    required String phaseName,
+    required double progressStart,
+    required double progressSpan,
+    required ProgressCallback onReceiveProgress,
+  }) async {
+    if (urls.isEmpty) {
+      throw _UpdateException('DOWNLOAD_URL_MISSING', '更新清单缺少下载地址');
+    }
+
+    Object? lastError;
+    StackTrace? lastStackTrace;
+    for (var index = 0; index < urls.length; index += 1) {
+      final url = urls[index];
+      if (url.isEmpty) continue;
+      try {
+        await _dio.download(
+          url,
+          savePath,
+          onReceiveProgress: (received, total) {
+            if (total > 0) {
+              final phaseProgress = received / total;
+              updateProgress.value =
+                  (progressStart + phaseProgress * progressSpan)
+                      .clamp(0.0, 1.0);
+              updateStatus.value =
+                  '$phaseName... ${_formatTransfer(received, total)}';
+            } else {
+              updateStatus.value =
+                  '$phaseName... 已下载 ${_formatBytes(received)}';
+            }
+            onReceiveProgress(received, total);
+          },
+        );
+        return;
+      } catch (error, stackTrace) {
+        lastError = error;
+        lastStackTrace = stackTrace;
+        final partialFile = File(savePath);
+        if (await partialFile.exists()) {
+          await partialFile.delete();
+        }
+        if (index < urls.length - 1) {
+          updateStatus.value = '$phaseName失败，尝试备用下载...';
+        }
+      }
+    }
+
+    if (lastError != null) {
+      Error.throwWithStackTrace(lastError, lastStackTrace ?? StackTrace.current);
+    }
+    throw _UpdateException('DOWNLOAD_URL_MISSING', '更新清单缺少下载地址');
+  }
+
+  void _showIncrementalUpdateFailedDialog(
+    _LocalAppInfo localInfo,
+    _RemoteUpdateInfo updateInfo,
+    _RemoteUpdatePatch patch, {
+    required Object error,
+  }) {
+    Get.dialog<void>(
+      AlertDialog(
+        title: const Text('增量更新失败'),
+        content: Text(
+          '错误：${_formatUpdateFailure(error)}\n\n'
+          '${updateInfo.hasFullDownload ? '你可以重试增量更新，或改用全量 APK。全量包大小约 ${_formatBytes(updateInfo.apkSize)}，建议在 Wi-Fi 下下载。' : '你可以稍后重试增量更新。当前更新清单未提供全量 APK 下载地址。'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<void>(),
+            child: const Text('稍后'),
+          ),
+          TextButton(
+            onPressed: () {
+              Get.back<void>();
+              unawaited(_applyIncrementalUpdate(localInfo, updateInfo, patch));
+            },
+            child: const Text('重试'),
+          ),
+          if (updateInfo.hasFullDownload)
+            FilledButton(
+              onPressed: () {
+                Get.back<void>();
+                _showFullFallbackDialog(
+                  localInfo,
+                  updateInfo,
+                  reason: '增量更新失败：${_formatUpdateFailure(error)}',
+                );
+              },
+              child: const Text('改用全量包'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullUpdateFailedDialog(
+    _LocalAppInfo localInfo,
+    _RemoteUpdateInfo updateInfo, {
+    required Object error,
+  }) {
+    Get.dialog<void>(
+      AlertDialog(
+        title: const Text('全量更新失败'),
+        content: Text('错误：${_formatUpdateFailure(error)}'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back<void>(),
+            child: const Text('稍后'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Get.back<void>();
+              unawaited(_downloadAndInstallFullApk(localInfo, updateInfo));
+            },
+            child: const Text('重试'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showProgressDialog() {
     Get.dialog<void>(
       Obx(
         () => AlertDialog(
-          title: const Text('增量更新中'),
+          title: const Text('应用更新中'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,7 +719,32 @@ class AppUpdateService extends GetxService {
     return '$bytes B';
   }
 
+  String _formatTransfer(int received, int total) {
+    final percent = total <= 0 ? 0 : received / total * 100;
+    return '${percent.toStringAsFixed(0)}% '
+        '(${_formatBytes(received)} / ${_formatBytes(total)})';
+  }
+
+  String _formatUpdateFailure(Object error) {
+    if (error is _UpdateException) {
+      return error.messageWithCode;
+    }
+    if (error is DioException) {
+      return _formatDioException(error);
+    }
+    if (error is PlatformException) {
+      return error.message ?? error.code;
+    }
+    return '$error';
+  }
+
   String _formatDioException(DioException error) {
+    final errorCode = _errorCodeFromResponse(error.response);
+    final message = _messageFromResponse(error.response);
+    if (errorCode != null) {
+      return message == null ? errorCode : '$errorCode：$message';
+    }
+
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -370,10 +770,96 @@ class AppUpdateService extends GetxService {
     final digest = await sha256.bind(file.openRead()).first;
     return digest.toString();
   }
+
+  Future<void> _verifyPayloadSignature(_RemoteUpdateInfo updateInfo) async {
+    final signature = updateInfo.payloadSignature;
+    if (updateInfo.source == _ManifestSource.emergency && signature == null) {
+      throw _UpdateException('SIGNATURE_MISSING', '紧急更新清单缺少 payloadSignature');
+    }
+    if (signature == null) return;
+
+    if (signature.algorithm != 'ed25519') {
+      throw _UpdateException(
+        'SIGNATURE_UNSUPPORTED',
+        '不支持的更新清单签名算法：${signature.algorithm}',
+      );
+    }
+    if (ShareLinks.updatePayloadPublicKeyBase64.isEmpty) {
+      throw _UpdateException('SIGNATURE_KEY_MISSING', '客户端未内置更新清单验签公钥');
+    }
+
+    final publicKeyBytes = base64Decode(ShareLinks.updatePayloadPublicKeyBase64);
+    final signatureBytes = base64Decode(signature.signatureBase64);
+    final payload = utf8.encode(_canonicalJson(updateInfo.signedPayload));
+    final algorithm = Ed25519();
+    final isValid = await algorithm.verify(
+      payload,
+      signature: Signature(
+        signatureBytes,
+        publicKey: SimplePublicKey(
+          publicKeyBytes,
+          type: KeyPairType.ed25519,
+        ),
+      ),
+    );
+    if (!isValid) {
+      throw _UpdateException('SIGNATURE_INVALID', '更新清单签名校验失败');
+    }
+  }
+
+  String? _errorCodeFromResponse(Response<dynamic>? response) {
+    final data = response?.data;
+    if (data is Map<String, dynamic>) {
+      return data['errorCode'] as String?;
+    }
+    if (data is String && data.trim().isNotEmpty) {
+      try {
+        final json = jsonDecode(data);
+        if (json is Map<String, dynamic>) {
+          return json['errorCode'] as String?;
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  String? _messageFromResponse(Response<dynamic>? response) {
+    final data = response?.data;
+    if (data is Map<String, dynamic>) {
+      return (data['message'] ?? data['maintenanceMessage']) as String?;
+    }
+    if (data is String && data.trim().isNotEmpty) {
+      try {
+        final json = jsonDecode(data);
+        if (json is Map<String, dynamic>) {
+          return (json['message'] ?? json['maintenanceMessage']) as String?;
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  bool _isTerminalPublicError(String? errorCode) {
+    return errorCode == 'NO_UPDATE' ||
+        errorCode == 'CHANNEL_STOPPED' ||
+        errorCode == 'CLIENT_TOO_OLD' ||
+        errorCode == 'SIGNATURE_MISSING' ||
+        errorCode == 'SIGNATURE_UNSUPPORTED' ||
+        errorCode == 'SIGNATURE_KEY_MISSING' ||
+        errorCode == 'SIGNATURE_INVALID';
+  }
 }
 
 class _TracePatchApplier {
   static final List<int> _magic = utf8.encode('TRACEPATCH1\n');
+  static const int maxPatchSizeBytes = 512 * 1024 * 1024;
+  static const int _maxManifestLengthBytes = 2 * 1024 * 1024;
+  static const int _maxOperationCount = 200000;
+  static const int _maxOutputApkSizeBytes = 1024 * 1024 * 1024;
 
   Future<void> apply({
     required String oldApkPath,
@@ -386,6 +872,11 @@ class _TracePatchApplier {
     final oldApk = File(oldApkPath);
     final patchFile = File(patchPath);
     final outputApk = File(outputApkPath);
+    final oldApkSize = await oldApk.length();
+    final patchSize = await patchFile.length();
+    if (patchSize <= _magic.length + 4 || patchSize > maxPatchSizeBytes) {
+      throw Exception('增量包大小超出安全限制');
+    }
 
     final oldSha = await sha256.bind(oldApk.openRead()).first;
     if (oldSha.toString() != expectedOldSha256) {
@@ -406,6 +897,12 @@ class _TracePatchApplier {
       final manifestLength =
           ByteData.sublistView(Uint8List.fromList(manifestLengthBytes))
               .getUint32(0, Endian.little);
+      if (manifestLength <= 0 || manifestLength > _maxManifestLengthBytes) {
+        throw Exception('增量包清单长度超出安全限制');
+      }
+      if (_magic.length + 4 + manifestLength > patchSize) {
+        throw Exception('增量包清单长度无效');
+      }
       final manifestBytes = await _readExactly(patchRaf, manifestLength);
       final manifest = jsonDecode(utf8.decode(manifestBytes)) as Map<String, dynamic>;
 
@@ -414,16 +911,28 @@ class _TracePatchApplier {
       }
 
       final newSize = _jsonInt(manifest['newSize']);
+      if (newSize <= 0 || newSize > _maxOutputApkSizeBytes) {
+        throw Exception('增量包输出大小超出安全限制');
+      }
       var written = 0;
       final operations = manifest['operations'] as List<dynamic>;
+      if (operations.isEmpty || operations.length > _maxOperationCount) {
+        throw Exception('增量包操作数量超出安全限制');
+      }
 
       for (final operation in operations) {
         final op = operation as Map<String, dynamic>;
         final kind = op['op'] as String;
         final length = _jsonInt(op['length']);
+        if (length <= 0) {
+          throw Exception('增量包操作长度无效');
+        }
 
         if (kind == 'copy') {
           final offset = _jsonInt(op['offset']);
+          if (offset < 0 || offset + length > oldApkSize) {
+            throw Exception('增量包 copy 操作越界');
+          }
           await oldRaf.setPosition(offset);
           await _copyBytes(oldRaf, outRaf, length);
         } else if (kind == 'data') {
@@ -433,9 +942,16 @@ class _TracePatchApplier {
         }
 
         written += length;
+        if (written > newSize) {
+          throw Exception('增量包输出大小与清单不匹配');
+        }
         if (newSize > 0) {
           onProgress((written / newSize).clamp(0.0, 1.0));
         }
+      }
+
+      if (written != newSize) {
+        throw Exception('增量包输出大小与清单不匹配');
       }
     } finally {
       await oldRaf.close();
@@ -508,22 +1024,167 @@ class _LocalAppInfo {
 
 class _RemoteUpdateInfo {
   const _RemoteUpdateInfo({
+    required this.source,
+    required this.schemaVersion,
+    required this.appId,
+    required this.channel,
     required this.versionName,
     required this.versionCode,
+    required this.releaseTag,
+    required this.apkAssetName,
+    required this.apkSha256,
+    required this.apkSize,
+    required this.releaseNotes,
+    required this.minClientVersionCode,
+    required this.capabilities,
+    required this.fullDownloadUrl,
+    required this.fullFallbackUrl,
+    required this.assets,
+    required this.payloadSignature,
     required this.patches,
   });
 
+  final _ManifestSource source;
+  final int schemaVersion;
+  final String appId;
+  final String channel;
   final String versionName;
   final int versionCode;
+  final String releaseTag;
+  final String apkAssetName;
+  final String apkSha256;
+  final int apkSize;
+  final String releaseNotes;
+  final int minClientVersionCode;
+  final List<String> capabilities;
+  final String? fullDownloadUrl;
+  final String? fullFallbackUrl;
+  final List<Object?> assets;
+  final _PayloadSignature? payloadSignature;
   final List<_RemoteUpdatePatch> patches;
 
-  factory _RemoteUpdateInfo.fromJson(Map<String, dynamic> json) {
+  bool get hasFullDownload {
+    return apkSha256.isNotEmpty &&
+        apkSize > 0 &&
+        fullDownloadUrls.isNotEmpty;
+  }
+
+  List<String> get fullDownloadUrls {
+    return [
+      if (fullDownloadUrl != null && fullDownloadUrl!.isNotEmpty)
+        fullDownloadUrl!,
+      if (fullFallbackUrl != null && fullFallbackUrl!.isNotEmpty)
+        fullFallbackUrl!,
+    ];
+  }
+
+  Map<String, Object?> get signedPayload {
+    return {
+      'appId': appId,
+      'platform': 'android',
+      'versionName': versionName,
+      'versionCode': versionCode,
+      'releaseTag': releaseTag,
+      'apkAssetName': apkAssetName,
+      'apkSha256': apkSha256,
+      'apkSize': apkSize,
+      'patches': patches.map((patch) => patch.signedPayload).toList(),
+      'assetHashes': assets,
+      'minClientVersionCode': minClientVersionCode,
+      'capabilities': capabilities,
+    };
+  }
+
+  factory _RemoteUpdateInfo.fromJson(
+    Map<String, dynamic> json, {
+    required _ManifestSource source,
+    required int localVersionCode,
+  }) {
+    final errorCode = json['errorCode'] as String?;
+    if (errorCode == 'NO_UPDATE') {
+      return _RemoteUpdateInfo.noUpdate(source: source);
+    }
+    if (errorCode != null) {
+      throw _UpdateException(
+        errorCode,
+        (json['message'] ?? json['maintenanceMessage'] ?? errorCode)
+            .toString(),
+      );
+    }
+    if (json['updateAvailable'] == false) {
+      return _RemoteUpdateInfo.noUpdate(source: source);
+    }
+
+    final schemaVersion = _jsonIntWithDefault(json['schemaVersion'], 1);
+    final platform = (json['platform'] ?? 'android').toString();
+    if (platform != 'android') {
+      throw _UpdateException('PLATFORM_MISMATCH', '更新清单平台不匹配：$platform');
+    }
+
+    final minClientVersionCode =
+        _jsonIntWithDefault(json['minClientVersionCode'], 0);
+    if (minClientVersionCode > localVersionCode) {
+      throw _UpdateException('CLIENT_TOO_OLD', '当前版本过旧，需要先安装兼容版本');
+    }
+
+    final releaseTag = (json['releaseTag'] ?? '').toString();
+    final apkAssetName =
+        (json['apkAssetName'] ?? 'ble-monitor-android.apk').toString();
+    final fullDownloadUrl = _stringOrNull(json['fullDownloadUrl']) ??
+        (releaseTag.isEmpty
+            ? null
+            : ShareLinks.githubReleaseAssetUrl(releaseTag, apkAssetName));
+    final fullFallbackUrl = _stringOrNull(json['fullFallbackUrl']);
+
     return _RemoteUpdateInfo(
-      versionName: json['versionName'] as String,
-      versionCode: (json['versionCode'] as num).toInt(),
+      source: source,
+      schemaVersion: schemaVersion,
+      appId: (json['appId'] ?? ShareLinks.appId).toString(),
+      channel: (json['channel'] ?? ShareLinks.updateChannel).toString(),
+      versionName: (json['versionName'] ?? '').toString(),
+      versionCode: _jsonInt(json['versionCode']),
+      releaseTag: releaseTag,
+      apkAssetName: apkAssetName,
+      apkSha256: (json['apkSha256'] ?? '').toString().toLowerCase(),
+      apkSize: _jsonIntWithDefault(json['apkSize'], 0),
+      releaseNotes: (json['releaseNotes'] ?? '').toString(),
+      minClientVersionCode: minClientVersionCode,
+      capabilities: _stringList(json['capabilities']),
+      fullDownloadUrl: fullDownloadUrl,
+      fullFallbackUrl: fullFallbackUrl,
+      assets: (json['assets'] as List<dynamic>?)?.cast<Object?>() ?? const [],
+      payloadSignature: _PayloadSignature.tryParse(json['payloadSignature']),
       patches: ((json['patches'] as List<dynamic>?) ?? const [])
-          .map((item) => _RemoteUpdatePatch.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => _RemoteUpdatePatch.fromJson(
+              item as Map<String, dynamic>,
+              releaseTag: releaseTag,
+            ),
+          )
           .toList(),
+    );
+  }
+
+  factory _RemoteUpdateInfo.noUpdate({required _ManifestSource source}) {
+    return _RemoteUpdateInfo(
+      source: source,
+      schemaVersion: 1,
+      appId: ShareLinks.appId,
+      channel: ShareLinks.updateChannel,
+      versionName: '',
+      versionCode: 0,
+      releaseTag: '',
+      apkAssetName: '',
+      apkSha256: '',
+      apkSize: 0,
+      releaseNotes: '',
+      minClientVersionCode: 0,
+      capabilities: const [],
+      fullDownloadUrl: null,
+      fullFallbackUrl: null,
+      assets: const [],
+      payloadSignature: null,
+      patches: const [],
     );
   }
 
@@ -534,7 +1195,8 @@ class _RemoteUpdateInfo {
     final normalizedOldSha = oldSha256.toLowerCase();
     for (final patch in patches) {
       if (patch.fromVersionCode == versionCode &&
-          patch.oldSha256.toLowerCase() == normalizedOldSha) {
+          patch.oldSha256.toLowerCase() == normalizedOldSha &&
+          patch.downloadUrls.isNotEmpty) {
         return patch;
       }
     }
@@ -545,30 +1207,173 @@ class _RemoteUpdateInfo {
 class _RemoteUpdatePatch {
   const _RemoteUpdatePatch({
     required this.fromVersionCode,
+    required this.toVersionCode,
     required this.assetName,
     required this.sha256,
     required this.size,
     required this.oldSha256,
     required this.newSha256,
+    required this.downloadUrl,
+    required this.fallbackUrl,
   });
 
   final int fromVersionCode;
+  final int toVersionCode;
   final String assetName;
   final String sha256;
   final int size;
   final String oldSha256;
   final String newSha256;
+  final String? downloadUrl;
+  final String? fallbackUrl;
 
-  String get downloadUrl => '${ShareLinks.githubLatestReleaseDownloadBaseUrl}$assetName';
+  List<String> get downloadUrls {
+    return [
+      if (downloadUrl != null && downloadUrl!.isNotEmpty) downloadUrl!,
+      if (fallbackUrl != null && fallbackUrl!.isNotEmpty) fallbackUrl!,
+    ];
+  }
 
-  factory _RemoteUpdatePatch.fromJson(Map<String, dynamic> json) {
+  Map<String, Object?> get signedPayload {
+    return {
+      'fromVersionCode': fromVersionCode,
+      'toVersionCode': toVersionCode,
+      'assetName': assetName,
+      'sha256': sha256,
+      'size': size,
+      'oldSha256': oldSha256,
+      'newSha256': newSha256,
+    };
+  }
+
+  factory _RemoteUpdatePatch.fromJson(
+    Map<String, dynamic> json, {
+    required String releaseTag,
+  }) {
+    final assetName = (json['assetName'] ?? '').toString();
+    final tagAssetUrl = releaseTag.isEmpty || assetName.isEmpty
+        ? null
+        : ShareLinks.githubReleaseAssetUrl(releaseTag, assetName);
     return _RemoteUpdatePatch(
-      fromVersionCode: (json['fromVersionCode'] as num).toInt(),
-      assetName: json['assetName'] as String,
-      sha256: json['sha256'] as String,
-      size: (json['size'] as num).toInt(),
-      oldSha256: json['oldSha256'] as String,
-      newSha256: json['newSha256'] as String,
+      fromVersionCode: _jsonInt(json['fromVersionCode']),
+      toVersionCode: _jsonIntWithDefault(json['toVersionCode'], 0),
+      assetName: assetName,
+      sha256: (json['sha256'] ?? '').toString().toLowerCase(),
+      size: _jsonInt(json['size']),
+      oldSha256: (json['oldSha256'] ?? '').toString().toLowerCase(),
+      newSha256: (json['newSha256'] ?? '').toString().toLowerCase(),
+      downloadUrl: _stringOrNull(json['downloadUrl']) ?? tagAssetUrl,
+      fallbackUrl: _stringOrNull(json['fallbackUrl']),
     );
   }
+}
+
+enum _ManifestSource {
+  cloudflare,
+  emergency,
+  legacyGithubLatest,
+}
+
+class _ManifestRequest {
+  const _ManifestRequest({
+    required this.url,
+    required this.source,
+  });
+
+  final String url;
+  final _ManifestSource source;
+}
+
+class _PayloadSignature {
+  const _PayloadSignature({
+    required this.algorithm,
+    required this.keyVersion,
+    required this.signatureBase64,
+  });
+
+  final String algorithm;
+  final String keyVersion;
+  final String signatureBase64;
+
+  static _PayloadSignature? tryParse(Object? value) {
+    if (value == null) return null;
+    if (value is String && value.isNotEmpty) {
+      return _PayloadSignature(
+        algorithm: 'ed25519',
+        keyVersion: 'default',
+        signatureBase64: value,
+      );
+    }
+    if (value is Map<String, dynamic>) {
+      final signature = (value['signature'] ?? value['value'])?.toString();
+      if (signature == null || signature.isEmpty) return null;
+      return _PayloadSignature(
+        algorithm: (value['algorithm'] ?? 'ed25519').toString().toLowerCase(),
+        keyVersion: (value['keyVersion'] ?? 'default').toString(),
+        signatureBase64: signature,
+      );
+    }
+    return null;
+  }
+}
+
+class _UpdateException implements Exception {
+  const _UpdateException(this.errorCode, this.message);
+
+  final String errorCode;
+  final String message;
+
+  String get messageWithCode => '$errorCode：$message';
+
+  @override
+  String toString() => messageWithCode;
+}
+
+String _canonicalJson(Object? value) {
+  if (value is Map) {
+    final entries = value.entries
+        .map((entry) => MapEntry(entry.key.toString(), entry.value))
+        .toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return '{${entries.map((entry) {
+      return '${jsonEncode(entry.key)}:${_canonicalJson(entry.value)}';
+    }).join(',')}}';
+  }
+  if (value is List) {
+    return '[${value.map(_canonicalJson).join(',')}]';
+  }
+  return jsonEncode(value);
+}
+
+int _jsonInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.parse(value);
+  throw Exception('更新清单数值字段错误');
+}
+
+int _jsonIntWithDefault(Object? value, int defaultValue) {
+  if (value == null) return defaultValue;
+  return _jsonInt(value);
+}
+
+String? _stringOrNull(Object? value) {
+  if (value == null) return null;
+  final stringValue = value.toString();
+  return stringValue.isEmpty ? null : stringValue;
+}
+
+List<String> _stringList(Object? value) {
+  if (value == null) return const [];
+  if (value is String) {
+    return value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+  if (value is List) {
+    return value.map((item) => item.toString()).toList();
+  }
+  return const [];
 }

@@ -36,6 +36,8 @@ jobs:
   android:
     name: Build Android APK
     runs-on: ubuntu-latest
+    outputs:
+      fixed_signing_configured: ${{ steps.android_release_signing.outputs.fixed_signing_configured }}
 
     steps:
       - name: Checkout repository
@@ -70,6 +72,7 @@ jobs:
           gradle wrapper --gradle-version 8.12 --distribution-type all
 
       - name: Configure Android release signing
+        id: android_release_signing
         shell: bash
         env:
           ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
@@ -96,6 +99,7 @@ jobs:
 
           if [[ "${android_release_signing_present}" == "false" && "${sideload_signing_present}" == "false" ]]; then
             echo "::warning title=Android release signing::No fixed signing secrets are configured; release APK will use CI debug signing and cannot reliably update previous CI APKs."
+            echo "fixed_signing_configured=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -126,6 +130,7 @@ jobs:
 
           chmod 600 android/release-keystore.jks android/key.properties
           echo "Android release signing configured with a fixed keystore."
+          echo "fixed_signing_configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Analyze project
         continue-on-error: true
@@ -245,11 +250,23 @@ jobs:
     needs:
       - android
       - windows
-    if: github.event_name == 'push' || github.event.inputs.publish_release == 'true'
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Enforce fixed Android release signing
+        shell: bash
+        env:
+          FIXED_SIGNING_CONFIGURED: ${{ needs.android.outputs.fixed_signing_configured }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${FIXED_SIGNING_CONFIGURED}" != "true" ]]; then
+            echo "::error title=Android release signing required::Formal GitHub Releases and Cloudflare candidates require fixed Android release signing secrets."
+            exit 1
+          fi
 
       - name: Download Android build artifact
         uses: actions/download-artifact@v4
@@ -268,11 +285,15 @@ jobs:
         shell: bash
         env:
           MANUAL_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          PUBLISH_RELEASE: ${{ github.event.inputs.publish_release }}
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             tag="${GITHUB_REF_NAME}"
           elif [[ -n "${MANUAL_RELEASE_TAG}" ]]; then
             tag="${MANUAL_RELEASE_TAG}"
+          elif [[ "${PUBLISH_RELEASE}" == "true" ]]; then
+            echo "::error title=Release tag required::Manual formal releases must provide release_tag unless the workflow runs on a tag."
+            exit 1
           else
             short_sha="${GITHUB_SHA::7}"
             tag="build-${GITHUB_RUN_NUMBER}-${short_sha}"
