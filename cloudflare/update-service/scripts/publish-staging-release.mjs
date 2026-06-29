@@ -369,8 +369,10 @@ async function publishChannel(release, channelName) {
     }
   }
 
-  const beforeJson = canonicalJson(channel);
-  const afterJson = canonicalJson({ ...channel, current_release_id: release.id });
+  const beforeSnapshot = channelAuditSnapshot(channel);
+  const afterSnapshot = { ...beforeSnapshot, current_release_id: release.id };
+  const beforeJson = canonicalJson(beforeSnapshot);
+  const afterJson = canonicalJson(afterSnapshot);
   const requestId = requestIdFor(`publish_${channelName}`);
   const rows = await d1Rows(
     `
@@ -514,24 +516,58 @@ async function curlHeadersOnlyGet(url) {
 
 async function d1Rows(sql) {
   const wranglerEntry = wranglerPath();
+  const compact = compactSql(sql);
   const args = [
     wranglerEntry,
     "d1",
     "execute",
     database,
     "--remote",
-    "--command",
-    compactSql(sql),
     "--env",
     wranglerEnv
   ];
-  const output = await runCapture(process.execPath, args, { cwd: path.resolve(wranglerCwd) });
-  const parsed = parseWranglerJson(output);
-  if (!Array.isArray(parsed) || parsed.length === 0) return [];
-  const failed = parsed.find((entry) => entry.success === false);
-  if (failed) fail(`D1 command failed: ${JSON.stringify(failed)}`);
-  const last = parsed[parsed.length - 1];
-  return Array.isArray(last.results) ? last.results : [];
+  const cwd = path.resolve(wranglerCwd);
+  let tempDirForSql = "";
+  try {
+    if (commandLineLength([process.execPath, ...args, "--command", compact]) > 7000) {
+      tempDirForSql = await mkdtemp(path.join(tmpdir(), "trace-d1-sql-"));
+      const sqlPath = path.join(tempDirForSql, "query.sql");
+      await writeFile(sqlPath, `${compact}\n`, "utf8");
+      args.push("--file", sqlPath);
+    } else {
+      args.push("--command", compact);
+    }
+
+    const output = await runCapture(process.execPath, args, { cwd });
+    const parsed = parseWranglerJson(output);
+    if (!Array.isArray(parsed) || parsed.length === 0) return [];
+    const failed = parsed.find((entry) => entry.success === false);
+    if (failed) fail(`D1 command failed: ${JSON.stringify(failed)}`);
+    const last = parsed[parsed.length - 1];
+    return Array.isArray(last.results) ? last.results : [];
+  } finally {
+    if (tempDirForSql) {
+      await rm(tempDirForSql, { recursive: true, force: true });
+    }
+  }
+}
+
+function commandLineLength(parts) {
+  return parts.reduce((total, part) => total + String(part).length + 3, 0);
+}
+
+function channelAuditSnapshot(channel) {
+  return {
+    id: channel.id,
+    app_id: channel.app_id,
+    platform: channel.platform,
+    name: channel.name,
+    current_release_id: channel.current_release_id,
+    revision: channel.revision,
+    disable_latest: channel.disable_latest,
+    disable_downloads: channel.disable_downloads,
+    maintenance_message: channel.maintenance_message ?? ""
+  };
 }
 
 function wranglerPath() {

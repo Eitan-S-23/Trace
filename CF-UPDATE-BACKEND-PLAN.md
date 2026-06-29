@@ -735,3 +735,36 @@ Validation:
 - The staging wrapper verified both public latest endpoints return `v1.0.7` and that the `31 -> 33` primary patch download is served from R2.
 - D1 audit logs recorded the CI `register_candidate` and system channel publish operations.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 follow-up — v1.0.8 clean staging publication on 2026-06-29
+
+Implemented:
+
+- Published and verified a clean Android staging release `v1.0.8` / versionCode `34` after the `v1.0.7` repeated-tag history exposed metadata mismatch risk.
+- GitHub Actions formal release run `28378583701` completed successfully at commit `fca306f5bf00d074ede0d5f9feced72f15206cd5`; Android, Windows, Pages, GitHub Release creation, Cloudflare R2 upload/read-back, and Cloudflare candidate registration all passed.
+- D1 registered `rel_trace_android_v1_0_8` with run id `28378583701`, commit SHA `fca306f5bf00d074ede0d5f9feced72f15206cd5`, and state `candidate`.
+- All Android `v1.0.8` assets in D1 are `r2_state = available`, including APK, manifest, and patches from versionCode `29`, `30`, `31`, `32`, and `33`.
+- Android `stable` and `beta` staging channels both now point to `rel_trace_android_v1_0_8` at revision `6`.
+- The staging publish wrapper was hardened for Windows operator use: channel audit snapshots no longer recursively include prior `last_before_json` / `last_after_json`, and long Wrangler D1 SQL commands automatically use a temporary SQL file instead of overflowing Windows command-line length.
+
+Remaining risks:
+
+- `v1.0.7` remains in D1/GitHub history, but it should not be reused as a clean validation target because repeated workflow runs for the same tag previously created metadata/hash ambiguity.
+- Local Node `fetch` to `workers.dev` still fails through the current Windows proxy/TLS environment; script verification falls back to `curl`, which successfully reaches the Worker.
+- Local Worker runtime tests remain unsuitable on this Windows host because of the known workerd/Miniflare crash; Linux GitHub Actions remains the runtime test path.
+- R2 retention cleanup, restore-from-GitHub workflow, backup scheduling, richer manifest preview, and lightweight statistics remain Phase 3+ work.
+
+Validation:
+
+- `gh auth status` confirmed the active GitHub account is `Eitan-S-23`.
+- `gh run view 28378583701 -R Eitan-S-23/Trace --json ...` confirmed the formal release run and all required jobs/steps succeeded.
+- `gh release view v1.0.8 -R Eitan-S-23/Trace --json ...` confirmed the release targets `fca306f5bf00d074ede0d5f9feced72f15206cd5` and includes Android APK, manifest, all tpatch assets, and Windows assets with expected SHA-256 digests.
+- D1 queries confirmed `rel_trace_android_v1_0_8` exists and every Android asset row has `r2_state = available` and an R2 key.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.8 -Channels stable,beta -SkipBackfill -Yes -ActorEmail codex-staging -VerifyFromVersionCode 32` completed, verified public latest manifests, and verified `32 -> 34` primary patch downloads from R2.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.8 -Channels stable,beta -SkipBackfill -SkipPublish -Yes -ActorEmail codex-staging -VerifyFromVersionCode 33` verified `33 -> 34` primary patch downloads from R2.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.8 -Channels stable,beta -SkipBackfill -SkipPublish -Yes -ActorEmail codex-staging -VerifyFromVersionCode 31` verified `31 -> 34` primary patch downloads from R2.
+- Public latest for `versionCode=34` returned `NO_UPDATE` on both `stable` and `beta`.
+- Full APK primary download returned HTTP `200`, `X-Trace-Asset-Source: r2`, `Content-Length: 60151010`, and SHA-256 `347943bcf18afdf74fedb7299645bf90fcd0435f59bd7c78d4b12c713550b2cb`, matching the manifest.
+- Full APK fallback returned HTTP `302` to `https://github.com/Eitan-S-23/Trace/releases/download/v1.0.8/...` and did not use `/latest/download`.
+- `node --check cloudflare/update-service/scripts/publish-staging-release.mjs` passed after the Windows script hardening.
+- Local Flutter/Gradle/Dart build or package commands were not run.

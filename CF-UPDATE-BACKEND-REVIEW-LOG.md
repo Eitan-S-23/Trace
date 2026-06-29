@@ -551,3 +551,37 @@ Validation recorded:
 - The staging publish wrapper verified latest manifests for both channels and verified the `31 -> 33` primary patch download source is R2.
 - D1 audit logs recorded `register_candidate` for `rel_trace_android_v1_0_7` and system `publish` actions for both Android channels.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 follow-up — v1.0.8 clean CI/R2/staging verification — 2026-06-29
+
+Status: `v1.0.8` is the current verified Android staging release on both `stable` and `beta`.
+
+Implemented:
+
+- Avoided further reliance on the repeated `v1.0.7` tag history by creating and validating a clean `v1.0.8` / versionCode `34` release.
+- GitHub Actions release run `28378583701` succeeded at commit `fca306f5bf00d074ede0d5f9feced72f15206cd5`; the Android signing gate, GitHub Release asset upload, Cloudflare metadata generation, R2 upload/read-back verification, and `/api/ci/releases` candidate registration all succeeded.
+- D1 contains `rel_trace_android_v1_0_8` with run id `28378583701`, commit SHA `fca306f5bf00d074ede0d5f9feced72f15206cd5`, and all Android assets marked `r2_state = available`.
+- Staging Android `stable` and `beta` channels now both point to `rel_trace_android_v1_0_8` at revision `6`.
+- Hardened `publish-staging-release.mjs` after a Windows `spawn ENAMETOOLONG` failure: channel audit snapshots are bounded and long D1 SQL commands are sent through temporary SQL files.
+
+Residual risks and follow-up:
+
+- Do not use `v1.0.7` as a clean validation release because repeated same-tag workflow attempts previously created metadata/hash ambiguity. Use new tags for future tests.
+- Local Node `fetch` to the staging Worker can still fail through the current Windows proxy/TLS path; the publish script's curl fallback remains necessary on this host.
+- Local Worker runtime tests remain blocked by the known Windows workerd/Miniflare crash; Linux GitHub Actions remains the runtime verification path.
+- R2 retention cleanup, restore-from-GitHub, backup scheduling, richer manifest preview, and lightweight stats remain Phase 3+.
+
+Validation recorded:
+
+- `gh auth status` confirmed the active account is `Eitan-S-23`.
+- `gh run view 28378583701 -R Eitan-S-23/Trace --json ...` confirmed all jobs and the Cloudflare R2/candidate registration steps succeeded.
+- `gh release view v1.0.8 -R Eitan-S-23/Trace --json ...` confirmed immutable tag assets under `/releases/download/v1.0.8/...` with expected digests.
+- D1 release and asset queries confirmed `rel_trace_android_v1_0_8` exists and all Android assets have R2 keys with `r2_state = available`.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.8 -Channels stable,beta -SkipBackfill -Yes -ActorEmail codex-staging -VerifyFromVersionCode 32` verified both latest manifests and `32 -> 34` R2 primary patch downloads.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.8 -Channels stable,beta -SkipBackfill -SkipPublish -Yes -ActorEmail codex-staging -VerifyFromVersionCode 33` verified `33 -> 34` R2 primary patch downloads.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.8 -Channels stable,beta -SkipBackfill -SkipPublish -Yes -ActorEmail codex-staging -VerifyFromVersionCode 31` verified `31 -> 34` R2 primary patch downloads.
+- Public latest for `versionCode=34` returned `NO_UPDATE` for both `stable` and `beta`.
+- Full APK primary download returned HTTP `200`, `X-Trace-Asset-Source: r2`, `Content-Length: 60151010`, and SHA-256 `347943bcf18afdf74fedb7299645bf90fcd0435f59bd7c78d4b12c713550b2cb`, matching the manifest.
+- Full APK fallback returned HTTP `302` to a tag-specific `v1.0.8` GitHub Release asset and did not use `/latest/download`.
+- `node --check cloudflare/update-service/scripts/publish-staging-release.mjs` passed after the Windows operator hardening.
+- Local Flutter/Gradle/Dart build or package commands were not run.
