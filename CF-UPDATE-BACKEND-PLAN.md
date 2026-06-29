@@ -8,9 +8,9 @@ _Locked via grill — by Codex + user_
 
 ## Architecture
 
-- GitHub Actions 继续构建 Android APK、Windows zip/exe、tracepatch/VCDIFF 补丁和 manifest。
+- GitHub Actions 继续构建 Android APK、Windows zip/exe、VCDIFF 补丁和 manifest；`1.0.10` 及更旧客户端走全量过渡，不再为历史版本生成 legacy tracepatch。
 - Cloudflare D1 作为版本、资产、补丁、渠道和审计日志的事实源。
-- Cloudflare R2 作为主文件源，存放 APK、Windows 包、tracepatch/VCDIFF 补丁和 manifest。
+- Cloudflare R2 作为主文件源，存放 APK、Windows 包、VCDIFF 补丁和 manifest。
 - Cloudflare KV 只缓存按 origin、下载 key version 和 revision 命名的 latest manifest 渲染结果，key 为 `manifest:{origin}:{downloadKeyVersion}:{appId}:{platform}:{channel}:{revision}`，首版 TTL 为 60 秒；未带 revision 的 channel 状态始终从 D1 读取。
 - Cloudflare Workers 提供 public/admin/ci API。
 - Cloudflare Pages 部署发布控制台前端；如 `workers.dev` 在客户端网络不可达，可部署独立 public Pages facade，只暴露 `/healthz` 和 `/api/public/*`。
@@ -56,7 +56,7 @@ Phase 3: Pages 发布控制台完善。
 ## Scope
 
 - 首版重点支持 Android 应用内更新。
-- Android 更新优先使用 VCDIFF 增量补丁，旧客户端继续使用 tracepatch。
+- Android 更新优先使用 VCDIFF 增量补丁；`1.0.10` 及更旧客户端不再提供跨算法差分，改走全量 APK fallback。
 - 增量不可用、下载失败、校验失败或合成失败时，提供全量 APK fallback。
 - Windows 首版只做资产上传、后台查看和网页下载链接管理。
 - Windows 不做应用内自动更新、安装器或进程自替换。

@@ -82,7 +82,7 @@ Phase 2 candidate registration uploads APK/manifest/patch assets to R2, verifies
 
 Pushes to `main` / `master` now derive the release tag from `pubspec.yaml`, create the GitHub Release with `--latest=false`, upload release assets to R2, and register a Cloudflare candidate automatically. If `TRACE_UPDATE_SERVICE_AUTO_DEPLOY=true` is set as a repository variable and the Cloudflare token has D1/Workers permissions, the workflow first applies pending staging D1 migrations and deploys the update Worker. If the derived tag already exists, the automatic candidate preparation is skipped; bump `pubspec.yaml` to prepare a new candidate.
 
-Android release metadata contains both legacy `tracepatch` (`.tpatch`) and standard VCDIFF (`.vcdiff`) patches when previous APKs are available. New clients advertise `vcdiff` and prefer the smaller VCDIFF patch; older clients continue to consume `tracepatch` because the Worker renders tracepatch first for the same source APK.
+Android release metadata uses standard VCDIFF (`.vcdiff`) patches only for source versions that already contain VCDIFF-capable clients. `1.0.10` and older clients use full APK fallback for the transition release instead of downloading large legacy tracepatch files.
 
 `TRACE_UPDATE_SERVICE_URL` remains the Worker base URL used by CI registration (`/api/ci/releases`). `TRACE_PUBLIC_UPDATE_SERVICE_URL` is the non-secret client base URL compiled into APKs for `/api/public/latest`; in staging it should be `https://trace-update-public-staging.pages.dev`.
 

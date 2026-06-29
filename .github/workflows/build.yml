@@ -396,6 +396,9 @@ jobs:
           patch_metadata_dir="${previous_dir}/patch-metadata"
           mkdir -p "${patch_metadata_dir}"
           release_count=0
+          patch_source_count=0
+          max_patch_sources="${TRACE_MAX_INCREMENTAL_SOURCE_RELEASES:-1}"
+          vcdiff_min_source_version_code="${TRACE_VCDIFF_MIN_SOURCE_VERSION_CODE:-37}"
 
           while IFS= read -r previous_tag; do
             if [[ -z "${previous_tag}" ]]; then
@@ -426,28 +429,22 @@ jobs:
               echo "Release ${previous_tag} versionCode ${previous_version_code} is not older than current ${version_code}; skipping."
               continue
             fi
+            if (( previous_version_code < vcdiff_min_source_version_code )); then
+              echo "Release ${previous_tag} versionCode ${previous_version_code} predates VCDIFF-capable clients; using full APK fallback instead of a legacy tracepatch."
+              break
+            fi
 
             previous_apk_sha="$(
               python -c "import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1], 'rb'); [h.update(c) for c in iter(lambda: f.read(1024*1024), b'')]; print(h.hexdigest())" "${previous_apk}"
             )"
             old_sha_prefix="${previous_apk_sha:0:12}"
-            trace_patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-${old_sha_prefix}-to-${version_code}.tpatch"
-            trace_patch_metadata="${patch_metadata_dir}/${previous_version_code}-${old_sha_prefix}-tracepatch.json"
             vcdiff_patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-${old_sha_prefix}-to-${version_code}.vcdiff"
             vcdiff_patch_metadata="${patch_metadata_dir}/${previous_version_code}-${old_sha_prefix}-vcdiff.json"
 
-            if [[ -f "${trace_patch_metadata}" || -f "${vcdiff_patch_metadata}" ]]; then
+            if [[ -f "${vcdiff_patch_metadata}" ]]; then
               echo "Patch for versionCode ${previous_version_code} and APK ${old_sha_prefix} already exists; skipping duplicate."
               continue
             fi
-
-            python .github/scripts/create_trace_patch.py \
-              "${previous_apk}" \
-              "${apk_path}" \
-              "${trace_patch_path}" \
-              --from-version-code "${previous_version_code}" \
-              --to-version-code "${version_code}" \
-              --metadata-output "${trace_patch_metadata}"
 
             python .github/scripts/create_vcdiff_patch.py \
               "${previous_apk}" \
@@ -456,13 +453,19 @@ jobs:
               --from-version-code "${previous_version_code}" \
               --to-version-code "${version_code}" \
               --metadata-output "${vcdiff_patch_metadata}"
+
+            patch_source_count=$((patch_source_count + 1))
+            if (( patch_source_count >= max_patch_sources )); then
+              echo "Prepared ${patch_source_count} VCDIFF source release(s); stopping incremental patch search."
+              break
+            fi
           done < <(
             gh release list --exclude-drafts --exclude-pre-releases --limit 20 --json tagName \
               --jq '.[].tagName' | grep -vx "${RELEASE_TAG}" || true
           )
 
-          if [[ "${release_count}" -eq 0 ]]; then
-            echo "No previous release found; publishing metadata without patch."
+          if [[ "${patch_source_count}" -eq 0 ]]; then
+            echo "No compatible VCDIFF source release found; publishing metadata without patch."
           fi
 
           python - <<'PY' "${apk_path}" "${version_name}" "${version_code}" "${RELEASE_TAG}" "${patch_metadata_dir}" "release-assets/ble-monitor-update.json"
