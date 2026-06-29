@@ -460,6 +460,11 @@ jobs:
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release edit "${RELEASE_TAG}" --target "${GITHUB_SHA}" --notes "${notes}"
+            for asset_path in release-assets/*; do
+              if [[ -f "${asset_path}" ]]; then
+                gh release delete-asset "${RELEASE_TAG}" "$(basename "${asset_path}")" -y >/dev/null 2>&1 || true
+              fi
+            done
           else
             gh release create "${RELEASE_TAG}" \
               --target "${GITHUB_SHA}" \
