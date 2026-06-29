@@ -173,6 +173,7 @@ async function renderManifestEnvelope(
       fromVersionCode: patch.from_version_code,
       toVersionCode: state.release.version_code,
       assetName: patch.file_name,
+      algorithm: patch.patch_format,
       sha256: patch.patch_sha256,
       size: patch.patch_size_bytes,
       oldSha256: patch.old_sha256,
@@ -263,7 +264,11 @@ async function loadLatestState(
       FROM patches p
       JOIN release_assets a ON a.id = p.asset_id
       WHERE p.to_release_id = ? AND p.disabled = 0 AND a.disabled = 0
-      ORDER BY p.from_version_code DESC
+      ORDER BY
+        p.from_version_code DESC,
+        p.old_sha256 ASC,
+        CASE p.patch_format WHEN 'tracepatch' THEN 0 ELSE 1 END,
+        a.file_name ASC
     `
   )
     .bind(release.id)

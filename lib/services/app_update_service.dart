@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vcdiff_decoder/vcdiff_decoder.dart' as vcdiff;
 
 import '../config/share_links.dart';
 
@@ -22,9 +23,11 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   static const String _pendingInstallApkPathKey =
       'app_update_pending_install_apk_path';
   static const String _unknownAppSourcesCode = 'UNKNOWN_APP_SOURCES';
+  static const String _patchAlgorithmTracePatch = 'tracepatch';
+  static const String _patchAlgorithmVcdiff = 'vcdiff';
   static const int _manifestSchemaVersion = 2;
   static const String _clientCapabilities =
-      'patch,full,fallback,errorCode,payloadSignature';
+      'patch,full,fallback,errorCode,payloadSignature,vcdiff';
 
   final Dio _dio = Dio(
     BaseOptions(
@@ -569,8 +572,10 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
       final tempDir = await getTemporaryDirectory();
       final fileToken = DateTime.now().microsecondsSinceEpoch;
+      final patchExtension =
+          patch.algorithm == _patchAlgorithmVcdiff ? 'vcdiff' : 'tpatch';
       final patchFile = File(
-        '${tempDir.path}/trace_${localInfo.versionCode}_${updateInfo.versionCode}_$fileToken.tpatch',
+        '${tempDir.path}/trace_${localInfo.versionCode}_${updateInfo.versionCode}_$fileToken.$patchExtension',
       );
       final outputApk = File(
         '${tempDir.path}/trace_update_${updateInfo.versionCode}_$fileToken.apk',
@@ -597,16 +602,30 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       }
 
       updateStatus.value = '合成新版安装包...';
-      await _TracePatchApplier().apply(
-        oldApkPath: localInfo.sourceApkPath,
-        patchPath: patchFile.path,
-        outputApkPath: outputApk.path,
-        expectedOldSha256: patch.oldSha256,
-        expectedNewSha256: patch.newSha256,
-        onProgress: (progress) {
-          updateProgress.value = (0.45 + progress * 0.45).clamp(0.45, 0.90);
-        },
-      );
+      void onPatchProgress(double progress) {
+        updateProgress.value = (0.45 + progress * 0.45).clamp(0.45, 0.90);
+      }
+
+      if (patch.algorithm == _patchAlgorithmVcdiff) {
+        await _VcdiffPatchApplier().apply(
+          oldApkPath: localInfo.sourceApkPath,
+          patchPath: patchFile.path,
+          outputApkPath: outputApk.path,
+          expectedOldSha256: patch.oldSha256,
+          expectedNewSha256: patch.newSha256,
+          expectedNewSize: updateInfo.apkSize,
+          onProgress: onPatchProgress,
+        );
+      } else {
+        await _TracePatchApplier().apply(
+          oldApkPath: localInfo.sourceApkPath,
+          patchPath: patchFile.path,
+          outputApkPath: outputApk.path,
+          expectedOldSha256: patch.oldSha256,
+          expectedNewSha256: patch.newSha256,
+          onProgress: onPatchProgress,
+        );
+      }
 
       updateStatus.value = '打开系统安装器...';
       updateProgress.value = 1;
@@ -1259,6 +1278,57 @@ class _TracePatchApplier {
   }
 }
 
+class _VcdiffPatchApplier {
+  static const int maxPatchSizeBytes = 512 * 1024 * 1024;
+  static const int _maxOutputApkSizeBytes = 1024 * 1024 * 1024;
+
+  Future<void> apply({
+    required String oldApkPath,
+    required String patchPath,
+    required String outputApkPath,
+    required String expectedOldSha256,
+    required String expectedNewSha256,
+    required int expectedNewSize,
+    required ValueChanged<double> onProgress,
+  }) async {
+    final oldApk = File(oldApkPath);
+    final patchFile = File(patchPath);
+    final outputApk = File(outputApkPath);
+    final patchSize = await patchFile.length();
+    if (patchSize <= 0 || patchSize > maxPatchSizeBytes) {
+      throw Exception('VCDIFF 增量包大小超出安全限制');
+    }
+
+    final oldSha = await sha256.bind(oldApk.openRead()).first;
+    if (oldSha.toString() != expectedOldSha256) {
+      throw Exception('当前安装包与 VCDIFF 增量包不匹配');
+    }
+    onProgress(0.10);
+
+    final oldBytes = await oldApk.readAsBytes();
+    final patchBytes = await patchFile.readAsBytes();
+    onProgress(0.25);
+
+    final outputBytes = vcdiff.decode(oldBytes, patchBytes);
+    if (outputBytes.length > _maxOutputApkSizeBytes) {
+      throw Exception('VCDIFF 输出安装包大小超出安全限制');
+    }
+    if (expectedNewSize > 0 && outputBytes.length != expectedNewSize) {
+      throw Exception('VCDIFF 输出安装包大小与清单不匹配');
+    }
+    onProgress(0.80);
+
+    await outputApk.writeAsBytes(outputBytes, flush: true);
+    onProgress(0.95);
+
+    final newSha = await sha256.bind(outputApk.openRead()).first;
+    if (newSha.toString() != expectedNewSha256) {
+      throw Exception('VCDIFF 合成安装包校验失败');
+    }
+    onProgress(1);
+  }
+}
+
 class _LocalAppInfo {
   const _LocalAppInfo({
     required this.versionName,
@@ -1450,14 +1520,34 @@ class _RemoteUpdateInfo {
     required String oldSha256,
   }) {
     final normalizedOldSha = oldSha256.toLowerCase();
+    _RemoteUpdatePatch? bestPatch;
     for (final patch in patches) {
       if (patch.fromVersionCode == versionCode &&
           patch.oldSha256.toLowerCase() == normalizedOldSha &&
           patch.downloadUrls.isNotEmpty) {
-        return patch;
+        if (!_isSupportedPatchAlgorithm(patch.algorithm)) continue;
+        if (bestPatch == null ||
+            _patchAlgorithmPriority(patch.algorithm) >
+                _patchAlgorithmPriority(bestPatch.algorithm) ||
+            (_patchAlgorithmPriority(patch.algorithm) ==
+                    _patchAlgorithmPriority(bestPatch.algorithm) &&
+                patch.size < bestPatch.size)) {
+          bestPatch = patch;
+        }
       }
     }
-    return null;
+    return bestPatch;
+  }
+
+  bool _isSupportedPatchAlgorithm(String algorithm) {
+    return algorithm == AppUpdateService._patchAlgorithmVcdiff ||
+        algorithm == AppUpdateService._patchAlgorithmTracePatch;
+  }
+
+  int _patchAlgorithmPriority(String algorithm) {
+    if (algorithm == AppUpdateService._patchAlgorithmVcdiff) return 2;
+    if (algorithm == AppUpdateService._patchAlgorithmTracePatch) return 1;
+    return 0;
   }
 }
 
@@ -1466,6 +1556,7 @@ class _RemoteUpdatePatch {
     required this.fromVersionCode,
     required this.toVersionCode,
     required this.assetName,
+    required this.algorithm,
     required this.sha256,
     required this.size,
     required this.oldSha256,
@@ -1477,6 +1568,7 @@ class _RemoteUpdatePatch {
   final int fromVersionCode;
   final int toVersionCode;
   final String assetName;
+  final String algorithm;
   final String sha256;
   final int size;
   final String oldSha256;
@@ -1515,6 +1607,7 @@ class _RemoteUpdatePatch {
       fromVersionCode: _jsonInt(json['fromVersionCode']),
       toVersionCode: _jsonIntWithDefault(json['toVersionCode'], 0),
       assetName: assetName,
+      algorithm: _patchAlgorithmFromJson(json, assetName),
       sha256: (json['sha256'] ?? '').toString().toLowerCase(),
       size: _jsonInt(json['size']),
       oldSha256: (json['oldSha256'] ?? '').toString().toLowerCase(),
@@ -1522,6 +1615,27 @@ class _RemoteUpdatePatch {
       downloadUrl: _stringOrNull(json['downloadUrl']) ?? tagAssetUrl,
       fallbackUrl: _stringOrNull(json['fallbackUrl']),
     );
+  }
+
+  static String _patchAlgorithmFromJson(
+    Map<String, dynamic> json,
+    String assetName,
+  ) {
+    final raw = (json['algorithm'] ?? json['patchFormat'] ?? json['format'])
+        ?.toString()
+        .toLowerCase();
+    if (raw == 'vcdiff' || raw == 'xdelta3') {
+      return AppUpdateService._patchAlgorithmVcdiff;
+    }
+    if (raw == 'tracepatch' || raw == 'trace') {
+      return AppUpdateService._patchAlgorithmTracePatch;
+    }
+    final lowerAssetName = assetName.toLowerCase();
+    if (lowerAssetName.endsWith('.vcdiff') ||
+        lowerAssetName.endsWith('.xdelta')) {
+      return AppUpdateService._patchAlgorithmVcdiff;
+    }
+    return AppUpdateService._patchAlgorithmTracePatch;
   }
 }
 

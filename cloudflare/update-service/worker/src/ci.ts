@@ -17,6 +17,7 @@ interface RegisterAsset {
 interface RegisterPatch {
   fromVersionCode: number;
   oldSha256: string;
+  patchFormat: "tracepatch" | "vcdiff";
   patchAssetName: string;
   patchSha256: string;
   patchSizeBytes: number;
@@ -196,21 +197,23 @@ export async function handleRegisterRelease(
             asset_id,
             from_version_code,
             old_sha256,
+            patch_format,
             patch_sha256,
             patch_size_bytes,
             output_sha256,
             output_size_bytes
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       ).bind(
-        patchIdFor(releaseId, patch.fromVersionCode, patch.oldSha256),
+        patchIdFor(releaseId, patch.patchAssetName),
         input.appId,
         input.platform,
         releaseId,
         assetId,
         patch.fromVersionCode,
         patch.oldSha256,
+        patch.patchFormat,
         patch.patchSha256,
         patch.patchSizeBytes,
         patch.outputSha256,
@@ -304,6 +307,7 @@ function parsePatch(value: unknown): RegisterPatch {
   return {
     fromVersionCode: requireInt(body.fromVersionCode, "fromVersionCode"),
     oldSha256: requireSha256(body.oldSha256, "oldSha256"),
+    patchFormat: parsePatchFormat(body.patchFormat ?? body.algorithm ?? body.format),
     patchAssetName: requireString(body.patchAssetName, "patchAssetName"),
     patchSha256: requireSha256(body.patchSha256, "patchSha256"),
     patchSizeBytes: requireInt(body.patchSizeBytes, "patchSizeBytes"),
@@ -531,8 +535,18 @@ function assetIdFor(releaseId: string, assetType: RegisterAsset["assetType"], fi
   return `asset_${releaseId}_${assetType}_${slug(fileName)}`;
 }
 
-function patchIdFor(releaseId: string, fromVersionCode: number, oldSha256: string): string {
-  return `patch_${releaseId}_${fromVersionCode}_${oldSha256.slice(0, 16)}`;
+function parsePatchFormat(value: unknown): "tracepatch" | "vcdiff" {
+  if (value === undefined || value === null || value === "" || value === "tracepatch") {
+    return "tracepatch";
+  }
+  if (value === "vcdiff" || value === "xdelta3") {
+    return "vcdiff";
+  }
+  throw invalidParameter("patchFormat is invalid");
+}
+
+function patchIdFor(releaseId: string, patchAssetName: string): string {
+  return `patch_${releaseId}_${slug(patchAssetName)}`;
 }
 
 function slug(value: string): string {

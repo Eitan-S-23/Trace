@@ -96,6 +96,8 @@ def create_patch(old_path: Path, new_path: Path, output_path: Path, from_version
 
     return {
         "assetName": output_path.name,
+        "algorithm": "tracepatch",
+        "patchFormat": "tracepatch",
         "fromVersionCode": from_version_code,
         "toVersionCode": to_version_code,
         "sha256": sha256_file(output_path),

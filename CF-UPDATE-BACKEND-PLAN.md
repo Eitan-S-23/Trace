@@ -4,13 +4,13 @@ _Locked via grill — by Codex + user_
 
 ## Goal
 
-将 Trace 当前依赖 GitHub Release 的应用更新机制迁移为 Cloudflare 主控的更新后台：GitHub Actions 继续负责构建 Android APK、Windows 包和增量 tpatch；Cloudflare Workers + D1 + R2 + KV + Pages 负责发布控制台、版本事实源、主下载分发、manifest 缓存、回滚、停更和防滥用。目标是正常个人使用尽量零成本，GitHub Release 保留为完整历史备份和 fallback。
+将 Trace 当前依赖 GitHub Release 的应用更新机制迁移为 Cloudflare 主控的更新后台：GitHub Actions 继续负责构建 Android APK、Windows 包和增量补丁；Cloudflare Workers + D1 + R2 + KV + Pages 负责发布控制台、版本事实源、主下载分发、manifest 缓存、回滚、停更和防滥用。目标是正常个人使用尽量零成本，GitHub Release 保留为完整历史备份和 fallback。
 
 ## Architecture
 
-- GitHub Actions 继续构建 Android APK、Windows zip/exe、tpatch、manifest。
+- GitHub Actions 继续构建 Android APK、Windows zip/exe、tracepatch/VCDIFF 补丁和 manifest。
 - Cloudflare D1 作为版本、资产、补丁、渠道和审计日志的事实源。
-- Cloudflare R2 作为主文件源，存放 APK、Windows 包、tpatch、manifest。
+- Cloudflare R2 作为主文件源，存放 APK、Windows 包、tracepatch/VCDIFF 补丁和 manifest。
 - Cloudflare KV 只缓存按 origin、下载 key version 和 revision 命名的 latest manifest 渲染结果，key 为 `manifest:{origin}:{downloadKeyVersion}:{appId}:{platform}:{channel}:{revision}`，首版 TTL 为 60 秒；未带 revision 的 channel 状态始终从 D1 读取。
 - Cloudflare Workers 提供 public/admin/ci API。
 - Cloudflare Pages 部署发布控制台前端；如 `workers.dev` 在客户端网络不可达，可部署独立 public Pages facade，只暴露 `/healthz` 和 `/api/public/*`。
@@ -21,9 +21,9 @@ _Locked via grill — by Codex + user_
 
 在任何 Cloudflare 客户端发布前，必须先修正当前 GitHub Release 行为：
 
-- 普通 push 不再创建会成为 GitHub latest 的正式 release。
+- 普通 push 到 `main` / `master` 使用 `pubspec.yaml` 版本号创建不可变且非 GitHub latest 的 GitHub Release，并准备 Cloudflare candidate；如果同版本 tag 已存在则跳过 candidate 准备，要求 bump 版本。
 - CI 普通构建只上传 workflow artifacts，或创建 draft/prerelease。
-- 只有 tag 发布或显式 `workflow_dispatch publish_release=true` 才创建正式 GitHub Release。
+- tag 发布或显式 `workflow_dispatch publish_release=true` 仍可创建正式 GitHub Release；已有正式 release 默认不可覆盖。
 - 旧客户端仍会读取 GitHub `/latest/download/ble-monitor-update.json`，因此 GitHub latest 必须只指向人工认可的 stable 构建。
 - Cloudflare fallback 永远使用 immutable tag-specific asset URL，不使用 `/latest/download`。
 - 正式 release tag 默认不可变；禁止未显式确认时覆盖已有 GitHub Release 资产，因为同 tag APK hash 漂移会让已安装客户端失去匹配的增量包。
@@ -56,7 +56,7 @@ Phase 3: Pages 发布控制台完善。
 ## Scope
 
 - 首版重点支持 Android 应用内更新。
-- Android 更新优先使用增量 tpatch。
+- Android 更新优先使用 VCDIFF 增量补丁，旧客户端继续使用 tracepatch。
 - 增量不可用、下载失败、校验失败或合成失败时，提供全量 APK fallback。
 - Windows 首版只做资产上传、后台查看和网页下载链接管理。
 - Windows 不做应用内自动更新、安装器或进程自替换。
@@ -67,9 +67,9 @@ Phase 3: Pages 发布控制台完善。
 
 1. GitHub Actions 构建成功。
 2. CI 继续创建 GitHub Release。
-3. 只有 tag 发布或显式 `workflow_dispatch publish_release=true` 才登记 Cloudflare candidate；普通 push build 不进入 D1/R2 发布控制面。
+3. 普通 push 到 `main` / `master`、tag 发布或显式 `workflow_dispatch publish_release=true` 都会准备 Cloudflare candidate；candidate 不会自动发布到客户端。
 4. Phase 1：CI 登记 approved GitHub tag asset metadata，不要求 R2 asset。
-5. Phase 2：CI 使用标准化 R2 S3 API 或 Wrangler 直传产物到 R2，并用 metadata/read-back sha256 验证对象存在、大小和哈希。
+5. Phase 2：CI 先应用 D1 migration、部署 Worker，再使用标准化 R2 S3 API 或 Wrangler 直传产物到 R2，并用 metadata/read-back sha256 验证对象存在、大小和哈希。
 6. CI 调用 Worker `/api/ci/releases` 登记元数据到 D1，登记必须按 `releaseTag`、`runId`、`commitSha` 幂等。
 7. 新版本状态为 `candidate`，不会自动发布给客户端。
 8. 管理员在 Pages 发布控制台人工发布到 `stable` 或 `beta`。
@@ -201,8 +201,9 @@ Patch 条目新增：
 
 - `downloadUrl`
 - `fallbackUrl`
+- `algorithm`
 
-客户端优先使用 patch `downloadUrl`，失败尝试 gated fallback endpoint。没有可用 patch 时使用 `fullDownloadUrl` 下载全量 APK。
+客户端优先选择支持的最优 `algorithm`，新客户端优先 VCDIFF，旧客户端继续选择 tracepatch；下载优先使用 patch `downloadUrl`，失败尝试 gated fallback endpoint。没有可用 patch 时使用 `fullDownloadUrl` 下载全量 APK。
 
 Immutable Payload 签名：
 
@@ -257,6 +258,7 @@ Public latest API 参数：
 ```text
 trace/releases/{versionCode}-{releaseTag}/android/ble-monitor-android.apk
 trace/releases/{versionCode}-{releaseTag}/android/patches/{fromVersionCode}-{oldShaPrefix}-to-{versionCode}.tpatch
+trace/releases/{versionCode}-{releaseTag}/android/patches/{fromVersionCode}-{oldShaPrefix}-to-{versionCode}.vcdiff
 trace/releases/{versionCode}-{releaseTag}/windows/ble-monitor-windows.zip
 trace/releases/{versionCode}-{releaseTag}/windows/ble-monitor-windows.exe
 trace/releases/{versionCode}-{releaseTag}/manifest/ble-monitor-update.json

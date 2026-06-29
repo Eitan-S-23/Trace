@@ -4,7 +4,7 @@ import { createHash, createPrivateKey, sign } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-const DEFAULT_CAPABILITIES = ["patch", "full", "fallback", "errorCode", "payloadSignature"];
+const DEFAULT_CAPABILITIES = ["patch", "full", "fallback", "errorCode", "payloadSignature", "vcdiff"];
 
 const options = parseArgs(process.argv.slice(2));
 const assetsDir = requiredOption(options, "assets-dir", "TRACE_RELEASE_ASSETS_DIR");
@@ -75,6 +75,7 @@ for (const patch of manifestPatches) {
   patches.push({
     fromVersionCode: integerField(patch, "fromVersionCode"),
     oldSha256: stringField(patch, "oldSha256").toLowerCase(),
+    patchFormat: patchFormatFor(patch, patchAssetName),
     patchAssetName,
     patchSha256,
     patchSizeBytes,
@@ -87,7 +88,11 @@ patches.sort((left, right) => {
   if (right.fromVersionCode !== left.fromVersionCode) {
     return right.fromVersionCode - left.fromVersionCode;
   }
-  return left.oldSha256.localeCompare(right.oldSha256);
+  const oldShaCompare = left.oldSha256.localeCompare(right.oldSha256);
+  if (oldShaCompare !== 0) return oldShaCompare;
+  const formatCompare = patchFormatPriority(left.patchFormat) - patchFormatPriority(right.patchFormat);
+  if (formatCompare !== 0) return formatCompare;
+  return left.patchAssetName.localeCompare(right.patchAssetName);
 });
 
 const securityPayload = {
@@ -262,6 +267,19 @@ function stringField(object, fieldName, defaultValue) {
 
 function integerField(object, fieldName) {
   return parseInteger(object[fieldName], fieldName);
+}
+
+function patchFormatFor(patch, patchAssetName) {
+  const raw = patch.patchFormat ?? patch.algorithm ?? patch.format;
+  const value = typeof raw === "string" ? raw.toLowerCase() : "";
+  if (value === "vcdiff" || value === "xdelta3") return "vcdiff";
+  if (value === "tracepatch" || value === "trace") return "tracepatch";
+  if (patchAssetName.endsWith(".vcdiff") || patchAssetName.endsWith(".xdelta")) return "vcdiff";
+  return "tracepatch";
+}
+
+function patchFormatPriority(value) {
+  return value === "tracepatch" ? 0 : 1;
 }
 
 function fail(message) {

@@ -273,7 +273,7 @@ jobs:
     needs:
       - android
       - windows
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release) || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
 
     steps:
       - name: Checkout repository
@@ -310,13 +310,22 @@ jobs:
           MANUAL_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
           PUBLISH_RELEASE: ${{ github.event.inputs.publish_release }}
         run: |
+          version_line="$(grep -E '^version:' pubspec.yaml | awk '{print $2}')"
+          version_name="${version_line%%+*}"
+          if [[ -z "${version_name}" || "${version_name}" == "${version_line}" ]]; then
+            echo "::error title=Release tag resolution::pubspec.yaml version must include a semantic version and +versionCode."
+            exit 1
+          fi
+          pubspec_tag="v${version_name}"
+
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             tag="${GITHUB_REF_NAME}"
           elif [[ -n "${MANUAL_RELEASE_TAG}" ]]; then
             tag="${MANUAL_RELEASE_TAG}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && ( "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == "refs/heads/master" ) ]]; then
+            tag="${pubspec_tag}"
           elif [[ "${PUBLISH_RELEASE}" == "true" ]]; then
-            echo "::error title=Release tag required::Manual formal releases must provide release_tag unless the workflow runs on a tag."
-            exit 1
+            tag="${pubspec_tag}"
           else
             short_sha="${GITHUB_SHA::7}"
             tag="build-${GITHUB_RUN_NUMBER}-${short_sha}"
@@ -332,21 +341,36 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
           REPLACE_EXISTING_RELEASE: ${{ github.event.inputs.replace_existing_release || 'false' }}
+          AUTO_RELEASE_ON_PUSH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
         run: |
           set -euo pipefail
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             if [[ "${REPLACE_EXISTING_RELEASE}" != "true" ]]; then
+              if [[ "${AUTO_RELEASE_ON_PUSH}" == "true" ]]; then
+                echo "skip_release=true" >> "$GITHUB_OUTPUT"
+                echo "::notice title=Release already exists::${RELEASE_TAG} already exists. Automatic push release preparation was skipped; bump pubspec.yaml to prepare a new Cloudflare candidate."
+                exit 0
+              fi
               echo "::error title=Release already exists::${RELEASE_TAG} already exists. Bump pubspec.yaml and use a new tag. Replacing an existing release changes APK hashes and breaks incremental updates for already-installed clients."
               exit 1
             fi
+            echo "skip_release=false" >> "$GITHUB_OUTPUT"
             echo "::warning title=Replacing existing release::${RELEASE_TAG} will have its assets replaced. This can break incremental updates for clients that installed the previous APK from this tag."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "skip_release=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install xdelta3
+        if: steps.release_guard.outputs.skip_release != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xdelta3
+
       - name: Prepare Android incremental update metadata
+        if: steps.release_guard.outputs.skip_release != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -407,10 +431,12 @@ jobs:
               python -c "import hashlib,sys; h=hashlib.sha256(); f=open(sys.argv[1], 'rb'); [h.update(c) for c in iter(lambda: f.read(1024*1024), b'')]; print(h.hexdigest())" "${previous_apk}"
             )"
             old_sha_prefix="${previous_apk_sha:0:12}"
-            patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-${old_sha_prefix}-to-${version_code}.tpatch"
-            patch_metadata="${patch_metadata_dir}/${previous_version_code}-${old_sha_prefix}.json"
+            trace_patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-${old_sha_prefix}-to-${version_code}.tpatch"
+            trace_patch_metadata="${patch_metadata_dir}/${previous_version_code}-${old_sha_prefix}-tracepatch.json"
+            vcdiff_patch_path="release-assets/ble-monitor-android-from-${previous_version_code}-${old_sha_prefix}-to-${version_code}.vcdiff"
+            vcdiff_patch_metadata="${patch_metadata_dir}/${previous_version_code}-${old_sha_prefix}-vcdiff.json"
 
-            if [[ -f "${patch_metadata}" ]]; then
+            if [[ -f "${trace_patch_metadata}" || -f "${vcdiff_patch_metadata}" ]]; then
               echo "Patch for versionCode ${previous_version_code} and APK ${old_sha_prefix} already exists; skipping duplicate."
               continue
             fi
@@ -418,10 +444,18 @@ jobs:
             python .github/scripts/create_trace_patch.py \
               "${previous_apk}" \
               "${apk_path}" \
-              "${patch_path}" \
+              "${trace_patch_path}" \
               --from-version-code "${previous_version_code}" \
               --to-version-code "${version_code}" \
-              --metadata-output "${patch_metadata}"
+              --metadata-output "${trace_patch_metadata}"
+
+            python .github/scripts/create_vcdiff_patch.py \
+              "${previous_apk}" \
+              "${apk_path}" \
+              "${vcdiff_patch_path}" \
+              --from-version-code "${previous_version_code}" \
+              --to-version-code "${version_code}" \
+              --metadata-output "${vcdiff_patch_metadata}"
           done < <(
             gh release list --exclude-drafts --exclude-pre-releases --limit 20 --json tagName \
               --jq '.[].tagName' | grep -vx "${RELEASE_TAG}" || true
@@ -460,7 +494,18 @@ jobs:
               )
               for metadata_file in metadata_files:
                   patches.append(json.loads(metadata_file.read_text(encoding="utf-8")))
-          patches.sort(key=lambda patch: (patch["fromVersionCode"], patch["oldSha256"]))
+          def patch_format_priority(patch: dict) -> int:
+              algorithm = str(patch.get("patchFormat") or patch.get("algorithm") or "tracepatch").lower()
+              return 0 if algorithm == "tracepatch" else 1
+
+          patches.sort(
+              key=lambda patch: (
+                  patch["fromVersionCode"],
+                  patch["oldSha256"],
+                  patch_format_priority(patch),
+                  patch["assetName"],
+              )
+          )
 
           manifest = {
               "schemaVersion": 1,
@@ -477,13 +522,19 @@ jobs:
           PY
 
       - name: Create or update GitHub Release
+        if: steps.release_guard.outputs.skip_release != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
           RELEASE_EXISTS: ${{ steps.release_guard.outputs.exists }}
+          AUTO_RELEASE_ON_PUSH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
         shell: bash
         run: |
+          release_flags=()
+          if [[ "${AUTO_RELEASE_ON_PUSH}" == "true" ]]; then
+            release_flags+=(--latest=false)
+          fi
           notes="Automated build from workflow run ${GITHUB_RUN_NUMBER} for commit ${GITHUB_SHA}."
 
           if [[ "${RELEASE_EXISTS}" == "true" ]]; then
@@ -497,12 +548,14 @@ jobs:
             gh release create "${RELEASE_TAG}" \
               --target "${GITHUB_SHA}" \
               --title "Trace ${RELEASE_TAG}" \
-              --notes "${notes}"
+              --notes "${notes}" \
+              "${release_flags[@]}"
           fi
 
           gh release upload "${RELEASE_TAG}" release-assets/* --clobber
 
       - name: Build Cloudflare candidate metadata
+        if: steps.release_guard.outputs.skip_release != 'true'
         env:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
           FIXED_SIGNING_CONFIGURED: ${{ needs.android.outputs.fixed_signing_configured }}
@@ -523,6 +576,7 @@ jobs:
             --allow-placeholder-signature
 
       - name: Upload Cloudflare candidate metadata artifact
+        if: steps.release_guard.outputs.skip_release != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: cloudflare-release-metadata
@@ -530,6 +584,7 @@ jobs:
           retention-days: 7
 
       - name: Check Cloudflare registration configuration
+        if: steps.release_guard.outputs.skip_release != 'true'
         id: cloudflare_config
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -548,11 +603,28 @@ jobs:
           fi
 
       - name: Install Cloudflare upload tooling
-        if: steps.cloudflare_config.outputs.enabled == 'true'
+        if: steps.release_guard.outputs.skip_release != 'true' && steps.cloudflare_config.outputs.enabled == 'true'
         run: npm ci --prefix cloudflare/update-service/worker
 
+      - name: Deploy Cloudflare update service
+        if: steps.release_guard.outputs.skip_release != 'true' && steps.cloudflare_config.outputs.enabled == 'true'
+        working-directory: cloudflare/update-service/worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TRACE_UPDATE_SERVICE_WRANGLER_ENV: ${{ vars.TRACE_UPDATE_SERVICE_WRANGLER_ENV || 'staging' }}
+          TRACE_UPDATE_SERVICE_D1_DATABASE: ${{ vars.TRACE_UPDATE_SERVICE_D1_DATABASE || 'trace-update-staging' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npx wrangler d1 migrations apply "${TRACE_UPDATE_SERVICE_D1_DATABASE}" \
+            --env "${TRACE_UPDATE_SERVICE_WRANGLER_ENV}" \
+            --remote
+          npx wrangler deploy --env "${TRACE_UPDATE_SERVICE_WRANGLER_ENV}"
+
       - name: Upload Cloudflare R2 assets
-        if: steps.cloudflare_config.outputs.enabled == 'true'
+        if: steps.release_guard.outputs.skip_release != 'true' && steps.cloudflare_config.outputs.enabled == 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -569,7 +641,7 @@ jobs:
             --output release-assets/cloudflare-release-metadata.json
 
       - name: Register Cloudflare candidate
-        if: steps.cloudflare_config.outputs.enabled == 'true'
+        if: steps.release_guard.outputs.skip_release != 'true' && steps.cloudflare_config.outputs.enabled == 'true'
         env:
           TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
           TRACE_DEPLOY_TOKEN: ${{ secrets.TRACE_DEPLOY_TOKEN }}

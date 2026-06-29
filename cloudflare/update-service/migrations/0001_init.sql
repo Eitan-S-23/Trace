@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS patches (
   asset_id TEXT NOT NULL,
   from_version_code INTEGER NOT NULL CHECK (from_version_code >= 0),
   old_sha256 TEXT NOT NULL CHECK (length(old_sha256) = 64),
+  patch_format TEXT NOT NULL DEFAULT 'tracepatch' CHECK (patch_format IN ('tracepatch', 'vcdiff')),
   patch_sha256 TEXT NOT NULL CHECK (length(patch_sha256) = 64),
   patch_size_bytes INTEGER NOT NULL CHECK (patch_size_bytes > 0),
   output_sha256 TEXT NOT NULL CHECK (length(output_sha256) = 64),
@@ -84,7 +85,7 @@ CREATE TABLE IF NOT EXISTS patches (
   FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE,
   FOREIGN KEY (to_release_id) REFERENCES releases(id) ON DELETE CASCADE,
   FOREIGN KEY (asset_id) REFERENCES release_assets(id) ON DELETE CASCADE,
-  UNIQUE (app_id, platform, to_release_id, from_version_code, old_sha256)
+  UNIQUE (app_id, platform, to_release_id, from_version_code, old_sha256, patch_format)
 );
 
 CREATE TABLE IF NOT EXISTS channels (

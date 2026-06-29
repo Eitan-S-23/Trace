@@ -203,7 +203,10 @@ async function downloadAndroidAssets(repoName, tagName, targetDir, assets) {
       fail(`Release ${tagName} is missing required Android asset ${name}.`);
     }
   }
-  const names = [...required, ...assetNames.filter((name) => name.endsWith(".tpatch"))];
+  const names = [
+    ...required,
+    ...assetNames.filter((name) => name.endsWith(".tpatch") || name.endsWith(".vcdiff"))
+  ];
   process.stdout.write(`Downloading ${names.length} Android update asset(s) from ${tagName}.\n`);
   for (const name of names) {
     await runWithRetry(

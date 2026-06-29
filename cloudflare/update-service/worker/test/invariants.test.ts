@@ -150,6 +150,100 @@ describe("Phase 1 update-service invariants", () => {
     expect(body.errorCode).toBe("INVALID_PARAMETER");
   });
 
+  it("registers and renders tracepatch and vcdiff patches for the same source APK", async () => {
+    const appId = appIdFor("patchformats");
+    const releaseTag = "v8.0.5";
+    const versionCode = 805;
+    const tracePatchName = "ble-monitor-android-from-804-bbbbbbbbbbbb-to-805.tpatch";
+    const vcdiffPatchName = "ble-monitor-android-from-804-bbbbbbbbbbbb-to-805.vcdiff";
+    const assetUrl = (fileName: string) =>
+      `https://github.com/Eitan-S-23/Trace/releases/download/${releaseTag}/${fileName}`;
+    const payload = registerPayload(appId, versionCode, releaseTag, [
+      {
+        assetType: "apk",
+        fileName: "ble-monitor-android.apk",
+        sha256: APK_SHA,
+        sizeBytes: 123456,
+        githubUrl: assetUrl("ble-monitor-android.apk")
+      },
+      {
+        assetType: "patch",
+        fileName: tracePatchName,
+        sha256: PATCH_SHA,
+        sizeBytes: 1000,
+        githubUrl: assetUrl(tracePatchName)
+      },
+      {
+        assetType: "patch",
+        fileName: vcdiffPatchName,
+        sha256: "e".repeat(64),
+        sizeBytes: 600,
+        githubUrl: assetUrl(vcdiffPatchName)
+      }
+    ]);
+    payload.capabilities = ["patch", "full", "payloadSignature", "vcdiff"];
+    payload.patches = [
+      {
+        fromVersionCode: 804,
+        oldSha256: OLD_SHA,
+        patchFormat: "tracepatch",
+        patchAssetName: tracePatchName,
+        patchSha256: PATCH_SHA,
+        patchSizeBytes: 1000,
+        outputSha256: OUTPUT_SHA,
+        outputSizeBytes: 123456
+      },
+      {
+        fromVersionCode: 804,
+        oldSha256: OLD_SHA,
+        algorithm: "vcdiff",
+        patchAssetName: vcdiffPatchName,
+        patchSha256: "e".repeat(64),
+        patchSizeBytes: 600,
+        outputSha256: OUTPUT_SHA,
+        outputSizeBytes: 123456
+      }
+    ];
+
+    const response = await SELF.fetch("http://example.com/api/ci/releases", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-deploy-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    const body = await response.json<{ releaseId: string }>();
+    expect(response.status).toBe(201);
+
+    await publishRelease(env, {
+      appId,
+      platform: "android",
+      channel: "stable",
+      releaseId: body.releaseId,
+      expectedRevision: 0,
+      rollback: false,
+      actor: "tester@example.com",
+      actorType: "test",
+      requestId: `${appId}-publish`
+    });
+
+    const patchRows = await env.DB.prepare(
+      "SELECT patch_format, patch_size_bytes FROM patches WHERE to_release_id = ? ORDER BY patch_format"
+    )
+      .bind(body.releaseId)
+      .all<{ patch_format: string; patch_size_bytes: number }>();
+    expect(patchRows.results).toEqual([
+      { patch_format: "tracepatch", patch_size_bytes: 1000 },
+      { patch_format: "vcdiff", patch_size_bytes: 600 }
+    ]);
+
+    const latest = await latestV2(appId);
+    const patches = latest.patches as Array<Record<string, unknown>>;
+    expect(patches.map((patch) => patch.algorithm)).toEqual(["tracepatch", "vcdiff"]);
+    expect(patches.map((patch) => patch.assetName)).toEqual([tracePatchName, vcdiffPatchName]);
+  });
+
   it("allows R2 backfill for an existing release without changing release identity", async () => {
     const appId = appIdFor("r2backfill");
     const releaseTag = "v8.1.0";
@@ -571,12 +665,13 @@ async function seedPatch(appId: string, releaseId: string): Promise<void> {
           asset_id,
           from_version_code,
           old_sha256,
+          patch_format,
           patch_sha256,
           patch_size_bytes,
           output_sha256,
           output_size_bytes
         )
-        VALUES (?, ?, 'android', ?, ?, 100, ?, ?, 1000, ?, 123456)
+        VALUES (?, ?, 'android', ?, ?, 100, ?, 'tracepatch', ?, 1000, ?, 123456)
       `
     ).bind(`patch_${releaseId}`, appId, releaseId, assetId, OLD_SHA, PATCH_SHA, OUTPUT_SHA)
   ]);
