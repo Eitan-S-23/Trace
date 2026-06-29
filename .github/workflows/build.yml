@@ -607,7 +607,7 @@ jobs:
         run: npm ci --prefix cloudflare/update-service/worker
 
       - name: Deploy Cloudflare update service
-        if: steps.release_guard.outputs.skip_release != 'true' && steps.cloudflare_config.outputs.enabled == 'true'
+        if: steps.release_guard.outputs.skip_release != 'true' && steps.cloudflare_config.outputs.enabled == 'true' && vars.TRACE_UPDATE_SERVICE_AUTO_DEPLOY == 'true'
         working-directory: cloudflare/update-service/worker
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

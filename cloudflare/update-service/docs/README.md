@@ -80,7 +80,7 @@ cloudflare/update-service/scripts/register-release.mjs
 
 Phase 2 candidate registration uploads APK/manifest/patch assets to R2, verifies them by read-back SHA-256, writes `r2Key` and `r2Verified: true` into the metadata, and registers the candidate in D1. It does not publish the candidate to `stable` or `beta`.
 
-Pushes to `main` / `master` now derive the release tag from `pubspec.yaml`, create the GitHub Release with `--latest=false`, apply pending staging D1 migrations, deploy the update Worker, upload release assets to R2, and register a Cloudflare candidate automatically. If the derived tag already exists, the automatic candidate preparation is skipped; bump `pubspec.yaml` to prepare a new candidate.
+Pushes to `main` / `master` now derive the release tag from `pubspec.yaml`, create the GitHub Release with `--latest=false`, upload release assets to R2, and register a Cloudflare candidate automatically. If `TRACE_UPDATE_SERVICE_AUTO_DEPLOY=true` is set as a repository variable and the Cloudflare token has D1/Workers permissions, the workflow first applies pending staging D1 migrations and deploys the update Worker. If the derived tag already exists, the automatic candidate preparation is skipped; bump `pubspec.yaml` to prepare a new candidate.
 
 Android release metadata contains both legacy `tracepatch` (`.tpatch`) and standard VCDIFF (`.vcdiff`) patches when previous APKs are available. New clients advertise `vcdiff` and prefer the smaller VCDIFF patch; older clients continue to consume `tracepatch` because the Worker renders tracepatch first for the same source APK.
 

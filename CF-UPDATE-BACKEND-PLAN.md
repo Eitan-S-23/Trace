@@ -69,7 +69,7 @@ Phase 3: Pages 发布控制台完善。
 2. CI 继续创建 GitHub Release。
 3. 普通 push 到 `main` / `master`、tag 发布或显式 `workflow_dispatch publish_release=true` 都会准备 Cloudflare candidate；candidate 不会自动发布到客户端。
 4. Phase 1：CI 登记 approved GitHub tag asset metadata，不要求 R2 asset。
-5. Phase 2：CI 先应用 D1 migration、部署 Worker，再使用标准化 R2 S3 API 或 Wrangler 直传产物到 R2，并用 metadata/read-back sha256 验证对象存在、大小和哈希。
+5. Phase 2：CI 使用标准化 R2 S3 API 或 Wrangler 直传产物到 R2，并用 metadata/read-back sha256 验证对象存在、大小和哈希；如 `TRACE_UPDATE_SERVICE_AUTO_DEPLOY=true` 且 Cloudflare token 具备 D1/Workers 权限，CI 会先应用 D1 migration 并部署 Worker，否则需在发布链路变更时提前手动部署。
 6. CI 调用 Worker `/api/ci/releases` 登记元数据到 D1，登记必须按 `releaseTag`、`runId`、`commitSha` 幂等。
 7. 新版本状态为 `candidate`，不会自动发布给客户端。
 8. 管理员在 Pages 发布控制台人工发布到 `stable` 或 `beta`。
