@@ -46,37 +46,68 @@ function Quote-ProcessArgument([string]$Value) {
   return '"' + ($Value -replace '"', '\"') + '"'
 }
 
+function IsTransientGhFailure([string]$ErrorText) {
+  if (IsBlank $ErrorText) {
+    return $false
+  }
+  return $ErrorText -match "(?i)(timeout|timed out|keyring|connection reset|temporarily unavailable|TLS handshake timeout|i/o timeout|EOF)"
+}
+
+function Get-GhFailureHint([string]$ErrorText) {
+  if ($ErrorText -match "(?i)(keyring|Timeout trying to log in)") {
+    return @"
+
+GitHub CLI could not read the saved token from the Windows keyring.
+Repair the gh login, or set GH_TOKEN in this PowerShell session to bypass the keyring:
+  gh auth status --hostname github.com --active
+  gh auth login --hostname github.com --web
+"@
+  }
+  return ""
+}
+
 function Invoke-GhCapture([string[]]$Arguments, [string]$StandardInput = $null) {
   $gh = Get-Command gh -ErrorAction SilentlyContinue
   if (-not $gh) {
     Fail "GitHub CLI 'gh' is required. Install it and run 'gh auth login'."
   }
 
-  $process = [System.Diagnostics.Process]::new()
-  $process.StartInfo.FileName = $gh.Source
-  $process.StartInfo.Arguments = ($Arguments | ForEach-Object { Quote-ProcessArgument $_ }) -join " "
-  $process.StartInfo.RedirectStandardOutput = $true
-  $process.StartInfo.RedirectStandardError = $true
-  $process.StartInfo.RedirectStandardInput = $null -ne $StandardInput
-  $process.StartInfo.UseShellExecute = $false
+  $safeCommand = "gh " + ($Arguments -join " ")
+  $maxAttempts = 3
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo.FileName = $gh.Source
+    $process.StartInfo.Arguments = ($Arguments | ForEach-Object { Quote-ProcessArgument $_ }) -join " "
+    $process.StartInfo.RedirectStandardOutput = $true
+    $process.StartInfo.RedirectStandardError = $true
+    $process.StartInfo.RedirectStandardInput = $null -ne $StandardInput
+    $process.StartInfo.UseShellExecute = $false
 
-  [void]$process.Start()
-  if ($null -ne $StandardInput) {
-    $process.StandardInput.Write($StandardInput)
-    if (-not $StandardInput.EndsWith("`n")) {
-      $process.StandardInput.WriteLine()
+    [void]$process.Start()
+    if ($null -ne $StandardInput) {
+      $process.StandardInput.Write($StandardInput)
+      if (-not $StandardInput.EndsWith("`n")) {
+        $process.StandardInput.WriteLine()
+      }
+      $process.StandardInput.Close()
     }
-    $process.StandardInput.Close()
-  }
-  $stdout = $process.StandardOutput.ReadToEnd()
-  $stderr = $process.StandardError.ReadToEnd()
-  $process.WaitForExit()
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
 
-  if ($process.ExitCode -ne 0) {
-    $safeCommand = "gh " + ($Arguments -join " ")
-    Fail "$safeCommand failed with exit code $($process.ExitCode). $stderr"
+    if ($process.ExitCode -eq 0) {
+      return $stdout
+    }
+
+    if ($attempt -lt $maxAttempts -and (IsTransientGhFailure $stderr)) {
+      Write-Warning "$safeCommand failed with a transient GitHub CLI error. Retrying in 2 seconds ($attempt/$maxAttempts)."
+      Start-Sleep -Seconds 2
+      continue
+    }
+
+    $hint = Get-GhFailureHint $stderr
+    Fail "$safeCommand failed with exit code $($process.ExitCode). $stderr$hint"
   }
-  return $stdout
 }
 
 function Get-GhNames([string[]]$Arguments) {
@@ -191,7 +222,7 @@ if ($configObject.requirePayloadSigning -eq $true) {
   AddIfMissing $requiredVariables "TRACE_UPDATE_PAYLOAD_KEY_VERSION"
 }
 
-Invoke-GhCapture @("auth", "status", "--hostname", "github.com") | Out-Null
+Invoke-GhCapture @("auth", "status", "--hostname", "github.com", "--active") | Out-Null
 $existingSecrets = Get-GhNames @("secret", "list", "--repo", $repo, "--app", "actions", "--json", "name")
 $existingVariables = Get-GhNames @("variable", "list", "--repo", $repo, "--json", "name")
 
