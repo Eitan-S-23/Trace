@@ -5,6 +5,11 @@ import json
 import subprocess
 from pathlib import Path
 
+VCDIFF_MAGIC = b"\xd6\xc3\xc4\x00"
+VCD_SECONDARY = 0x01
+VCD_CODETABLE = 0x02
+VCD_APPHEADER = 0x04
+
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -12,6 +17,66 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _read_vcdiff_varint(data: bytes, offset: int) -> tuple[int, int]:
+    value = 0
+    while True:
+        if offset >= len(data):
+            raise ValueError("Truncated VCDIFF variable-length integer")
+        byte = data[offset]
+        offset += 1
+        value = (value << 7) | (byte & 0x7F)
+        if byte < 0x80:
+            return value, offset
+
+
+def _skip_vcdiff_block(data: bytes, offset: int) -> int:
+    length, offset = _read_vcdiff_varint(data, offset)
+    end = offset + length
+    if end > len(data):
+        raise ValueError("Truncated VCDIFF header block")
+    return end
+
+
+def strip_vcdiff_app_header(path: Path) -> None:
+    data = path.read_bytes()
+    if len(data) < 5 or data[:4] != VCDIFF_MAGIC:
+        raise ValueError(f"{path} is not a VCDIFF file")
+
+    header_indicator = data[4]
+    if header_indicator & ~(VCD_SECONDARY | VCD_CODETABLE | VCD_APPHEADER):
+        raise ValueError(
+            f"{path} has unsupported VCDIFF header flags: 0x{header_indicator:02x}"
+        )
+    if not (header_indicator & VCD_APPHEADER):
+        return
+
+    offset = 5
+    if header_indicator & VCD_SECONDARY:
+        offset += 1
+        if offset > len(data):
+            raise ValueError("Truncated VCDIFF secondary compressor id")
+    if header_indicator & VCD_CODETABLE:
+        offset = _skip_vcdiff_block(data, offset)
+
+    app_header_start = offset
+    app_header_end = _skip_vcdiff_block(data, offset)
+
+    stripped = bytearray()
+    stripped.extend(data[:4])
+    stripped.append(header_indicator & ~VCD_APPHEADER)
+    stripped.extend(data[5:app_header_start])
+    stripped.extend(data[app_header_end:])
+    path.write_bytes(stripped)
+
+
+def assert_vcdiff_without_app_header(path: Path) -> None:
+    data = path.read_bytes()
+    if len(data) < 5 or data[:4] != VCDIFF_MAGIC:
+        raise ValueError(f"{path} is not a VCDIFF file")
+    if data[4] & VCD_APPHEADER:
+        raise ValueError("VCDIFF patch still contains VCD_APPHEADER")
 
 
 def create_patch(
@@ -35,6 +100,11 @@ def create_patch(
         ],
         check=True,
     )
+    # xdelta3's CLI writes a file-name application header by default.
+    # The Flutter vcdiff_decoder package rejects VCD_APPHEADER, so keep
+    # generated patches within the decoder-supported RFC3284 subset.
+    strip_vcdiff_app_header(output_path)
+    assert_vcdiff_without_app_header(output_path)
 
     return {
         "assetName": output_path.name,

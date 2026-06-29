@@ -397,7 +397,7 @@ jobs:
           mkdir -p "${patch_metadata_dir}"
           release_count=0
           patch_source_count=0
-          max_patch_sources="${TRACE_MAX_INCREMENTAL_SOURCE_RELEASES:-1}"
+          max_patch_sources="${TRACE_MAX_INCREMENTAL_SOURCE_RELEASES:-2}"
           vcdiff_min_source_version_code="${TRACE_VCDIFF_MIN_SOURCE_VERSION_CODE:-37}"
 
           while IFS= read -r previous_tag; do
