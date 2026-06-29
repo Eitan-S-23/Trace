@@ -430,7 +430,7 @@ async function seedRelease(
   await seedApp(appId);
   const platform = options.platform ?? "android";
   const releaseId = `rel_${appId}_${platform}_${releaseTag.replaceAll(".", "_")}`;
-  const assetId = `asset_${releaseId}_apk`;
+  const assetId = `asset_${releaseId}_apk_ble_monitor_android_apk`;
   const payload: SecurityPayload = {
     appId,
     platform,
