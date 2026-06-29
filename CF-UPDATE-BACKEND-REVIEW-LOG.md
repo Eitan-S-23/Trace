@@ -517,3 +517,37 @@ Validation recorded:
 - The full APK primary URL returned `BACKEND_UNAVAILABLE` after the unsafe R2 APK state was cleared.
 - The full APK fallback URL returned `302` to a tag-specific GitHub Release URL under `/releases/download/v1.0.6/...` and did not use `/latest/download`.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 follow-up — v1.0.7 Linux CI R2 upload verification — 2026-06-29
+
+Status: GitHub Actions Linux R2 upload path verified; staging `stable` and `beta` now point to `v1.0.7`.
+
+Implemented:
+
+- Configured the previously missing GitHub Actions Cloudflare secrets and variables with `configure-github-actions-secrets.ps1 -Yes`.
+- Fixed `upload-r2-assets.mjs` to resolve metadata, asset, output, and Wrangler cwd paths to absolute paths before invoking Wrangler from `cloudflare/update-service/worker`.
+- Fixed `configure-github-actions-secrets.ps1` to write stdin secrets with UTF-8 no BOM and normalize leading BOM characters from config values before upload.
+- Rewrote the affected GitHub Actions secrets after the BOM fix. The previous `CLOUDFLARE_API_TOKEN` secret failed Wrangler because it contained `U+FEFF`.
+- Re-ran the formal `build.yml` workflow for `v1.0.7`; the successful run uploaded APK, manifest, and seven patch assets to R2, read them back, verified SHA-256, and registered the Cloudflare candidate.
+- Published `v1.0.7` to Android `stable` and `beta` with the staging publish wrapper using `-SkipBackfill`, because CI had already uploaded and verified every active Android asset.
+
+Residual risks and follow-up:
+
+- The first failed `v1.0.7` workflow created the GitHub tag at `6771b5e`; the successful D1 registration came from workflow run `28377025733` at `cce70a3`. The app artifact version remains `1.0.7+33`; only CI/operator scripts changed between those commits.
+- Local GitHub CLI/API calls still intermittently hit keyring/TLS/EOF timeouts on this Windows host; the scripts now retry transient `gh` failures, but operator commands may still need manual retry.
+- R2 retention cleanup, restore-from-GitHub, backup scheduling, manifest preview polish, and lightweight stats remain Phase 3+.
+
+Validation recorded:
+
+- `configure-github-actions-secrets.ps1 -DryRun` passed after the BOM/encoding fix.
+- `configure-github-actions-secrets.ps1 -Yes` completed and verified required GitHub secret and variable names by name.
+- `node --check cloudflare/update-service/scripts/upload-r2-assets.mjs` passed.
+- `git diff --check` passed for both script fixes with only line-ending warnings.
+- GitHub Actions run `28377025733` completed successfully. In the `Create GitHub Release` job, `Upload Cloudflare R2 assets` and `Register Cloudflare candidate` both succeeded.
+- D1 confirmed `rel_trace_android_v1_0_7` / `v1.0.7` / versionCode `33` exists as `candidate` with commit `cce70a38491487139b353f4722b921e39edcbdb4` and run id `28377025733`.
+- D1 confirmed APK, manifest, and seven patch assets for `rel_trace_android_v1_0_7` all have `r2_state = available` and present `r2_key` values.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.7 -Channels stable,beta -SkipBackfill -DryRun` printed the no-write plan.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.7 -Channels stable,beta -SkipBackfill -Yes` published `stable` revision `3` and `beta` revision `4`.
+- The staging publish wrapper verified latest manifests for both channels and verified the `31 -> 33` primary patch download source is R2.
+- D1 audit logs recorded `register_candidate` for `rel_trace_android_v1_0_7` and system `publish` actions for both Android channels.
+- Local Flutter/Gradle build/package commands were not run.

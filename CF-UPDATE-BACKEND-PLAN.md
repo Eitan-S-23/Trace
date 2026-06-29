@@ -710,3 +710,28 @@ Validation:
 - A primary signed patch download returned HTTP `200`, `X-Trace-Asset-Source: r2`, `Content-Length: 513666`, and immutable cache headers.
 - The matching fallback URL returned HTTP `302` to `https://github.com/Eitan-S-23/Trace/releases/download/v1.0.5/...`; no `/latest/download` fallback was introduced.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 follow-up — v1.0.7 Linux CI R2 upload verification on 2026-06-29
+
+Implemented:
+
+- Configured the GitHub Actions secrets and variables required for formal Cloudflare candidate registration: staging Worker URL, deploy token, Cloudflare account/token, R2 bucket, and payload key version.
+- Fixed `upload-r2-assets.mjs` so Wrangler receives absolute asset paths when it runs from `cloudflare/update-service/worker` in CI.
+- Fixed `configure-github-actions-secrets.ps1` so secret values written through stdin use UTF-8 without a BOM and config values with a leading BOM are normalized before upload.
+- Re-ran the formal `build.yml` release workflow for `v1.0.7`; Linux CI uploaded the APK, manifest, and seven Android patch assets to R2, read-back verified them, and registered `rel_trace_android_v1_0_7` in staging D1.
+- Published `v1.0.7` to Android `stable` and `beta` through the staging wrapper with `-SkipBackfill` after confirming all Android assets were already R2 available.
+
+Remaining risks:
+
+- The first failed `v1.0.7` workflow created the GitHub tag at `6771b5e`; the successful D1 registration came from workflow run `28377025733` at `cce70a3`. The app version/artifacts remain `1.0.7+33`; the later commits only fixed CI/operator scripts.
+- R2 retention cleanup, restore-from-GitHub workflow, backup scheduling, richer manifest preview, and lightweight statistics remain Phase 3+ work.
+
+Validation:
+
+- GitHub Actions run `28377025733` completed successfully with `Upload Cloudflare R2 assets` and `Register Cloudflare candidate` both successful.
+- D1 confirmed `rel_trace_android_v1_0_7` / `v1.0.7` / versionCode `33` exists as a `candidate` with commit `cce70a38491487139b353f4722b921e39edcbdb4` and run id `28377025733`.
+- D1 confirmed the APK, manifest, and seven patch assets for `rel_trace_android_v1_0_7` all have `r2_state = available` and present `r2_key` values.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.7 -Channels stable,beta -SkipBackfill -Yes` published `stable` revision `3` and `beta` revision `4`.
+- The staging wrapper verified both public latest endpoints return `v1.0.7` and that the `31 -> 33` primary patch download is served from R2.
+- D1 audit logs recorded the CI `register_candidate` and system channel publish operations.
+- Local Flutter/Gradle build/package commands were not run.
