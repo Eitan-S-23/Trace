@@ -25,13 +25,24 @@ function IsBlank($Value) {
   return $null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)
 }
 
+function NormalizeConfigValue($Value) {
+  if ($null -eq $Value) {
+    return ""
+  }
+  $text = [string]$Value
+  if ($text.Length -gt 0 -and [int][char]$text[0] -eq 0xFEFF) {
+    return $text.Substring(1)
+  }
+  return $text
+}
+
 function ObjectToHashtable($Object) {
   $map = [ordered]@{}
   if ($null -eq $Object) {
     return $map
   }
   foreach ($property in $Object.PSObject.Properties) {
-    $map[$property.Name] = [string]$property.Value
+    $map[$property.Name] = NormalizeConfigValue $property.Value
   }
   return $map
 }
@@ -81,6 +92,9 @@ function Invoke-GhCapture([string[]]$Arguments, [string]$StandardInput = $null) 
     $process.StartInfo.RedirectStandardOutput = $true
     $process.StartInfo.RedirectStandardError = $true
     $process.StartInfo.RedirectStandardInput = $null -ne $StandardInput
+    if ($null -ne $StandardInput) {
+      $process.StartInfo.StandardInputEncoding = [System.Text.UTF8Encoding]::new($false)
+    }
     $process.StartInfo.UseShellExecute = $false
 
     [void]$process.Start()
