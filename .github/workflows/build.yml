@@ -459,7 +459,7 @@ jobs:
           notes="Automated build from workflow run ${GITHUB_RUN_NUMBER} for commit ${GITHUB_SHA}."
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release edit "${RELEASE_TAG}" --notes "${notes}"
+            gh release edit "${RELEASE_TAG}" --target "${GITHUB_SHA}" --notes "${notes}"
           else
             gh release create "${RELEASE_TAG}" \
               --target "${GITHUB_SHA}" \
