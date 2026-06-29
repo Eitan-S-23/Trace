@@ -8,11 +8,11 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 
 const options = parseArgs(process.argv.slice(2));
-const metadataPath = requiredOption(options, "metadata", "TRACE_RELEASE_METADATA_JSON");
-const assetsDir = requiredOption(options, "assets-dir", "TRACE_RELEASE_ASSETS_DIR");
+const metadataPath = path.resolve(requiredOption(options, "metadata", "TRACE_RELEASE_METADATA_JSON"));
+const assetsDir = path.resolve(requiredOption(options, "assets-dir", "TRACE_RELEASE_ASSETS_DIR"));
 const bucket = requiredOption(options, "bucket", "TRACE_R2_BUCKET");
-const outputPath = options.output ?? metadataPath;
-const wranglerCwd = options["wrangler-cwd"] ?? "cloudflare/update-service/worker";
+const outputPath = path.resolve(options.output ?? metadataPath);
+const wranglerCwd = path.resolve(options["wrangler-cwd"] ?? "cloudflare/update-service/worker");
 const wranglerEnv = options.env ?? "";
 const dryRun = parseBoolean(options["dry-run"]);
 const skipReadback = parseBoolean(options["skip-readback"]);
@@ -98,7 +98,7 @@ async function wrangler(args) {
     finalArgs.push("--env", wranglerEnv);
   }
   await run(process.execPath, finalArgs, {
-    cwd: path.resolve(wranglerCwd)
+    cwd: wranglerCwd
   });
 }
 
@@ -120,7 +120,7 @@ async function wranglerWithRetry(args, label) {
 }
 
 function wranglerPath() {
-  const entry = path.join(path.resolve(wranglerCwd), "node_modules", "wrangler", "bin", "wrangler.js");
+  const entry = path.join(wranglerCwd, "node_modules", "wrangler", "bin", "wrangler.js");
   if (!existsSync(entry)) {
     fail(`Wrangler is not installed at ${entry}. Run npm ci in ${wranglerCwd} first.`);
   }
