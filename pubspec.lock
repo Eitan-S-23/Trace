@@ -832,10 +832,9 @@ packages:
   vcdiff_decoder:
     dependency: "direct main"
     description:
-      name: vcdiff_decoder
-      sha256: "870e61be7e1b9d7dd6036e6b72af5760e5ff1861efa01cd0d512c65f4403b14e"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/vcdiff_decoder"
+      relative: true
+    source: path
     version: "0.1.0"
   vibration:
     dependency: "direct main"

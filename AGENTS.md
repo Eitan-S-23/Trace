@@ -23,4 +23,5 @@ The update pipeline prepares Cloudflare release candidates automatically, but it
 - If the derived tag already exists, automatic candidate preparation is skipped. Do not force-replace or re-upload the same tag unless the user explicitly asks for a staging-only replacement; same-tag APK hash drift breaks incremental updates for installed clients.
 - A registered candidate is not visible to clients until an operator publishes it to `stable` or `beta` through the Access-protected admin UI or the staging publish wrapper.
 - Keep `TRACE_UPDATE_SERVICE_URL` as the Worker URL for CI `/api/ci/releases`; keep `TRACE_PUBLIC_UPDATE_SERVICE_URL` as the Pages URL compiled into APKs for public update checks.
+- VCDIFF patches must only be generated for source clients with versionCode `41` or newer. Earlier clients contain the upstream `vcdiff_decoder` address-cache bug and must use one full APK transition before receiving VCDIFF again.
 - Do not use local Flutter/Gradle builds to verify release artifacts. Inspect or trigger GitHub Actions instead.
