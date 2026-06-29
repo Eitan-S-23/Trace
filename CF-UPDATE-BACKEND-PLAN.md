@@ -203,7 +203,7 @@ Patch 条目新增：
 - `fallbackUrl`
 - `algorithm`
 
-客户端优先选择支持的最优 `algorithm`，新客户端优先 VCDIFF，旧客户端继续选择 tracepatch；下载优先使用 patch `downloadUrl`，失败尝试 gated fallback endpoint。没有可用 patch 时使用 `fullDownloadUrl` 下载全量 APK。
+客户端优先选择支持的最优 `algorithm`，新客户端优先 VCDIFF；`1.0.10` 及更旧客户端不再接收 legacy tracepatch，直接使用 `fullDownloadUrl` 下载全量 APK 过渡。patch 下载优先使用 `downloadUrl`，失败尝试 gated fallback endpoint。
 
 Immutable Payload 签名：
 
