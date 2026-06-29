@@ -489,10 +489,37 @@ jobs:
             --output release-assets/cloudflare-release-metadata.json \
             --allow-placeholder-signature
 
+      - name: Upload Cloudflare candidate metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-release-metadata
+          path: release-assets/cloudflare-release-metadata.json
+          retention-days: 7
+
+      - name: Check Cloudflare registration configuration
+        id: cloudflare_config
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
+          TRACE_DEPLOY_TOKEN: ${{ secrets.TRACE_DEPLOY_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" && -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${TRACE_UPDATE_SERVICE_URL:-}" && -n "${TRACE_DEPLOY_TOKEN:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Cloudflare registration skipped::Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, TRACE_UPDATE_SERVICE_URL, and TRACE_DEPLOY_TOKEN repository secrets to upload R2 assets and register the candidate from CI."
+          fi
+
       - name: Install Cloudflare upload tooling
+        if: steps.cloudflare_config.outputs.enabled == 'true'
         run: npm ci --prefix cloudflare/update-service/worker
 
       - name: Upload Cloudflare R2 assets
+        if: steps.cloudflare_config.outputs.enabled == 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -500,11 +527,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          if [[ -z "${CLOUDFLARE_ACCOUNT_ID:-}" || -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
-            echo "::error title=Cloudflare R2 upload::CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN secrets are required for Phase 2 R2 distribution."
-            exit 1
-          fi
 
           node cloudflare/update-service/scripts/upload-r2-assets.mjs \
             --assets-dir release-assets \
@@ -514,6 +536,7 @@ jobs:
             --output release-assets/cloudflare-release-metadata.json
 
       - name: Register Cloudflare candidate
+        if: steps.cloudflare_config.outputs.enabled == 'true'
         env:
           TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
           TRACE_DEPLOY_TOKEN: ${{ secrets.TRACE_DEPLOY_TOKEN }}
