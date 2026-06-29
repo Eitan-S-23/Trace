@@ -438,3 +438,82 @@ Validation recorded:
 - A signed primary patch download returned `200`, `X-Trace-Asset-Source: r2`, `Content-Length: 513666`, and immutable cache headers.
 - The matching fallback URL returned `302` to `/releases/download/v1.0.5/...` and did not use `/latest/download`.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 follow-up — one-command staging publish automation — 2026-06-29
+
+Status: implemented locally; dry-run verified.
+
+Implemented:
+
+- Added `cloudflare/update-service/scripts/publish-staging-release.ps1` and `publish-staging-release.mjs` as a staging-only operator wrapper.
+- The wrapper chains existing GitHub Release asset validation, R2 upload/read-back verification, `/api/ci/releases` R2 backfill registration, D1 channel CAS publish, public latest manifest verification, primary signed patch download verification, and gated GitHub fallback redirect verification.
+- The wrapper refuses non-staging D1 targets by default and does not run local Flutter, Gradle, Dart, Windows, or packaging builds.
+- The wrapper requires all active Android assets to be R2 `available` before publishing unless the operator explicitly passes `-AllowPartialR2` for temporary staging diagnostics.
+- The registration step uses Node fetch first and falls back to PowerShell `Invoke-RestMethod` on Windows without printing the deploy token, matching the local proxy behavior observed during manual R2 backfill.
+- Updated staging docs and the update-service README with the one-command release flow and safety notes.
+
+Residual risks and follow-up:
+
+- Production release automation still requires GitHub Actions secrets `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; this wrapper is not a substitute for CI R2 upload in formal releases.
+- The wrapper uses direct Wrangler D1 CAS updates for staging operator convenience. Production admin mutation should continue to use the Access-protected Pages facade or an equivalent protected same-origin path.
+- The full end-to-end non-dry-run path still depends on Cloudflare/GitHub network stability for large APK and patch downloads/uploads.
+
+Validation recorded:
+
+- `node --check cloudflare/update-service/scripts/publish-staging-release.mjs` passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File .\cloudflare\update-service\scripts\publish-staging-release.ps1 -ReleaseTag v1.0.6 -Channels stable,beta -DryRun` passed and performed no writes.
+- Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 follow-up — GitHub Actions secret configuration wrapper — 2026-06-29
+
+Status: implemented locally; pending operator-filled local config.
+
+Implemented:
+
+- Added `cloudflare/update-service/scripts/configure-github-actions-secrets.ps1`, which reads a local JSON config and writes repository-level GitHub Actions secrets and variables with `gh secret set` / `gh variable set`.
+- Added `cloudflare/update-service/github-actions-secrets.staging.example.json` as the fill-in template for staging configuration.
+- Added `.gitignore` coverage for `cloudflare/update-service/.github-actions-secrets*.local.json`, so real Cloudflare API tokens, deploy tokens, signing secrets, and payload signing keys are not committed.
+- The wrapper can read `TRACE_UPDATE_SERVICE_URL`, `TRACE_DEPLOY_TOKEN`, and `TRACE_R2_BUCKET` from `.bootstrap/staging-summary.json` when configured.
+- Blank local config values preserve already configured GitHub secret/variable names; if a required name is neither filled locally nor present in GitHub, the wrapper fails before writing.
+- Secret values are passed to `gh secret set` through stdin and are not printed.
+
+Residual risks and follow-up:
+
+- GitHub does not allow reading secret values back, so the wrapper verifies presence by name only. Incorrect secret values still require a GitHub Actions run to detect.
+- The operator must fill `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; these are not available from the bootstrap summary.
+- Payload signing keys should be generated once and kept stable for client compatibility.
+
+Validation recorded:
+
+- PowerShell parser validation passed for `cloudflare/update-service/scripts/configure-github-actions-secrets.ps1`.
+- `configure-github-actions-secrets.ps1 -Config cloudflare/update-service/github-actions-secrets.staging.example.json -DryRun` correctly performed no writes and failed closed on the unfilled example config, reporting missing `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
+- Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 follow-up — v1.0.6 staging update verification — 2026-06-29
+
+Status: staging channel published and verified for the current installed `1.0.5 (31)` phone path.
+
+Implemented:
+
+- The GitHub Actions formal release run for `v1.0.6` succeeded and produced signed Cloudflare release metadata for versionCode `32`.
+- The `v1.0.6` candidate was registered in staging D1 as `rel_trace_android_v1_0_6`.
+- Android `stable` and `beta` channels now point to `rel_trace_android_v1_0_6`.
+- The `31 -> 32` incremental patch and one small `30 -> 32` patch were uploaded to R2, read-back verified, and registered as `r2_state = available`.
+- The `v1.0.6` manifest asset was also uploaded to R2 and registered as available.
+- A corrupted/mismatched R2 APK object created during a failed Wrangler large-object upload was deleted, and the APK asset row was restored to `r2_state = not_uploaded` with an audit log entry. This prevents clients from receiving a bad full APK from the R2 primary endpoint.
+
+Residual risks and follow-up:
+
+- Large APK upload from this Windows host through Wrangler remains unstable. Until CI has `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` configured and the Linux GitHub Actions R2 upload path is verified, the `v1.0.6` full APK primary URL intentionally fails closed and full APK fallback goes through the Worker-gated immutable GitHub Release URL.
+- Only the current `1.0.5 (31) -> 1.0.6 (32)` phone path is fully R2-primary verified. Older installed APK hashes may receive large patches that are still GitHub fallback-only.
+- `publish-staging-release.ps1 -AllowPartialR2` remains a staging diagnostic escape hatch only and must not be used for normal releases.
+
+Validation recorded:
+
+- D1 confirmed `stable` and `beta` point to `rel_trace_android_v1_0_6` / `v1.0.6` / versionCode `32`.
+- D1 confirmed `ble-monitor-android-from-31-11ae0ed6a0fa-to-32.tpatch` has `r2_state = available`.
+- Public latest for Android `stable` from versionCode `31` returned `v1.0.6`, schema v2 payload signature metadata, and the `31 -> 32` patch.
+- The signed `31 -> 32` primary patch URL returned `200`, `X-Trace-Asset-Source: r2`, the expected content length, and a SHA-256 match.
+- The full APK primary URL returned `BACKEND_UNAVAILABLE` after the unsafe R2 APK state was cleared.
+- The full APK fallback URL returned `302` to a tag-specific GitHub Release URL under `/releases/download/v1.0.6/...` and did not use `/latest/download`.
+- Local Flutter/Gradle build/package commands were not run.

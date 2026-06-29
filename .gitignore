@@ -38,6 +38,7 @@ lib/generated_plugin_registrant.dart
 node_modules/
 **/node_modules/
 cloudflare/update-service/.bootstrap/
+cloudflare/update-service/.github-actions-secrets*.local.json
 
 # Symbolication related
 app.*.symbols

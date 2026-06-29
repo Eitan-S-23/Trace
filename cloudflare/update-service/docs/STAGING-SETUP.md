@@ -180,22 +180,53 @@ Expected secret names:
 
 ## Step 6: GitHub Secrets For CI Registration
 
-After bootstrap, add these repository secrets in GitHub:
+After bootstrap, configure GitHub Actions secrets and variables with the local config script. First copy the example config:
+
+```powershell
+Copy-Item `
+  .\cloudflare\update-service\github-actions-secrets.staging.example.json `
+  .\cloudflare\update-service\.github-actions-secrets.staging.local.json
+```
+
+Edit `.github-actions-secrets.staging.local.json` and fill the blank values. The local file is ignored by git. Blank values mean "keep the value already configured in GitHub"; if GitHub does not already have that name, the script fails before writing.
+
+The script can read these values from `.bootstrap/staging-summary.json` when `useBootstrapSummary` is `true`, so they normally do not need to be pasted manually:
 
 ```text
 TRACE_UPDATE_SERVICE_URL=<printed staging Worker URL>
 TRACE_DEPLOY_TOKEN=<printed raw deploy token>
-CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
-CLOUDFLARE_API_TOKEN=<token with R2 object write/read permission for the staging bucket>
 ```
 
-Add this repository variable if the bucket name differs from the staging default:
+The values that usually must be filled manually are:
+
+```text
+CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+CLOUDFLARE_API_TOKEN=<token with R2 object write/read permission for the staging bucket>
+TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64=<from Step 7>
+TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64=<from Step 7>
+```
+
+Run a no-write plan:
+
+```powershell
+.\cloudflare\update-service\scripts\configure-github-actions-secrets.ps1 -DryRun
+```
+
+Write the configured values to GitHub:
+
+```powershell
+.\cloudflare\update-service\scripts\configure-github-actions-secrets.ps1 -Yes
+```
+
+The script uses `gh secret set` and `gh variable set` for repository `Eitan-S-23/Trace`. Secret values are passed through stdin and are not printed. The script verifies required names exist afterward, but GitHub does not allow reading secret values back.
+
+Required repository variable:
 
 ```text
 TRACE_R2_BUCKET=trace-update-staging-releases
 ```
 
-These are not enough to publish production updates. They allow the formal GitHub Release job to upload staging R2 assets, call staging `/api/ci/releases`, and create a D1 `candidate`.
+These settings are not enough to publish production updates. They allow the formal GitHub Release job to upload staging R2 assets, call staging `/api/ci/releases`, and create a D1 `candidate`.
 
 ## Step 7: Configure Payload Signing For Client-Visible Updates
 
@@ -431,6 +462,24 @@ $env:TRACE_R2_OPERATION_TIMEOUT_MS = "600000"
 ```
 
 The backfill script downloads immutable GitHub Release assets with `gh release download`, validates the manifest/APK/patch SHA-256 values, uploads to R2, reads the objects back, and calls `/api/ci/releases` with `r2Backfill: true`. The Worker only updates D1 when the existing release tag, commit SHA, asset ID, size, and SHA-256 match.
+
+For a full staging test release, use the one-command publish wrapper instead of manually chaining backfill, D1 publish, and verification:
+
+```powershell
+.\cloudflare\update-service\scripts\publish-staging-release.ps1 -ReleaseTag v1.0.6 -Channels stable,beta -Yes
+```
+
+The wrapper is staging-only. It downloads and validates GitHub Release Android assets, uploads them to R2, read-back verifies them, registers the R2 backfill, publishes the selected D1 channels with CAS revision checks, and verifies the public latest endpoint plus a signed patch download. It does not run local Flutter, Gradle, Dart, Windows, or packaging builds.
+
+Useful options:
+
+```powershell
+.\cloudflare\update-service\scripts\publish-staging-release.ps1 -ReleaseTag v1.0.6 -Channels stable,beta -DryRun
+.\cloudflare\update-service\scripts\publish-staging-release.ps1 -ReleaseTag v1.0.6 -Channels stable -Yes -KeepAssets
+.\cloudflare\update-service\scripts\publish-staging-release.ps1 -ReleaseTag v1.0.6 -Channels stable -Yes -SkipBackfill
+```
+
+By default the wrapper refuses to publish unless every active Android asset for the release has `r2_state = available`. `-AllowPartialR2` exists only for temporary staging diagnostics, for example when validating a single small patch while full APK upload is still being recovered. Do not use `-AllowPartialR2` for normal releases.
 
 If the GitHub assets are already downloaded and verified, avoid re-downloading them:
 

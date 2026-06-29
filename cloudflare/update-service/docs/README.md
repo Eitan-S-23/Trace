@@ -55,6 +55,19 @@ The GitHub repository must define:
 - `CLOUDFLARE_API_TOKEN`
 - Fixed Android release signing secrets
 
+Use the local config wrapper instead of adding these by hand:
+
+```powershell
+Copy-Item `
+  .\cloudflare\update-service\github-actions-secrets.staging.example.json `
+  .\cloudflare\update-service\.github-actions-secrets.staging.local.json
+
+.\cloudflare\update-service\scripts\configure-github-actions-secrets.ps1 -DryRun
+.\cloudflare\update-service\scripts\configure-github-actions-secrets.ps1 -Yes
+```
+
+The `.local.json` file is ignored by git. Blank values keep existing GitHub settings when the name is already present; otherwise the script fails before writing.
+
 The workflow uses:
 
 ```text
@@ -82,7 +95,17 @@ Existing Phase 1 releases can be backfilled into R2 without rebuilding local APK
 
 The backfill script downloads existing immutable GitHub Release assets, uploads them to R2, read-back verifies SHA-256, and calls the CI registration endpoint with `r2Backfill: true`. The Worker only updates an existing release when the release tag, commit SHA, asset IDs, sizes, and SHA-256 values match D1.
 
+For staging-only end-to-end release testing, use the one-command wrapper:
+
+```powershell
+.\cloudflare\update-service\scripts\publish-staging-release.ps1 -ReleaseTag v1.0.6 -Channels stable,beta -Yes
+```
+
+It wraps R2 backfill, D1 candidate registration, channel CAS publish, latest manifest verification, signed patch download verification, and GitHub fallback immutability checks. It does not run local build or packaging commands. The wrapper is intentionally staging-only and refuses non-staging D1 targets by default.
+
 Staging `v1.0.5` has been backfilled and verified: all seven Android update assets are in `trace-update-staging-releases`, D1 stores `r2_state = available`, primary patch download returns `X-Trace-Asset-Source: r2`, and fallback redirects remain tag-specific GitHub Release URLs under `/releases/download/v1.0.5/...`.
+
+Staging `v1.0.6` is published to `stable` and `beta` for current phone testing from `1.0.5 (31)`: the `31 -> 32` patch is R2 primary and SHA-256 verified. The full APK R2 object is intentionally marked `not_uploaded` after a failed local Wrangler large-object upload produced a SHA mismatch, so full APK primary download fails closed and full APK fallback remains the Worker-gated immutable GitHub Release URL. Configure the Cloudflare GitHub Actions secrets and verify the Linux CI R2 upload path before treating `v1.0.6` as a fully R2-backed release.
 
 Until a real `TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64` signing secret and matching client public key are configured, CI emits a staging-only placeholder `payloadSignature`. Do not publish those candidates to clients; the placeholder is intended to fail closed if accidentally exposed.
 
