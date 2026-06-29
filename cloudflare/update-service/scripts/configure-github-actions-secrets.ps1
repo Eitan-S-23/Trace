@@ -31,9 +31,9 @@ function NormalizeConfigValue($Value) {
   }
   $text = [string]$Value
   if ($text.Length -gt 0 -and [int][char]$text[0] -eq 0xFEFF) {
-    return $text.Substring(1)
+    $text = $text.Substring(1)
   }
-  return $text
+  return $text.Trim()
 }
 
 function ObjectToHashtable($Object) {

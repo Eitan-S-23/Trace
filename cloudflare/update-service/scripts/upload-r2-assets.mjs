@@ -98,7 +98,8 @@ async function wrangler(args) {
     finalArgs.push("--env", wranglerEnv);
   }
   await run(process.execPath, finalArgs, {
-    cwd: wranglerCwd
+    cwd: wranglerCwd,
+    env: sanitizedWranglerEnv()
   });
 }
 
@@ -151,6 +152,20 @@ function run(command, args, options) {
       }
     });
   });
+}
+
+function sanitizedWranglerEnv() {
+  const env = { ...process.env };
+  for (const name of ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]) {
+    if (typeof env[name] === "string") {
+      env[name] = stripBomAndWhitespace(env[name]);
+    }
+  }
+  return env;
+}
+
+function stripBomAndWhitespace(value) {
+  return value.replace(/^\uFEFF/, "").trim();
 }
 
 function killProcessTree(child) {
