@@ -179,6 +179,13 @@ if (IsBlank $repo) {
 $secrets = ObjectToHashtable $configObject.secrets
 $variables = ObjectToHashtable $configObject.variables
 
+if (IsBlank $variables["TRACE_PUBLIC_UPDATE_SERVICE_URL"]) {
+  $publicUpdateUrl = [Environment]::GetEnvironmentVariable("TRACE_PUBLIC_UPDATE_SERVICE_URL")
+  if (-not (IsBlank $publicUpdateUrl)) {
+    $variables["TRACE_PUBLIC_UPDATE_SERVICE_URL"] = NormalizeConfigValue $publicUpdateUrl
+  }
+}
+
 $useBootstrapSummary = $configObject.useBootstrapSummary -eq $true
 if ($useBootstrapSummary) {
   $bootstrapSummaryPath = [string]$configObject.bootstrapSummaryPath
@@ -225,6 +232,7 @@ if ($configObject.requireAndroidSigning -ne $false) {
 
 $requiredVariables = [System.Collections.Generic.List[string]]::new()
 AddIfMissing $requiredVariables "TRACE_R2_BUCKET"
+AddIfMissing $requiredVariables "TRACE_PUBLIC_UPDATE_SERVICE_URL"
 
 if ($configObject.requirePayloadSigning -eq $true) {
   foreach ($name in @(

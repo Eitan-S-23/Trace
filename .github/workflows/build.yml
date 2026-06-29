@@ -22,6 +22,11 @@ on:
         description: "Optional release tag, for example v1.0.0"
         required: false
         type: string
+      replace_existing_release:
+        description: "Dangerous: replace assets on an existing GitHub Release"
+        required: true
+        type: boolean
+        default: false
 
 env:
   PUB_HOSTED_URL: https://pub.dev
@@ -145,15 +150,15 @@ jobs:
       - name: Build release APK
         shell: bash
         env:
-          TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
+          TRACE_PUBLIC_UPDATE_SERVICE_URL: ${{ vars.TRACE_PUBLIC_UPDATE_SERVICE_URL || secrets.TRACE_PUBLIC_UPDATE_SERVICE_URL || secrets.TRACE_UPDATE_SERVICE_URL }}
           TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64: ${{ secrets.TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64 }}
         run: |
           set +e
           build_args=(apk --release)
-          if [[ -n "${TRACE_UPDATE_SERVICE_URL:-}" ]]; then
-            update_service_url="${TRACE_UPDATE_SERVICE_URL%/}"
+          if [[ -n "${TRACE_PUBLIC_UPDATE_SERVICE_URL:-}" ]]; then
+            update_service_url="${TRACE_PUBLIC_UPDATE_SERVICE_URL%/}"
             build_args+=(--dart-define="TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL=${update_service_url}/api/public/latest")
-            echo "Cloudflare update manifest URL is configured for this APK."
+            echo "Cloudflare public update manifest URL is configured for this APK."
           else
             echo "Cloudflare update manifest URL is not configured; APK will use the legacy GitHub latest manifest."
           fi
@@ -319,6 +324,28 @@ jobs:
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
+      - name: Guard immutable GitHub Release
+        id: release_guard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+          REPLACE_EXISTING_RELEASE: ${{ github.event.inputs.replace_existing_release || 'false' }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            if [[ "${REPLACE_EXISTING_RELEASE}" != "true" ]]; then
+              echo "::error title=Release already exists::${RELEASE_TAG} already exists. Bump pubspec.yaml and use a new tag. Replacing an existing release changes APK hashes and breaks incremental updates for already-installed clients."
+              exit 1
+            fi
+            echo "::warning title=Replacing existing release::${RELEASE_TAG} will have its assets replaced. This can break incremental updates for clients that installed the previous APK from this tag."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Prepare Android incremental update metadata
         shell: bash
         env:
@@ -454,11 +481,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+          RELEASE_EXISTS: ${{ steps.release_guard.outputs.exists }}
         shell: bash
         run: |
           notes="Automated build from workflow run ${GITHUB_RUN_NUMBER} for commit ${GITHUB_SHA}."
 
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+          if [[ "${RELEASE_EXISTS}" == "true" ]]; then
             gh release edit "${RELEASE_TAG}" --target "${GITHUB_SHA}" --notes "${notes}"
             for asset_path in release-assets/*; do
               if [[ -f "${asset_path}" ]]; then

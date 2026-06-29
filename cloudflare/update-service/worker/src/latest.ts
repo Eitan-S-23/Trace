@@ -113,12 +113,21 @@ export async function handleLatest(
       assets: state.assets,
       patches: state.patches
     };
-    const cacheKey = `manifest:${appId}:${platform}:${channel}:${renderableState.channel.revision}`;
+    const origin = new URL(request.url).origin;
+    const cacheKey = [
+      "manifest",
+      encodeURIComponent(origin),
+      env.DOWNLOAD_TOKEN_KEY_VERSION,
+      appId,
+      platform,
+      channel,
+      String(renderableState.channel.revision)
+    ].join(":");
     const cached = await env.MANIFEST_CACHE.get(cacheKey, "json");
     const envelope =
       cached && isManifestEnvelope(cached)
         ? cached
-        : await renderAndCacheEnvelope(env, request, renderableState, cacheKey);
+        : await renderAndCacheEnvelope(env, origin, renderableState, cacheKey);
     return json(wantsV2 ? envelope.v2 : envelope.v1);
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -130,11 +139,11 @@ export async function handleLatest(
 
 async function renderAndCacheEnvelope(
   env: WorkerEnv,
-  request: Request,
+  origin: string,
   state: RenderableLatestState,
   cacheKey: string
 ): Promise<ManifestEnvelope> {
-  const envelope = await renderManifestEnvelope(env, new URL(request.url).origin, state);
+  const envelope = await renderManifestEnvelope(env, origin, state);
   const ttl = Number(env.MANIFEST_CACHE_TTL_SECONDS || "60");
   await env.MANIFEST_CACHE.put(cacheKey, JSON.stringify(envelope), { expirationTtl: ttl });
   return envelope;

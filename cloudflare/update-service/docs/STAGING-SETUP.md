@@ -178,6 +178,45 @@ Expected secret names:
 - `DEPLOY_TOKEN_SHA256`
 - `DOWNLOAD_HMAC_KEY_CURRENT`
 
+## Step 5b: Deploy Public Pages Endpoint
+
+Use this only when client devices can reach `pages.dev` more reliably than `workers.dev`. The public Pages project exposes only:
+
+```text
+/healthz
+/api/public/latest
+/api/public/download
+/api/public/github-fallback
+```
+
+It does not expose `/api/admin/*` or `/api/ci/*`; CI registration must continue using the Worker URL.
+
+Set a download HMAC key for the Pages project. It may be independent from the Worker key because Pages signs and verifies its own public download URLs:
+
+```powershell
+$bytes = [byte[]]::new(48)
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$env:TRACE_PUBLIC_DOWNLOAD_HMAC_KEY_CURRENT = [Convert]::ToBase64String($bytes)
+.\cloudflare\update-service\scripts\deploy-public-staging.ps1 -Yes
+Remove-Item Env:TRACE_PUBLIC_DOWNLOAD_HMAC_KEY_CURRENT
+```
+
+If the Pages secret already exists and you do not want to rotate it, run with `-SkipSecrets`.
+
+Smoke check:
+
+```powershell
+$public = "https://trace-update-public-staging.pages.dev"
+Invoke-RestMethod "$public/healthz"
+Invoke-RestMethod "$public/api/public/latest?appId=trace&platform=android&channel=stable&versionCode=1&schemaVersion=2&capabilities=patch,full,payloadSignature"
+```
+
+Set this GitHub Actions variable for future APK builds:
+
+```powershell
+gh variable set TRACE_PUBLIC_UPDATE_SERVICE_URL --repo Eitan-S-23/Trace --body https://trace-update-public-staging.pages.dev
+```
+
 ## Step 6: GitHub Secrets For CI Registration
 
 After bootstrap, configure GitHub Actions secrets and variables with the local config script. First copy the example config:
@@ -196,6 +235,8 @@ The script can read these values from `.bootstrap/staging-summary.json` when `us
 TRACE_UPDATE_SERVICE_URL=<printed staging Worker URL>
 TRACE_DEPLOY_TOKEN=<printed raw deploy token>
 ```
+
+`TRACE_UPDATE_SERVICE_URL` must remain the Worker base URL because `register-release.mjs` posts to `/api/ci/releases`. The non-secret `TRACE_PUBLIC_UPDATE_SERVICE_URL` variable is the Pages base URL compiled into APKs for `/api/public/latest`.
 
 The values that usually must be filled manually are:
 
@@ -264,10 +305,10 @@ Do not publish Cloudflare candidates to phones until these are configured. Witho
 The Android client only uses Cloudflare primary when the app build includes:
 
 ```text
-TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL=https://your-staging-worker.workers.dev/api/public/latest
+TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL=https://trace-update-public-staging.pages.dev/api/public/latest
 ```
 
-Do not run local Flutter builds. Wire this into GitHub Actions only after staging Worker checks pass and you intentionally want a Cloudflare-capable artifact.
+Do not run local Flutter builds. Wire this into GitHub Actions through `TRACE_PUBLIC_UPDATE_SERVICE_URL` only after staging Worker/Pages checks pass and you intentionally want a Cloudflare-capable artifact.
 
 Before enabling this for normal users:
 
@@ -287,7 +328,7 @@ workflow_dispatch:
 
 Expected result:
 
-- GitHub Actions creates or updates the tag-specific GitHub Release.
+- GitHub Actions creates the tag-specific GitHub Release. If the release already exists, the job fails by default; only use `replace_existing_release=true` for an intentional staging-only replacement.
 - The release job uploads `ble-monitor-android.apk`, `ble-monitor-update.json`, and any `.tpatch` files.
 - `build-github-release-metadata.mjs` creates local CI metadata from those assets.
 - `upload-r2-assets.mjs` uploads those assets to R2, downloads them back, verifies SHA-256, and writes `r2Key` plus `r2Verified: true` into the metadata.

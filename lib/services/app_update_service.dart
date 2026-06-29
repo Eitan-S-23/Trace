@@ -576,7 +576,9 @@ class AppUpdateService extends GetxService {
     for (var index = 0; index < urls.length; index += 1) {
       final url = urls[index];
       if (url.isEmpty) continue;
+      final sourceLabel = _downloadEndpointLabel(url, index);
       try {
+        updateStatus.value = '$phaseName（$sourceLabel）...';
         await _dio.download(
           url,
           savePath,
@@ -586,11 +588,11 @@ class AppUpdateService extends GetxService {
               updateProgress.value =
                   (progressStart + phaseProgress * progressSpan)
                       .clamp(0.0, 1.0);
-              updateStatus.value =
-                  '$phaseName... ${_formatTransfer(received, total)}';
+              final transfer = _formatTransfer(received, total);
+              updateStatus.value = '$phaseName（$sourceLabel）... $transfer';
             } else {
-              updateStatus.value =
-                  '$phaseName... 已下载 ${_formatBytes(received)}';
+              final downloaded = _formatBytes(received);
+              updateStatus.value = '$phaseName（$sourceLabel）... 已下载 $downloaded';
             }
             onReceiveProgress(received, total);
           },
@@ -604,7 +606,7 @@ class AppUpdateService extends GetxService {
           await partialFile.delete();
         }
         if (index < urls.length - 1) {
-          updateStatus.value = '$phaseName失败，尝试备用下载...';
+          updateStatus.value = '$phaseName（$sourceLabel）失败，尝试备用下载...';
         }
       }
     }
@@ -768,7 +770,8 @@ class AppUpdateService extends GetxService {
               ),
               const SizedBox(height: 12),
               const Text(
-                '如果网络无法访问 GitHub，最多等待 30 秒后会返回错误。',
+                '优先连接配置的 Cloudflare 更新服务；'
+                '如不可用，会按内置备用清单规则重试，最多等待 30 秒。',
                 style: TextStyle(fontSize: 12),
               ),
             ],
@@ -805,6 +808,19 @@ class AppUpdateService extends GetxService {
     final percent = total <= 0 ? 0 : received / total * 100;
     return '${percent.toStringAsFixed(0)}% '
         '(${_formatBytes(received)} / ${_formatBytes(total)})';
+  }
+
+  String _downloadEndpointLabel(String url, int index) {
+    final uri = Uri.tryParse(url);
+    final host = uri?.host.toLowerCase() ?? '';
+    final path = uri?.path.toLowerCase() ?? '';
+    if (host == 'github.com' || path.endsWith('/api/public/github-fallback')) {
+      return 'GitHub 备用';
+    }
+    if (path.endsWith('/api/public/download')) {
+      return 'Cloudflare R2';
+    }
+    return index == 0 ? '主下载' : '备用下载';
   }
 
   String _formatUpdateFailure(Object error) {

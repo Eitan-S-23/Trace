@@ -259,7 +259,7 @@ describe("Phase 1 update-service invariants", () => {
     expect(result).toEqual({ ok: false, errorCode: "ASSET_ARCHIVED", status: 409 });
   });
 
-  it("returns v1-compatible and v2 manifests from the same revision-keyed cache", async () => {
+  it("returns v1-compatible and v2 manifests from the same origin-scoped cache", async () => {
     const appId = appIdFor("compat");
     const release = await seedRelease(appId, 500, "v5.0.0");
     await seedPatch(appId, release.releaseId);
@@ -297,11 +297,25 @@ describe("Phase 1 update-service invariants", () => {
     ]);
 
     const cached = await env.MANIFEST_CACHE.get(
-      `manifest:${appId}:android:stable:7`,
+      `manifest:${encodeURIComponent("http://example.com")}:dev:${appId}:android:stable:7`,
       "json"
     );
     expect(cached).toHaveProperty("v1");
     expect(cached).toHaveProperty("v2");
+
+    const alternateOrigin = await SELF.fetch(
+      `http://updates.example.com/api/public/latest?appId=${appId}&platform=android&channel=stable&versionCode=1&schemaVersion=2&capabilities=patch,full,payloadSignature`
+    );
+    const alternateBody = await alternateOrigin.json<Record<string, unknown>>();
+    expect(alternateOrigin.status).toBe(200);
+    expect(alternateBody.fullDownloadUrl).toContain("http://updates.example.com/api/public/download");
+
+    const alternateCached = await env.MANIFEST_CACHE.get(
+      `manifest:${encodeURIComponent("http://updates.example.com")}:dev:${appId}:android:stable:7`,
+      "json"
+    );
+    expect(alternateCached).toHaveProperty("v1");
+    expect(alternateCached).toHaveProperty("v2");
   });
 
   it("fails CI and download requests with invalid tokens", async () => {

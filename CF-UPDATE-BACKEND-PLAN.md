@@ -11,9 +11,9 @@ _Locked via grill — by Codex + user_
 - GitHub Actions 继续构建 Android APK、Windows zip/exe、tpatch、manifest。
 - Cloudflare D1 作为版本、资产、补丁、渠道和审计日志的事实源。
 - Cloudflare R2 作为主文件源，存放 APK、Windows 包、tpatch、manifest。
-- Cloudflare KV 只缓存按 revision 命名的 latest manifest 渲染结果，key 为 `manifest:{appId}:{platform}:{channel}:{revision}`，首版 TTL 为 60 秒；未带 revision 的 channel 状态始终从 D1 读取。
+- Cloudflare KV 只缓存按 origin、下载 key version 和 revision 命名的 latest manifest 渲染结果，key 为 `manifest:{origin}:{downloadKeyVersion}:{appId}:{platform}:{channel}:{revision}`，首版 TTL 为 60 秒；未带 revision 的 channel 状态始终从 D1 读取。
 - Cloudflare Workers 提供 public/admin/ci API。
-- Cloudflare Pages 部署发布控制台前端。
+- Cloudflare Pages 部署发布控制台前端；如 `workers.dev` 在客户端网络不可达，可部署独立 public Pages facade，只暴露 `/healthz` 和 `/api/public/*`。
 - GitHub Release 继续创建，作为完整历史备份、管理员恢复源和受 Worker gate 保护的 fallback。
 - 首版使用 `*.workers.dev` 和 `*.pages.dev`，以后有自定义域名时集中替换配置。
 
@@ -26,6 +26,7 @@ _Locked via grill — by Codex + user_
 - 只有 tag 发布或显式 `workflow_dispatch publish_release=true` 才创建正式 GitHub Release。
 - 旧客户端仍会读取 GitHub `/latest/download/ble-monitor-update.json`，因此 GitHub latest 必须只指向人工认可的 stable 构建。
 - Cloudflare fallback 永远使用 immutable tag-specific asset URL，不使用 `/latest/download`。
+- 正式 release tag 默认不可变；禁止未显式确认时覆盖已有 GitHub Release 资产，因为同 tag APK hash 漂移会让已安装客户端失去匹配的增量包。
 
 ## Implementation Phases
 
@@ -346,6 +347,10 @@ cloudflare/update-service/
   worker/
     src/
     test/
+    wrangler.jsonc
+  public/
+    functions/
+    site/
     wrangler.jsonc
   admin/
     src/
@@ -768,3 +773,31 @@ Validation:
 - Full APK fallback returned HTTP `302` to `https://github.com/Eitan-S-23/Trace/releases/download/v1.0.8/...` and did not use `/latest/download`.
 - `node --check cloudflare/update-service/scripts/publish-staging-release.mjs` passed after the Windows script hardening.
 - Local Flutter/Gradle/Dart build or package commands were not run.
+
+### Phase 2 follow-up — public Pages endpoint and immutable release guard on 2026-06-29
+
+Implemented:
+
+- Added and deployed standalone public Pages project `trace-update-public-staging` at `https://trace-update-public-staging.pages.dev`.
+- The public Pages facade exposes only `/healthz` and `/api/public/*`, reusing the same public latest/download logic and D1/KV/R2/RateLimiter bindings as the Worker.
+- Added deployment scripts `deploy-public-staging.ps1` and `deploy-public-staging.mjs`.
+- Updated manifest cache keys to include origin and download key version so Worker and Pages cannot return each other's signed URL origins from shared KV.
+- Added `TRACE_PUBLIC_UPDATE_SERVICE_URL` for APK build-time manifest URL injection while keeping `TRACE_UPDATE_SERVICE_URL` as the Worker URL for CI registration.
+- Added a GitHub Actions release immutability guard: existing releases fail by default unless `replace_existing_release=true` is explicitly selected.
+- Updated Android update UI wording and download status labels to distinguish Cloudflare R2 primary from GitHub fallback.
+
+Validation:
+
+- Public Pages deployment succeeded and `/healthz` returned `trace-update-public` / `staging`.
+- Public latest returned `v1.0.8` with Pages-origin signed download URLs.
+- A Pages-origin signed `33 -> 34` patch download returned `200` with `X-Trace-Asset-Source: r2`.
+- GitHub Actions variable `TRACE_PUBLIC_UPDATE_SERVICE_URL` was set to `https://trace-update-public-staging.pages.dev`.
+- `npm run check` passed for both `cloudflare/update-service/public` and `cloudflare/update-service/worker`.
+- `node --check cloudflare/update-service/scripts/deploy-public-staging.mjs` passed.
+- `git diff --check` passed with only line-ending warnings.
+- Local Worker invariant tests remain blocked by the Windows workerd `0xc0000005` crash.
+- Local Flutter/Gradle/Dart build or package commands were not run.
+
+Residual risk:
+
+- Any client that installed a pre-overwrite `v1.0.7` APK hash can still miss the `33 -> 34` patch and must use full APK once unless that exact old APK artifact is recovered and an extra patch is registered.

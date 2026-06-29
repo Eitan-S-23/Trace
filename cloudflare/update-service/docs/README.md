@@ -8,10 +8,11 @@ Phase 2 staging implements and verifies the update control plane plus R2 primary
 - Downloads are gated by Worker HMAC tokens and D1 state checks.
 - Primary download endpoints stream verified R2 objects when `release_assets.r2_state = 'available'`.
 - GitHub fallback endpoints redirect only to approved immutable GitHub tag asset URLs after token and D1 state checks.
-- KV is used only for revision-keyed manifest render cache: `manifest:{appId}:{platform}:{channel}:{revision}`.
+- KV is used only for origin/key-version/revision-keyed manifest render cache: `manifest:{origin}:{downloadKeyVersion}:{appId}:{platform}:{channel}:{revision}`.
 - Durable Object handles coarse public rate limiting. KV is not used as a rate-limit counter.
 - CI registration creates `candidate` releases only. It requires a formal release intent and fixed Android signing.
 - Direct Worker admin mutation routes are disabled. Admin mutations are exposed through the Access-protected Pages Functions facade.
+- The optional public Pages facade exposes only `/healthz` and `/api/public/*` for client networks where `workers.dev` is unreliable.
 
 ## Local Commands
 
@@ -50,6 +51,7 @@ Formal GitHub Releases now register an Android Cloudflare `candidate` after rele
 The GitHub repository must define:
 
 - `TRACE_UPDATE_SERVICE_URL`
+- `TRACE_PUBLIC_UPDATE_SERVICE_URL`
 - `TRACE_DEPLOY_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
@@ -77,6 +79,8 @@ cloudflare/update-service/scripts/register-release.mjs
 ```
 
 Phase 2 candidate registration uploads APK/manifest/patch assets to R2, verifies them by read-back SHA-256, writes `r2Key` and `r2Verified: true` into the metadata, and registers the candidate in D1. It does not publish the candidate to `stable` or `beta`.
+
+`TRACE_UPDATE_SERVICE_URL` remains the Worker base URL used by CI registration (`/api/ci/releases`). `TRACE_PUBLIC_UPDATE_SERVICE_URL` is the non-secret client base URL compiled into APKs for `/api/public/latest`; in staging it should be `https://trace-update-public-staging.pages.dev`.
 
 `upload-r2-assets.mjs` and `register-release.mjs` include bounded retries for transient network failures. Operators can tune slow staging networks with:
 
@@ -106,6 +110,10 @@ It wraps R2 backfill, D1 candidate registration, channel CAS publish, latest man
 Staging `v1.0.5` has been backfilled and verified: all seven Android update assets are in `trace-update-staging-releases`, D1 stores `r2_state = available`, primary patch download returns `X-Trace-Asset-Source: r2`, and fallback redirects remain tag-specific GitHub Release URLs under `/releases/download/v1.0.5/...`.
 
 Staging `v1.0.7` is published to `stable` and `beta` for current phone testing from `1.0.5 (31)`: the Linux GitHub Actions release run uploaded the APK, manifest, and seven Android patch assets to R2, read-back verified them, registered the candidate in D1, and the staging publish wrapper verified the `31 -> 33` primary patch download from R2. The matching fallback remains Worker-gated and redirects only to the immutable tag-specific GitHub Release URL under `/releases/download/v1.0.7/...`.
+
+Staging now also has a standalone public Pages endpoint at `https://trace-update-public-staging.pages.dev`. It uses the same D1/KV/R2 state as the Worker, but signs and serves public download URLs from the Pages origin so Android clients no longer need to reach `workers.dev`.
+
+Do not rebuild or re-upload assets for an existing release tag after clients may have installed it. If a same-tag APK was overwritten before this guard existed, old clients with the replaced APK hash may not have a matching patch and should use the full APK once. Future releases must bump `pubspec.yaml` and use a new tag.
 
 Until a real `TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64` signing secret and matching client public key are configured, CI emits a staging-only placeholder `payloadSignature`. Do not publish those candidates to clients; the placeholder is intended to fail closed if accidentally exposed.
 

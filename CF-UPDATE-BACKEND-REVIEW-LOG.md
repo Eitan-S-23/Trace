@@ -585,3 +585,42 @@ Validation recorded:
 - Full APK fallback returned HTTP `302` to a tag-specific `v1.0.8` GitHub Release asset and did not use `/latest/download`.
 - `node --check cloudflare/update-service/scripts/publish-staging-release.mjs` passed after the Windows operator hardening.
 - Local Flutter/Gradle/Dart build or package commands were not run.
+
+### Phase 2 follow-up — public Pages endpoint and release immutability guard on 2026-06-29
+
+Status: staging public Pages endpoint deployed and verified.
+
+Implemented:
+
+- Added `cloudflare/update-service/public` as a standalone public Pages facade exposing only `/healthz`, `/api/public/latest`, `/api/public/download`, and `/api/public/github-fallback`.
+- The public Pages facade reuses the Worker public latest/download logic and the staging D1/KV/R2/RateLimiter bindings, but it does not expose admin or CI registration routes.
+- Added `deploy-public-staging.ps1` and `deploy-public-staging.mjs` for creating/deploying `trace-update-public-staging` and writing Pages download HMAC secrets without printing secret values.
+- Deployed `https://trace-update-public-staging.pages.dev` and wrote a Pages-only `DOWNLOAD_HMAC_KEY_CURRENT`; Pages now signs and verifies download URLs with keyVersion `staging-public`.
+- Updated manifest cache keys to include request origin and download key version, preventing Worker and Pages from sharing cached signed URLs with the wrong origin or HMAC key.
+- Added Worker invariant coverage for origin-scoped manifest cache entries.
+- Added GitHub Actions variable `TRACE_PUBLIC_UPDATE_SERVICE_URL=https://trace-update-public-staging.pages.dev` for future APK builds.
+- Split client build URL from CI registration URL: APK builds use `TRACE_PUBLIC_UPDATE_SERVICE_URL` when present, while CI registration keeps using `TRACE_UPDATE_SERVICE_URL` for Worker `/api/ci/releases`.
+- Added a `replace_existing_release` workflow input and an immutable-release guard. Existing GitHub Releases now fail by default instead of silently deleting/re-uploading assets.
+- Updated Android update UI copy so it no longer says GitHub when Cloudflare is configured, and download progress labels now distinguish `Cloudflare R2` from `GitHub 备用`.
+
+Residual risks and follow-up:
+
+- Devices that installed a same-tag `v1.0.7` APK before the release assets were overwritten can still have an APK hash that no longer exists in the current GitHub Release. Without recovering that exact old APK, those devices must use full APK once.
+- Attempting to download old GitHub Actions APK artifacts from this Windows/proxy network was too slow to use for patch backfill; artifact metadata confirmed the old artifacts exist, but the APK ZIP download timed out.
+- The next Android APK must be built by GitHub Actions after this change before phones will use `trace-update-public-staging.pages.dev`; existing installed APKs still contain their previously compiled manifest URL.
+- Local Dart/Flutter commands were unavailable, so Dart formatting/analyze could not run locally.
+
+Validation recorded:
+
+- `cloudflare/update-service/scripts/deploy-public-staging.ps1 -Yes` created the Pages project, wrote `DOWNLOAD_HMAC_KEY_CURRENT`, and deployed `https://8dd9da90.trace-update-public-staging.pages.dev`.
+- `curl.exe https://trace-update-public-staging.pages.dev/healthz` returned `{ "ok": true, "service": "trace-update-public", "environment": "staging" }`.
+- Public latest from the Pages origin returned `v1.0.8` with `fullDownloadUrl` and patch `downloadUrl` under `https://trace-update-public-staging.pages.dev/api/public/...`.
+- A signed `33 -> 34` patch download through the Pages primary URL returned HTTP `200`, `Content-Length: 120526`, and `X-Trace-Asset-Source: r2`.
+- `gh variable set TRACE_PUBLIC_UPDATE_SERVICE_URL --repo Eitan-S-23/Trace --body https://trace-update-public-staging.pages.dev` succeeded, and `gh variable list` verified the value.
+- `npm install` generated `cloudflare/update-service/public/package-lock.json`.
+- `npm run check` passed in `cloudflare/update-service/public`.
+- `npm run check` passed in `cloudflare/update-service/worker`.
+- `node --check cloudflare/update-service/scripts/deploy-public-staging.mjs` passed.
+- `git diff --check` passed with only line-ending warnings.
+- `npm test` was attempted in `cloudflare/update-service/worker`, but local workerd/Miniflare again crashed before executing tests with Windows `0xc0000005`.
+- Local Flutter/Gradle/Dart build or package commands were not run.

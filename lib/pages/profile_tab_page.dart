@@ -214,7 +214,7 @@ class ProfileTabPage extends StatelessWidget {
       return _buildMenuItem(
         icon: Icons.system_update_alt,
         title: '检查更新',
-        subtitle: '检查 GitHub 发布页增量更新',
+        subtitle: '检查 Cloudflare 增量更新',
         onTap: _checkForUpdates,
       );
     }
@@ -229,7 +229,7 @@ class ProfileTabPage extends StatelessWidget {
             ? (service.updateStatus.value.isEmpty
                 ? '正在连接更新服务器'
                 : service.updateStatus.value)
-            : '检查 GitHub 发布页增量更新',
+            : '检查 Cloudflare 增量更新',
         trailing: busy
             ? const SizedBox(
                 width: 18,
