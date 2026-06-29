@@ -394,7 +394,27 @@ async function publishChannel(release, channelName) {
     `
   );
   if (!rows[0]) {
-    fail(`CAS conflict while publishing ${release.release_tag} to ${channelName}.`);
+    const refreshed = (
+      await d1Rows(
+        `
+          SELECT current_release_id, revision
+          FROM channels
+          WHERE id = ${sqlString(channel.id)}
+          LIMIT 1
+        `
+      )
+    )[0];
+    if (
+      !refreshed ||
+      refreshed.current_release_id !== release.id ||
+      Number(refreshed.revision) <= Number(channel.revision)
+    ) {
+      fail(`CAS conflict while publishing ${release.release_tag} to ${channelName}.`);
+    }
+    process.stdout.write(
+      `Published ${release.release_tag} to ${channelName}; revision ${refreshed.revision}.\n`
+    );
+    return;
   }
   process.stdout.write(
     `Published ${release.release_tag} to ${channelName}; revision ${rows[0].revision}.\n`
