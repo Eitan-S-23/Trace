@@ -33,6 +33,7 @@ class MainActivity: FlutterActivity() {
         appUpdateChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getAppInfo" -> result.success(getAppInfo())
+                "canRequestPackageInstalls" -> result.success(canRequestPackageInstalls())
                 "installApk" -> {
                     val apkPath = call.argument<String>("apkPath")
                     installApk(apkPath, result)
@@ -81,9 +82,7 @@ class MainActivity: FlutterActivity() {
             return
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !packageManager.canRequestPackageInstalls()
-        ) {
+        if (!canRequestPackageInstalls()) {
             val settingsIntent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:$packageName")
@@ -105,5 +104,10 @@ class MainActivity: FlutterActivity() {
         }
         startActivity(installIntent)
         result.success(true)
+    }
+
+    private fun canRequestPackageInstalls(): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            packageManager.canRequestPackageInstalls()
     }
 }

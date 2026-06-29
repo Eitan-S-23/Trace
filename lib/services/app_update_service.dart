@@ -14,11 +14,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/share_links.dart';
 
-class AppUpdateService extends GetxService {
+class AppUpdateService extends GetxService with WidgetsBindingObserver {
   static AppUpdateService get to => Get.find<AppUpdateService>();
 
   static const MethodChannel _platform = MethodChannel('trace/app_update');
   static const String _lastDailyCheckKey = 'app_update_last_daily_check';
+  static const String _pendingInstallApkPathKey =
+      'app_update_pending_install_apk_path';
+  static const String _unknownAppSourcesCode = 'UNKNOWN_APP_SOURCES';
   static const int _manifestSchemaVersion = 2;
   static const String _clientCapabilities =
       'patch,full,fallback,errorCode,payloadSignature';
@@ -35,6 +38,34 @@ class AppUpdateService extends GetxService {
   final isUpdating = false.obs;
   final updateProgress = 0.0.obs;
   final updateStatus = ''.obs;
+
+  bool _isRetryingPendingInstall = false;
+
+  @override
+  void onInit() {
+    super.onInit();
+    if (!Platform.isAndroid) return;
+
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_resumePendingInstallIfPermitted(showMessage: false));
+    });
+  }
+
+  @override
+  void onClose() {
+    if (Platform.isAndroid) {
+      WidgetsBinding.instance.removeObserver(this);
+    }
+    super.onClose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !Platform.isAndroid) return;
+
+    unawaited(_resumePendingInstallIfPermitted(showMessage: true));
+  }
 
   Future<void> checkDailyOnStartup() async {
     if (!Platform.isAndroid) return;
@@ -66,6 +97,10 @@ class AppUpdateService extends GetxService {
       if (manual) {
         Get.snackbar('正在检查更新', '后台检查仍在进行，请稍候');
       }
+      return;
+    }
+
+    if (await _handlePendingInstallBeforeUpdateCheck(manual: manual)) {
       return;
     }
 
@@ -166,6 +201,134 @@ class AppUpdateService extends GetxService {
       throw Exception('无法读取当前应用版本');
     }
     return _LocalAppInfo.fromMap(result);
+  }
+
+  Future<void> _openInstaller(String apkPath) async {
+    await _savePendingInstallApkPath(apkPath);
+    try {
+      await _platform.invokeMethod<bool>('installApk', {
+        'apkPath': apkPath,
+      });
+      await _clearPendingInstallApkPath();
+    } on PlatformException catch (e) {
+      if (e.code != _unknownAppSourcesCode) {
+        await _clearPendingInstallApkPath();
+      }
+      rethrow;
+    } catch (_) {
+      await _clearPendingInstallApkPath();
+      rethrow;
+    }
+  }
+
+  Future<bool> _canRequestPackageInstalls() async {
+    if (!Platform.isAndroid) return false;
+
+    try {
+      return await _platform.invokeMethod<bool>('canRequestPackageInstalls') ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _savePendingInstallApkPath(String apkPath) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pendingInstallApkPathKey, apkPath);
+  }
+
+  Future<String?> _pendingInstallApkPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final apkPath = prefs.getString(_pendingInstallApkPathKey);
+    if (apkPath == null || apkPath.isEmpty) return null;
+    return apkPath;
+  }
+
+  Future<void> _clearPendingInstallApkPath() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pendingInstallApkPathKey);
+  }
+
+  Future<void> _resumePendingInstallIfPermitted({
+    required bool showMessage,
+  }) async {
+    if (_isRetryingPendingInstall || isUpdating.value) return;
+
+    final apkPath = await _pendingInstallApkPath();
+    if (apkPath == null) return;
+
+    final apkFile = File(apkPath);
+    if (!await apkFile.exists()) {
+      await _clearPendingInstallApkPath();
+      if (showMessage) {
+        Get.snackbar('安装包已失效', '请重新检查更新并下载安装包');
+      }
+      return;
+    }
+
+    final canInstall = await _canRequestPackageInstalls();
+    if (!canInstall) {
+      if (showMessage) {
+        Get.snackbar('仍需授权', '安装包已保留，请开启安装未知应用权限后返回 Trace');
+      }
+      return;
+    }
+
+    _isRetryingPendingInstall = true;
+    isUpdating.value = true;
+    updateStatus.value = '继续打开系统安装器...';
+    try {
+      await _openInstaller(apkPath);
+    } on PlatformException catch (e) {
+      if (e.code == _unknownAppSourcesCode) {
+        if (showMessage) {
+          Get.snackbar('仍需授权', '安装包已保留，请开启安装未知应用权限后返回 Trace');
+        }
+        return;
+      }
+      if (showMessage) {
+        Get.snackbar('安装失败', _formatUpdateFailure(e));
+      }
+    } catch (e) {
+      if (showMessage) {
+        Get.snackbar('安装失败', _formatUpdateFailure(e));
+      }
+    } finally {
+      isUpdating.value = false;
+      _isRetryingPendingInstall = false;
+    }
+  }
+
+  Future<bool> _handlePendingInstallBeforeUpdateCheck({
+    required bool manual,
+  }) async {
+    final apkPath = await _pendingInstallApkPath();
+    if (apkPath == null) return false;
+
+    if (!await File(apkPath).exists()) {
+      await _clearPendingInstallApkPath();
+      return false;
+    }
+
+    if (await _canRequestPackageInstalls()) {
+      await _resumePendingInstallIfPermitted(showMessage: manual);
+      return true;
+    }
+
+    if (!manual) return true;
+
+    try {
+      await _openInstaller(apkPath);
+    } on PlatformException catch (e) {
+      if (e.code == _unknownAppSourcesCode) {
+        Get.snackbar('需要授权', '请开启安装未知应用权限，返回 Trace 后会自动继续安装');
+        return true;
+      }
+      Get.snackbar('安装失败', _formatUpdateFailure(e));
+    } catch (e) {
+      Get.snackbar('安装失败', _formatUpdateFailure(e));
+    }
+    return true;
   }
 
   Future<_RemoteUpdateInfo> _fetchUpdateInfo(
@@ -447,9 +610,7 @@ class AppUpdateService extends GetxService {
 
       updateStatus.value = '打开系统安装器...';
       updateProgress.value = 1;
-      await _platform.invokeMethod<bool>('installApk', {
-        'apkPath': outputApk.path,
-      });
+      await _openInstaller(outputApk.path);
     } on PlatformException catch (e) {
       failure = e;
     } catch (e) {
@@ -463,8 +624,8 @@ class AppUpdateService extends GetxService {
 
     if (failure == null) return;
     if (failure is PlatformException &&
-        (failure as PlatformException).code == 'UNKNOWN_APP_SOURCES') {
-      Get.snackbar('需要授权', '请允许安装未知来源应用后，再次点击检查更新');
+        (failure as PlatformException).code == _unknownAppSourcesCode) {
+      Get.snackbar('需要授权', '请开启安装未知应用权限，返回 Trace 后会自动继续安装');
       return;
     }
     _showIncrementalUpdateFailedDialog(
@@ -530,9 +691,7 @@ class AppUpdateService extends GetxService {
 
         updateStatus.value = '打开系统安装器...';
         updateProgress.value = 1;
-        await _platform.invokeMethod<bool>('installApk', {
-          'apkPath': outputApk.path,
-        });
+        await _openInstaller(outputApk.path);
       } catch (_) {
         if (await partialApk.exists()) {
           await partialApk.delete();
@@ -552,8 +711,8 @@ class AppUpdateService extends GetxService {
 
     if (failure == null) return;
     if (failure is PlatformException &&
-        (failure as PlatformException).code == 'UNKNOWN_APP_SOURCES') {
-      Get.snackbar('需要授权', '请允许安装未知来源应用后，再次点击检查更新');
+        (failure as PlatformException).code == _unknownAppSourcesCode) {
+      Get.snackbar('需要授权', '请开启安装未知应用权限，返回 Trace 后会自动继续安装');
       return;
     }
     _showFullUpdateFailedDialog(localInfo, updateInfo, error: failure);
