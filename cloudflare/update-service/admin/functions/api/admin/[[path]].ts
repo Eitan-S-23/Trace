@@ -6,8 +6,8 @@ interface AdminEnv {
   DB: D1Database;
   ENVIRONMENT: string;
   APP_ID: string;
-  ACCESS_JWT_ISSUER: string;
-  ACCESS_JWT_AUD: string;
+  ACCESS_JWT_ISSUER?: string;
+  ACCESS_JWT_AUD?: string;
   ADMIN_VIEWER_EMAILS?: string;
   ADMIN_PUBLISHER_EMAILS?: string;
   ADMIN_OWNER_EMAILS?: string;
@@ -202,6 +202,16 @@ async function listReleases(env: AdminEnv, url: URL): Promise<Response> {
           FROM release_assets a
           WHERE a.release_id = r.id AND a.disabled = 0
         ) AS asset_count,
+        (
+          SELECT count(*)
+          FROM release_assets a
+          WHERE a.release_id = r.id AND a.disabled = 0 AND a.r2_state = 'available'
+        ) AS r2_available_count,
+        (
+          SELECT count(*)
+          FROM release_assets a
+          WHERE a.release_id = r.id AND a.disabled = 0 AND a.r2_state <> 'available'
+        ) AS github_fallback_only_count,
         (
           SELECT count(*)
           FROM patches p

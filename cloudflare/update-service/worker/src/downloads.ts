@@ -1,4 +1,4 @@
-import { ApiError } from "./errors";
+import { ApiError, backendUnavailable } from "./errors";
 import { downloadHmacKey, signHmacSha256, timingSafeEqual } from "./crypto";
 import { json } from "./http";
 import { writeLog } from "./logger";
@@ -73,6 +73,10 @@ export async function handleDownload(
   const state = await loadDownloadState(env, assetId, releaseId);
   ensureDownloadAllowed(state, mode);
 
+  if (mode === "primary") {
+    return streamR2Asset(env, state, requestId);
+  }
+
   writeLog("info", "download_redirect", {
     requestId,
     releaseId,
@@ -90,6 +94,61 @@ export async function handleDownload(
       "X-Request-Id": requestId
     }
   });
+}
+
+async function streamR2Asset(
+  env: WorkerEnv,
+  state: DownloadStateRow,
+  requestId: string
+): Promise<Response> {
+  if (state.r2_state !== "available" || !state.r2_key) {
+    throw backendUnavailable("R2 primary asset is not available");
+  }
+
+  let object: R2ObjectBody | null;
+  try {
+    object = await env.RELEASES_BUCKET.get(state.r2_key);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    writeLog("error", "r2_download_failed", {
+      requestId,
+      releaseId: state.release_id,
+      assetId: state.id,
+      r2Key: state.r2_key,
+      message
+    });
+    throw backendUnavailable("R2 primary asset could not be read");
+  }
+
+  if (!object) {
+    throw backendUnavailable("R2 primary asset is missing");
+  }
+  if (object.size !== state.size_bytes) {
+    throw backendUnavailable("R2 primary asset size mismatch");
+  }
+
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("Content-Type", headers.get("Content-Type") ?? contentTypeForAsset(state));
+  headers.set("Content-Length", String(object.size));
+  headers.set("ETag", object.httpEtag);
+  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("Content-Disposition", `attachment; filename="${contentDispositionFileName(state.file_name)}"`);
+  headers.set("X-Request-Id", requestId);
+  headers.set("X-Trace-Asset-Source", "r2");
+
+  writeLog("info", "download_stream", {
+    requestId,
+    releaseId: state.release_id,
+    assetId: state.id,
+    channel: state.channel_id,
+    assetType: state.asset_type,
+    bytes: object.size,
+    status: "ok",
+    mode: "primary"
+  });
+
+  return new Response(object.body, { headers });
 }
 
 export async function verifyDownloadToken(
@@ -174,6 +233,18 @@ function requiredQuery(url: URL, key: string): string {
   const value = url.searchParams.get(key);
   if (!value) throw new ApiError("TOKEN_INVALID", `${key} is required`, 401);
   return value;
+}
+
+function contentTypeForAsset(asset: AssetRow): string {
+  if (asset.asset_type === "apk") return "application/vnd.android.package-archive";
+  if (asset.asset_type === "manifest") return "application/json; charset=utf-8";
+  if (asset.asset_type === "windows_zip") return "application/zip";
+  if (asset.file_name.endsWith(".tpatch")) return "application/octet-stream";
+  return "application/octet-stream";
+}
+
+function contentDispositionFileName(fileName: string): string {
+  return fileName.replace(/["\\\r\n]/g, "_");
 }
 
 function downloadTokenMessage(

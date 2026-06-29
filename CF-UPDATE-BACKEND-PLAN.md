@@ -584,3 +584,129 @@ Validation:
 - `git diff --check` passed with only line-ending warnings.
 - `npm test` was attempted in `cloudflare/update-service/worker` and remains blocked before test execution by the known Windows workerd `0xc0000005` runtime crash.
 - Local Flutter/Gradle build/package commands were not run.
+
+### Phase 1 follow-up — admin Pages deployment script verification on 2026-06-29
+
+Implemented:
+
+- Added `cloudflare/update-service/scripts/deploy-admin-staging.ps1` and `deploy-admin-staging.mjs` to automate the staging admin facade deployment.
+- The script creates or reuses the `trace-update-admin-staging` Pages project, runs the admin TypeScript check without invoking local app builds, writes Access configuration from environment variables as Pages secrets, and deploys the Pages Functions facade.
+- The script now reports whether `CLOUDFLARE_API_TOKEN` is set and preserves Wrangler output on Pages project list failures, so custom-token permission/auth errors are visible instead of being hidden behind a generic exit code.
+- Removed Access and admin allowlist names from `cloudflare/update-service/admin/wrangler.jsonc` `vars` so Pages secrets can use those binding names without `Binding name ... already in use` deployment failures.
+- Updated `cloudflare/update-service/admin/README.md` and `cloudflare/update-service/docs/STAGING-SETUP.md` so the manual path includes the required `wrangler pages project create` step before `wrangler pages deploy`.
+- Updated the admin deployment docs to explain that a leftover `CLOUDFLARE_API_TOKEN` can override `wrangler login`; operators should either grant that token Cloudflare Pages permissions or unset it for the Pages admin deploy.
+- Created the staging Pages project `trace-update-admin-staging` and deployed the current admin facade to Cloudflare Pages staging.
+
+Remaining risks:
+
+- Access values were not written during this verification because the current shell did not contain `ACCESS_JWT_ISSUER`, `ACCESS_JWT_AUD`, or role email environment variables.
+- Local direct HTTPS requests to `*.pages.dev` still fail on this Windows host through the configured proxy/TLS stack, so browser or another network validation is required after Access is configured.
+- The admin facade remains a JSON API surface; the final React console is still Phase 3.
+
+Validation:
+
+- `npx wrangler pages project create trace-update-admin-staging --production-branch main --compatibility-date 2026-06-28 --compatibility-flag nodejs_compat` succeeded.
+- `npx wrangler pages deploy .\public --project-name trace-update-admin-staging --branch main --commit-dirty=true` succeeded.
+- `npx wrangler pages project list` confirmed `trace-update-admin-staging.pages.dev`.
+- `npx wrangler pages secret list --project-name trace-update-admin-staging` succeeded and confirmed the project exists.
+- `node --check cloudflare/update-service/scripts/deploy-admin-staging.mjs` passed.
+- `cloudflare/update-service/scripts/deploy-admin-staging.ps1 -DryRun` passed.
+- `cloudflare/update-service/scripts/deploy-admin-staging.ps1 -Yes -SkipSecrets -SkipDeploy` passed.
+- `cloudflare/update-service/scripts/deploy-admin-staging.ps1 -Yes -SkipSecrets` passed and deployed `https://3718ac26.trace-update-admin-staging.pages.dev`.
+- A negative-path run with a deliberately invalid `CLOUDFLARE_API_TOKEN` now prints the Wrangler authentication failure and the script hint about Pages token permissions or unsetting the token.
+- After the user uploaded Pages Access secrets, the first deploy failed with duplicate binding name `ACCESS_JWT_AUD`; removing committed Access `vars` fixed the conflict.
+- `cloudflare/update-service/scripts/deploy-admin-staging.ps1 -Yes -SkipSecrets` passed after the duplicate binding fix and deployed `https://fa6e2e77.trace-update-admin-staging.pages.dev`.
+- Local Flutter/Gradle build/package commands were not run.
+
+### Phase 1 follow-up — lightweight admin UI on 2026-06-29
+
+Implemented:
+
+- Replaced the admin placeholder page with a lightweight static operator UI at `cloudflare/update-service/admin/public/index.html`.
+- The UI loads `/api/admin/session`, `/api/admin/channels`, and `/api/admin/releases` after Cloudflare Access login.
+- The UI displays the current Access actor/role, Android beta/stable channel revisions, registered releases, asset/patch counts, release notes, and publication state.
+- The UI supports editing release notes, publishing a candidate to beta, publishing to stable with an explicit confirmation prompt, and disabling unpublished releases.
+- The UI still uses the Access-protected Pages Functions facade and does not expose direct Worker admin routes.
+
+Remaining risks:
+
+- This is a Phase 1 static operator UI, not the final React console from Phase 3.
+- Browser validation of the publish buttons requires the operator's Cloudflare Access session.
+
+Validation:
+
+- Inline script syntax check passed by extracting the `<script>` block and compiling it with Node.
+- `git diff --check` passed for `cloudflare/update-service/admin/public/index.html` with only line-ending warnings.
+- `npx wrangler pages deploy .\public --project-name trace-update-admin-staging --branch main --commit-dirty=true` succeeded and deployed `https://7dd9a490.trace-update-admin-staging.pages.dev`.
+- Local Flutter/Gradle build/package commands were not run.
+
+### Phase 1 follow-up — beta publication verified on 2026-06-29
+
+Implemented:
+
+- Used the Access-protected Pages admin UI to publish the registered Android `v1.0.4` candidate to the `beta` channel.
+- The public Worker latest endpoint now exposes `v1.0.4` only on `beta`; `stable` remains unpublished.
+- The returned manifest includes v2 payload signature metadata, full APK fallback, and three patch entries for versionCode 29 to 30.
+- The publish operation wrote both `channel_history` and append-only `audit_logs` records for the Access actor.
+- Fallback download URLs are Worker-gated and redirect to immutable tag-specific GitHub Release assets under `/releases/download/v1.0.4/...`; no `/latest/download` fallback was introduced.
+
+Remaining risks:
+
+- `stable` has not been published and should stay blocked until beta is verified on a real phone.
+- R2 primary asset upload and primary R2 streaming remain Phase 2. Phase 1 still uses Worker-gated GitHub tag assets as the file source.
+- Download token validation is GET-scoped; HEAD checks against signed download URLs return `401`, so operator smoke checks should use non-following GET requests when validating redirects without downloading files.
+
+Validation:
+
+- `npx wrangler d1 execute trace-update-staging --env staging --remote --command "SELECT c.name, c.platform, c.revision, c.current_release_id, r.release_tag, r.version_code, r.state FROM channels c LEFT JOIN releases r ON r.id = c.current_release_id ORDER BY c.platform, c.name;"` confirmed `beta` revision `1` points to `rel_trace_android_v1_0_4` / `v1.0.4` / versionCode `30`; `stable` revision remains `0` with no release.
+- `curl.exe` against `/api/public/latest?appId=trace&platform=android&channel=beta&versionCode=1&schemaVersion=2&capabilities=patch,full,payloadSignature` returned `updateAvailable: true`, `releaseTag: v1.0.4`, `versionCode: 30`, and three patches.
+- `curl.exe` against the same latest endpoint for `channel=stable` returned `NO_UPDATE`.
+- Non-following GET checks against the patch and APK fallback URLs returned `302` redirects to tag-specific GitHub Release asset URLs.
+- D1 queries confirmed one `channel_history` publish row for `ch_trace_android_beta` and one `audit_logs` publish row for the same channel, in addition to the CI `register_candidate` audit row.
+- Local Flutter/Gradle build/package commands were not run.
+
+### Phase 2 — R2 primary distribution wiring on 2026-06-29
+
+Implemented:
+
+- Updated the formal GitHub Release job so Phase 2 uploads Android update assets to R2 before calling the Cloudflare CI registration endpoint.
+- Added `upload-r2-assets.mjs`, which validates local asset size/SHA-256, writes versioned R2 keys, sets immutable HTTP metadata, downloads objects back through Wrangler, verifies SHA-256, and writes `r2Key` plus `r2Verified: true` into the candidate metadata.
+- Added bounded retry and operation timeout handling to `upload-r2-assets.mjs` so transient Wrangler/R2 upload or read-back hangs fail into a retry instead of blocking indefinitely.
+- Added bounded retry and timeout handling to `register-release.mjs` for CI registration calls.
+- Updated Worker CI registration to accept verified R2 metadata, enforce the planned R2 key policy, require `r2Verified: true`, check R2 object existence/size through the R2 binding, and store `release_assets.r2_state = 'available'`.
+- Added a restricted `r2Backfill` registration path for existing Phase 1 releases. It only updates R2 asset state for an already registered release when commit SHA, asset ID, size, and SHA-256 match D1; it does not create or modify release identity.
+- Added `backfill-r2-release.mjs` and `backfill-r2-release.ps1` so existing GitHub Releases can be copied into R2 and re-registered without local app builds.
+- Updated `/api/public/download` so primary download URLs stream from R2 when `r2_state = 'available'`, with `X-Trace-Asset-Source: r2`, immutable cache headers, content type, content length, ETag, and content disposition.
+- Kept `/api/public/github-fallback` as the gated immutable GitHub tag fallback. No direct GitHub `/latest/download` fallback was introduced.
+- Added invariant coverage for R2 primary streaming, missing R2 object rejection during CI registration, and R2 backfill of an existing release.
+- Updated staging documentation to cover Phase 2 GitHub secrets, R2 upload, existing release backfill, D1 asset-state checks, primary R2 header checks, and fallback checks.
+- Deployed the updated staging Worker and admin Pages project after completing R2 upload/backfill for `v1.0.5`.
+
+Remaining risks:
+
+- The formal GitHub Actions release path still needs a Linux-hosted end-to-end run after these script hardening changes; current real R2 verification used the staging backfill path against existing `v1.0.5` assets.
+- Local Worker runtime tests still cannot run on this Windows host because workerd/Miniflare crashes with the known `0xc0000005` issue. Linux GitHub Actions remains the runtime test path.
+- R2 retention cleanup, restore-from-GitHub workflow, backup scheduling, richer manifest preview, and lightweight statistics remain Phase 3+ work.
+
+Validation:
+
+- `npx wrangler r2 object put --help` and `npx wrangler r2 object get --help` confirmed Wrangler 4.105 supports the R2 object flags used by the upload script.
+- `node --check cloudflare/update-service/scripts/upload-r2-assets.mjs` passed.
+- `node --check cloudflare/update-service/scripts/backfill-r2-release.mjs` passed.
+- `node --check cloudflare/update-service/scripts/register-release.mjs` passed.
+- `node --check cloudflare/update-service/scripts/deploy-admin-staging.mjs` passed.
+- `npm run check` passed in `cloudflare/update-service/worker`.
+- `npm run check` passed in `cloudflare/update-service/admin`.
+- `npm test` was attempted in `cloudflare/update-service/worker`, but local workerd/Miniflare crashed before executing tests with the known Windows `0xc0000005` access violation.
+- `cloudflare/update-service/scripts/backfill-r2-release.ps1 -ReleaseTag v1.0.5 -DryRun` passed and confirmed the non-writing plan path.
+- `gh release view v1.0.5 -R Eitan-S-23/Trace --json assets` confirmed the release contains the Android APK, update manifest, five `.tpatch` files, and Windows assets.
+- A no-write metadata-generation run against `v1.0.5` succeeded before the download-scope optimization, validating the existing GitHub Release manifest/APK/patch hashes without uploading R2 or registering D1.
+- `backfill-r2-release.ps1 -ReleaseTag v1.0.5 -Yes -SkipDownload -KeepAssets -AssetsDir $env:TEMP\trace-r2-backfill-debug` uploaded the Android APK, update manifest, and five `.tpatch` files to `trace-update-staging-releases`, then read each object back and verified SHA-256.
+- The first R2 run exposed local proxy/Wrangler instability; the new operation timeout/retry logic recovered from a hanging patch upload. Node `fetch` to `workers.dev` still timed out locally, so the final CI registration retry was performed with PowerShell `Invoke-RestMethod` using the same verified metadata.
+- The staging Worker was deployed with `npx wrangler deploy --env staging`; current version ID was reported as `28b2f3b3-fa3c-46ec-9798-3e4309f22ed8`.
+- The admin Pages facade was redeployed with `deploy-admin-staging.ps1 -Yes -SkipSecrets`; deployment URL was reported as `https://8c9131cb.trace-update-admin-staging.pages.dev`.
+- D1 query confirmed all seven `rel_trace_android_v1_0_5` assets have `r2_state = 'available'` and versioned `r2_key` values under `trace/releases/31-v1.0.5/...`.
+- Public latest for Android `stable` and `beta` both pointed to `v1.0.5` / versionCode `31` after the user's publish verification.
+- A primary signed patch download returned HTTP `200`, `X-Trace-Asset-Source: r2`, `Content-Length: 513666`, and immutable cache headers.
+- The matching fallback URL returned HTTP `302` to `https://github.com/Eitan-S-23/Trace/releases/download/v1.0.5/...`; no `/latest/download` fallback was introduced.
+- Local Flutter/Gradle build/package commands were not run.

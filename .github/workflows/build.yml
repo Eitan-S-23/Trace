@@ -489,6 +489,30 @@ jobs:
             --output release-assets/cloudflare-release-metadata.json \
             --allow-placeholder-signature
 
+      - name: Install Cloudflare upload tooling
+        run: npm ci --prefix cloudflare/update-service/worker
+
+      - name: Upload Cloudflare R2 assets
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TRACE_R2_BUCKET: ${{ vars.TRACE_R2_BUCKET || 'trace-update-staging-releases' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID:-}" || -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+            echo "::error title=Cloudflare R2 upload::CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN secrets are required for Phase 2 R2 distribution."
+            exit 1
+          fi
+
+          node cloudflare/update-service/scripts/upload-r2-assets.mjs \
+            --assets-dir release-assets \
+            --metadata release-assets/cloudflare-release-metadata.json \
+            --bucket "${TRACE_R2_BUCKET}" \
+            --wrangler-cwd cloudflare/update-service/worker \
+            --output release-assets/cloudflare-release-metadata.json
+
       - name: Register Cloudflare candidate
         env:
           TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}

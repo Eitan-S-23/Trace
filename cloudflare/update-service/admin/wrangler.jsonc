@@ -8,13 +8,7 @@
   ],
   "vars": {
     "ENVIRONMENT": "staging",
-    "APP_ID": "trace",
-    "ACCESS_JWT_ISSUER": "",
-    "ACCESS_JWT_AUD": "",
-    "ADMIN_VIEWER_EMAILS": "",
-    "ADMIN_PUBLISHER_EMAILS": "",
-    "ADMIN_OWNER_EMAILS": "",
-    "ADMIN_ALLOWED_ORIGINS": ""
+    "APP_ID": "trace"
   },
   "d1_databases": [
     {

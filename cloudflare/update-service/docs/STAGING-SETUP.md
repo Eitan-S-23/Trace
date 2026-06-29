@@ -185,11 +185,17 @@ After bootstrap, add these repository secrets in GitHub:
 ```text
 TRACE_UPDATE_SERVICE_URL=<printed staging Worker URL>
 TRACE_DEPLOY_TOKEN=<printed raw deploy token>
+CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
+CLOUDFLARE_API_TOKEN=<token with R2 object write/read permission for the staging bucket>
 ```
 
-These are not enough to publish production updates. They allow the formal GitHub Release job to call staging `/api/ci/releases` and create a D1 `candidate`.
+Add this repository variable if the bucket name differs from the staging default:
 
-Phase 1 still uses immutable GitHub tag asset URLs as the file source. R2 upload and R2 primary downloads are Phase 2.
+```text
+TRACE_R2_BUCKET=trace-update-staging-releases
+```
+
+These are not enough to publish production updates. They allow the formal GitHub Release job to upload staging R2 assets, call staging `/api/ci/releases`, and create a D1 `candidate`.
 
 ## Step 7: Configure Payload Signing For Client-Visible Updates
 
@@ -253,8 +259,9 @@ Expected result:
 - GitHub Actions creates or updates the tag-specific GitHub Release.
 - The release job uploads `ble-monitor-android.apk`, `ble-monitor-update.json`, and any `.tpatch` files.
 - `build-github-release-metadata.mjs` creates local CI metadata from those assets.
+- `upload-r2-assets.mjs` uploads those assets to R2, downloads them back, verifies SHA-256, and writes `r2Key` plus `r2Verified: true` into the metadata.
 - `register-release.mjs` calls staging `/api/ci/releases`.
-- D1 stores the release as `candidate`.
+- D1 stores the release as `candidate` and stores each asset with `r2_state = 'available'`.
 
 The public latest endpoint should still return `NO_UPDATE` until an Access-protected admin facade publishes that candidate to `stable` or `beta`:
 
@@ -263,7 +270,7 @@ $worker = "https://your-staging-worker.workers.dev"
 Invoke-RestMethod "$worker/api/public/latest?appId=trace&platform=android&channel=stable&versionCode=1&schemaVersion=2&capabilities=patch,full,payloadSignature"
 ```
 
-Current Phase 1 registration allows a staging-only placeholder `payloadSignature` when no real payload signing key is configured. Do not publish those candidates to clients. Configure real Ed25519 payload signing before using Cloudflare latest for production updates.
+Staging registration allows a placeholder `payloadSignature` when no real payload signing key is configured. Do not publish those candidates to clients. Configure real Ed25519 payload signing before using Cloudflare latest for production updates.
 
 ## Step 10: Configure Access-Protected Admin Facade
 
@@ -280,7 +287,7 @@ ACCESS_JWT_ISSUER=https://<team-name>.cloudflareaccess.com
 ACCESS_JWT_AUD=<Access application AUD tag>
 ```
 
-Configure Pages variables for the admin project:
+Configure Pages secrets for the admin project. Do not also define these names in `admin/wrangler.jsonc` `vars`; Pages rejects duplicate binding names.
 
 ```text
 ACCESS_JWT_ISSUER
@@ -293,6 +300,16 @@ ADMIN_ALLOWED_ORIGINS
 
 At least your email must be in `ADMIN_OWNER_EMAILS` for stable publish, rollback, and disable operations. The facade fails closed while `ACCESS_JWT_ISSUER` or `ACCESS_JWT_AUD` is empty.
 
+Set the values in the current PowerShell session. Use the email address that Cloudflare Access will place in the `email` claim after login:
+
+```powershell
+$env:ACCESS_JWT_ISSUER = "https://<team-name>.cloudflareaccess.com"
+$env:ACCESS_JWT_AUD = "<Access application AUD tag>"
+$env:ADMIN_OWNER_EMAILS = "you@example.com"
+$env:ADMIN_PUBLISHER_EMAILS = "you@example.com"
+$env:ADMIN_VIEWER_EMAILS = "you@example.com"
+```
+
 Run local non-build checks:
 
 ```powershell
@@ -302,13 +319,28 @@ npm run check
 Set-Location D:\github\my\bluetooth_flutter_Trace
 ```
 
-Deploy the staging Pages project only after Access is configured:
+Deploy the staging Pages project only after Access is configured. The script creates `trace-update-admin-staging` if it does not exist, writes the Access values as Pages secrets, and deploys the current admin facade:
+
+```powershell
+.\cloudflare\update-service\scripts\deploy-admin-staging.ps1 -Yes
+```
+
+If `pages project list` fails while `CLOUDFLARE_API_TOKEN` is set, Wrangler is using that token instead of the browser login. Either give that token Cloudflare Pages permissions or unset it for this PowerShell session:
+
+```powershell
+Remove-Item Env:CLOUDFLARE_API_TOKEN -ErrorAction SilentlyContinue
+```
+
+If you want to run the Wrangler commands manually instead, create the project before deploying:
 
 ```powershell
 Set-Location D:\github\my\bluetooth_flutter_Trace\cloudflare\update-service\admin
-npx wrangler pages deploy .\public --project-name trace-update-admin-staging
+npx wrangler pages project create trace-update-admin-staging --production-branch main --compatibility-date 2026-06-28 --compatibility-flag nodejs_compat
+npx wrangler pages deploy .\public --project-name trace-update-admin-staging --branch main --commit-dirty=true
 Set-Location D:\github\my\bluetooth_flutter_Trace
 ```
+
+If `pages project create` says the project already exists, skip that command and run only `pages deploy`.
 
 Then protect the resulting Pages URL with the Access application before using mutation endpoints.
 
@@ -341,7 +373,126 @@ Expected result:
 - D1 `channels.beta.current_release_id` points to the candidate.
 - `/api/public/latest?...channel=beta...` returns an update manifest for clients below the target `versionCode`.
 
+Verified staging result on 2026-06-29:
+
+- The Pages admin UI published `rel_trace_android_v1_0_4` / `v1.0.4` to Android `beta`.
+- D1 `beta` revision became `1` and points to `rel_trace_android_v1_0_4`; `stable` revision stayed `0` with no release.
+- D1 recorded the publish operation in `channel_history` and `audit_logs`.
+- The `beta` latest endpoint returned `updateAvailable: true`, versionCode `30`, and three patch entries.
+- The `stable` latest endpoint returned `NO_UPDATE`.
+- Non-following GET checks against fallback URLs returned `302` redirects to tag-specific GitHub Release URLs under `/releases/download/v1.0.4/...`. HEAD checks return `401` because signed download tokens are GET-scoped.
+
+Useful verification commands:
+
+```powershell
+Set-Location D:\github\my\bluetooth_flutter_Trace\cloudflare\update-service\worker
+npx wrangler d1 execute trace-update-staging --env staging --remote --command "SELECT c.name, c.platform, c.revision, c.current_release_id, r.release_tag, r.version_code, r.state FROM channels c LEFT JOIN releases r ON r.id = c.current_release_id ORDER BY c.platform, c.name;"
+npx wrangler d1 execute trace-update-staging --env staging --remote --command "SELECT channel_id, release_id, revision, action, actor_type, created_at FROM channel_history ORDER BY created_at DESC LIMIT 5;"
+npx wrangler d1 execute trace-update-staging --env staging --remote --command "SELECT app_id, actor_type, action, target_type, target_id, created_at FROM audit_logs ORDER BY created_at DESC LIMIT 5;"
+
+$worker = "https://trace-update-service-staging.tangjichentudou.workers.dev"
+curl.exe -sS --max-time 30 "$worker/api/public/latest?appId=trace&platform=android&channel=beta&versionCode=1&schemaVersion=2&capabilities=patch,full,payloadSignature"
+curl.exe -sS --max-time 30 "$worker/api/public/latest?appId=trace&platform=android&channel=stable&versionCode=1&schemaVersion=2&capabilities=patch,full,payloadSignature"
+```
+
+To validate fallback redirects without downloading the APK or patch body:
+
+```powershell
+$manifest = (curl.exe -sS --max-time 30 "$worker/api/public/latest?appId=trace&platform=android&channel=beta&versionCode=1&schemaVersion=2&capabilities=patch,full,payloadSignature") | ConvertFrom-Json
+$firstPatch = $manifest.patches | Select-Object -First 1
+curl.exe -sS -o NUL -w "status=%{http_code} redirect=%{redirect_url}`n" --max-time 30 $firstPatch.fallbackUrl
+curl.exe -sS -o NUL -w "status=%{http_code} redirect=%{redirect_url}`n" --max-time 30 $manifest.fullFallbackUrl
+```
+
 Do not publish to `stable` until beta verification succeeds on a real phone.
+
+## Step 12: Verify R2 Primary Distribution
+
+Deploy the updated staging Worker before validating R2 streaming:
+
+```powershell
+Set-Location D:\github\my\bluetooth_flutter_Trace\cloudflare\update-service\worker
+npm run check
+npx wrangler deploy --env staging
+Set-Location D:\github\my\bluetooth_flutter_Trace
+```
+
+For new formal releases, GitHub Actions uploads R2 assets before candidate registration. Existing Phase 1 candidates can be backfilled without rebuilding locally:
+
+```powershell
+$env:TRACE_UPDATE_SERVICE_URL = "https://trace-update-service-staging.tangjichentudou.workers.dev"
+$env:TRACE_DEPLOY_TOKEN = "<raw staging deploy token>"
+$env:CLOUDFLARE_ACCOUNT_ID = "<account id>"
+$env:CLOUDFLARE_API_TOKEN = "<token with R2 object write/read permission>"
+$env:TRACE_R2_UPLOAD_RETRIES = "3"
+$env:TRACE_R2_OPERATION_TIMEOUT_MS = "600000"
+
+.\cloudflare\update-service\scripts\backfill-r2-release.ps1 -ReleaseTag v1.0.5 -Yes
+```
+
+The backfill script downloads immutable GitHub Release assets with `gh release download`, validates the manifest/APK/patch SHA-256 values, uploads to R2, reads the objects back, and calls `/api/ci/releases` with `r2Backfill: true`. The Worker only updates D1 when the existing release tag, commit SHA, asset ID, size, and SHA-256 match.
+
+If the GitHub assets are already downloaded and verified, avoid re-downloading them:
+
+```powershell
+$dir = Join-Path $env:TEMP "trace-r2-backfill-debug"
+.\cloudflare\update-service\scripts\backfill-r2-release.ps1 -ReleaseTag v1.0.5 -Yes -SkipDownload -KeepAssets -AssetsDir $dir
+```
+
+`TRACE_R2_OPERATION_TIMEOUT_MS` is intentionally high in the example because 40-60 MB patch uploads can be slow through some Windows proxy setups. The script still fails into bounded retries instead of hanging forever.
+
+Confirm D1 asset state:
+
+```powershell
+Set-Location D:\github\my\bluetooth_flutter_Trace\cloudflare\update-service\worker
+npx wrangler d1 execute trace-update-staging --env staging --remote --command "SELECT release_id, asset_type, file_name, r2_state, r2_key FROM release_assets WHERE release_id='rel_trace_android_v1_0_5' ORDER BY asset_type, file_name;"
+Set-Location D:\github\my\bluetooth_flutter_Trace
+```
+
+Expected result:
+
+- All active assets for the release have `r2_state = available`.
+- `r2_key` follows `trace/releases/{versionCode}-{releaseTag}/...`.
+
+Confirm primary patch download is served by R2:
+
+```powershell
+$worker = "https://trace-update-service-staging.tangjichentudou.workers.dev"
+$manifest = (curl.exe -sS --max-time 30 "$worker/api/public/latest?appId=trace&platform=android&channel=stable&versionCode=30&schemaVersion=2&capabilities=patch,full,payloadSignature") | ConvertFrom-Json
+$firstPatch = $manifest.patches | Select-Object -First 1
+curl.exe -sS -D - -o NUL --max-time 60 $firstPatch.downloadUrl
+```
+
+Expected response headers include:
+
+```text
+HTTP/1.1 200
+X-Trace-Asset-Source: r2
+Cache-Control: public, max-age=31536000, immutable
+Content-Disposition: attachment; filename="..."
+```
+
+Confirm gated GitHub fallback still works and still does not use `/latest/download`:
+
+```powershell
+curl.exe -sS -o NUL -w "status=%{http_code} redirect=%{redirect_url}`n" --max-time 30 $firstPatch.fallbackUrl
+```
+
+Expected result:
+
+- `status=302`
+- `redirect` contains `/releases/download/v1.0.5/`
+- `redirect` does not contain `/latest/download/`
+
+Verified staging result on 2026-06-29:
+
+- `v1.0.5` was backfilled from existing GitHub Release assets with no local app build.
+- R2 read-back SHA-256 verification completed for the APK, manifest, and five patch files.
+- D1 shows seven `rel_trace_android_v1_0_5` assets with `r2_state = available` and versioned keys under `trace/releases/31-v1.0.5/...`.
+- `npx wrangler deploy --env staging` deployed the updated Worker.
+- `deploy-admin-staging.ps1 -Yes -SkipSecrets` deployed the updated Pages admin facade.
+- A signed primary patch download returned HTTP `200`, `X-Trace-Asset-Source: r2`, `Content-Length: 513666`, and immutable cache headers.
+- The matching fallback URL returned HTTP `302` to `/releases/download/v1.0.5/...` and did not use `/latest/download`.
 
 ## Failure Handling
 
@@ -372,6 +523,26 @@ $env:TRACE_DEPLOY_TOKEN = "new-random-token"
 ```
 
 Then update GitHub secret `TRACE_DEPLOY_TOKEN`.
+
+If Node `fetch` in `register-release.mjs` cannot reach `workers.dev` through the local Windows/proxy stack, first verify that PowerShell or curl can reach the same Worker:
+
+```powershell
+curl.exe -sS --connect-timeout 30 --max-time 60 -D - -o NUL https://trace-update-service-staging.tangjichentudou.workers.dev/healthz
+Invoke-WebRequest -Uri "https://trace-update-service-staging.tangjichentudou.workers.dev/healthz" -TimeoutSec 60
+```
+
+If those succeed and the R2 metadata file already contains verified `r2Key` values, retry only the registration with PowerShell. This reads the local ignored bootstrap summary but does not print the deploy token:
+
+```powershell
+$metadata = Join-Path $env:TEMP "trace-r2-backfill-debug\cloudflare-r2-backfill-metadata.json"
+$summary = Get-Content -LiteralPath "cloudflare/update-service/.bootstrap/staging-summary.json" -Raw | ConvertFrom-Json
+$serviceUrl = if ($summary.githubSecrets.TRACE_UPDATE_SERVICE_URL) { $summary.githubSecrets.TRACE_UPDATE_SERVICE_URL } else { $summary.workerUrl }
+$headers = @{
+  Authorization = "Bearer $($summary.githubSecrets.TRACE_DEPLOY_TOKEN)"
+  "Content-Type" = "application/json"
+}
+Invoke-RestMethod -Uri "$serviceUrl/api/ci/releases" -Method Post -Headers $headers -Body (Get-Content -LiteralPath $metadata -Raw) -TimeoutSec 90
+```
 
 ## Cleanup
 

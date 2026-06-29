@@ -91,6 +91,153 @@ describe("Phase 1 update-service invariants", () => {
     expect(blockedBody.errorCode).toBe("ASSET_DISABLED");
   });
 
+  it("streams primary downloads from R2 when the asset is available", async () => {
+    const appId = appIdFor("r2stream");
+    const release = await seedRelease(appId, 350, "v3.5.0");
+    const r2Key = `${appId}/releases/350-v3.5.0/android/ble-monitor-android.apk`;
+    const bytes = new Uint8Array(123456);
+    bytes.fill(7);
+
+    await env.RELEASES_BUCKET.put(r2Key, bytes, {
+      httpMetadata: {
+        contentType: "application/vnd.android.package-archive"
+      }
+    });
+    await env.DB.prepare(
+      "UPDATE release_assets SET r2_key = ?, r2_state = 'available' WHERE id = ?"
+    )
+      .bind(r2Key, release.assetId)
+      .run();
+    await seedChannel(appId, release.releaseId, 0);
+
+    const token = await tokenQuery(release.assetId, release.releaseId);
+    const response = await SELF.fetch(`http://example.com/api/public/download?${token}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Location")).toBeNull();
+    expect(response.headers.get("X-Trace-Asset-Source")).toBe("r2");
+    expect(response.headers.get("Content-Length")).toBe("123456");
+    expect((await response.arrayBuffer()).byteLength).toBe(123456);
+  });
+
+  it("rejects CI R2 metadata when the uploaded object is missing", async () => {
+    const appId = appIdFor("r2register");
+    const releaseTag = "v8.0.0";
+    const versionCode = 800;
+    const r2Key = `${appId}/releases/${versionCode}-${releaseTag}/android/ble-monitor-android.apk`;
+
+    const response = await SELF.fetch("http://example.com/api/ci/releases", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-deploy-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(
+        registerPayload(appId, versionCode, releaseTag, [
+          {
+            assetType: "apk",
+            fileName: "ble-monitor-android.apk",
+            sha256: APK_SHA,
+            sizeBytes: 123456,
+            githubUrl: `https://github.com/Eitan-S-23/Trace/releases/download/${releaseTag}/ble-monitor-android.apk`,
+            r2Key,
+            r2Verified: true
+          }
+        ])
+      )
+    });
+    const body = await response.json<{ errorCode: string }>();
+    expect(response.status).toBe(400);
+    expect(body.errorCode).toBe("INVALID_PARAMETER");
+  });
+
+  it("allows R2 backfill for an existing release without changing release identity", async () => {
+    const appId = appIdFor("r2backfill");
+    const releaseTag = "v8.1.0";
+    const versionCode = 810;
+    const release = await seedRelease(appId, versionCode, releaseTag);
+    const r2Key = `${appId}/releases/${versionCode}-${releaseTag}/android/ble-monitor-android.apk`;
+    await env.RELEASES_BUCKET.put(r2Key, new Uint8Array(123456));
+
+    const payload = registerPayload(appId, versionCode, releaseTag, [
+      {
+        assetType: "apk",
+        fileName: "ble-monitor-android.apk",
+        sha256: APK_SHA,
+        sizeBytes: 123456,
+        githubUrl: `https://github.com/Eitan-S-23/Trace/releases/download/${releaseTag}/ble-monitor-android.apk`,
+        r2Key,
+        r2Verified: true
+      }
+    ]);
+    payload.runId = `${appId}-${versionCode}-backfill`;
+    payload.r2Backfill = true;
+
+    const response = await SELF.fetch("http://example.com/api/ci/releases", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-deploy-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    const body = await response.json<{
+      ok: boolean;
+      r2Backfill: boolean;
+      r2AssetsUpdated: number;
+      releaseId: string;
+    }>();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      ok: true,
+      r2Backfill: true,
+      r2AssetsUpdated: 1,
+      releaseId: release.releaseId
+    });
+
+    const row = await env.DB.prepare(
+      "SELECT r2_key, r2_state FROM release_assets WHERE id = ?"
+    )
+      .bind(release.assetId)
+      .first<{ r2_key: string; r2_state: string }>();
+    expect(row).toEqual({ r2_key: r2Key, r2_state: "available" });
+  });
+
+  it("rejects R2 backfill when commit identity does not match the existing release", async () => {
+    const appId = appIdFor("r2backfillbad");
+    const releaseTag = "v8.2.0";
+    const versionCode = 820;
+    await seedRelease(appId, versionCode, releaseTag);
+    const r2Key = `${appId}/releases/${versionCode}-${releaseTag}/android/ble-monitor-android.apk`;
+    await env.RELEASES_BUCKET.put(r2Key, new Uint8Array(123456));
+
+    const payload = registerPayload(appId, versionCode, releaseTag, [
+      {
+        assetType: "apk",
+        fileName: "ble-monitor-android.apk",
+        sha256: APK_SHA,
+        sizeBytes: 123456,
+        githubUrl: `https://github.com/Eitan-S-23/Trace/releases/download/${releaseTag}/ble-monitor-android.apk`,
+        r2Key,
+        r2Verified: true
+      }
+    ]);
+    payload.runId = `${appId}-${versionCode}-backfill`;
+    payload.commitSha = "different-commit";
+    payload.r2Backfill = true;
+
+    const response = await SELF.fetch("http://example.com/api/ci/releases", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-deploy-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    const body = await response.json<{ errorCode: string }>();
+    expect(response.status).toBe(400);
+    expect(body.errorCode).toBe("INVALID_PARAMETER");
+  });
+
   it("rejects rollback to archived releases", async () => {
     const appId = appIdFor("archived");
     const current = await seedRelease(appId, 400, "v4.0.0");
@@ -474,6 +621,31 @@ async function tokenQuery(assetId: string, releaseId: string): Promise<string> {
     keyVersion: env.DOWNLOAD_TOKEN_KEY_VERSION,
     signature
   }).toString();
+}
+
+function registerPayload(
+  appId: string,
+  versionCode: number,
+  releaseTag: string,
+  assets: Array<Record<string, unknown>>
+): Record<string, unknown> {
+  return {
+    appId,
+    platform: "android",
+    releaseTag,
+    runId: `${appId}-${versionCode}-run`,
+    commitSha: `${appId}-${versionCode}-commit`,
+    versionName: releaseTag.slice(1),
+    versionCode,
+    releaseNotes: `Notes for ${releaseTag}`,
+    minClientVersionCode: 0,
+    capabilities: ["patch", "full", "payloadSignature"],
+    payloadSignature: { algorithm: "ed25519", keyVersion: "test", signature: "c2ln" },
+    isFormalRelease: true,
+    fixedSigningConfigured: true,
+    assets,
+    patches: []
+  };
 }
 
 function appIdFor(testName: string): string {

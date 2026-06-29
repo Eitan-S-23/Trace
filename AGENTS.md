@@ -8,3 +8,8 @@ This project must not be built locally.
 - Use GitHub Actions for all compile/build verification and release artifacts.
 - Local non-build checks are allowed when useful, such as formatting, static analysis, tests that do not invoke a build, and file/content inspection.
 - If a task requires a real build result, trigger or inspect the relevant GitHub Actions workflow instead of attempting a local build.
+
+## GitHub Credentials
+
+- This Windows machine may have multiple GitHub credentials configured.
+- When pushing to the remote repository, explicitly use the `Eitan-S-23` GitHub identity/credential. Do not assume the default cached credential is correct.

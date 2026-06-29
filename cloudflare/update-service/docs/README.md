@@ -1,16 +1,17 @@
 # Trace Cloudflare Update Service
 
-Phase 1 is a local scaffold for the update control plane. It does not create Cloudflare resources and does not deploy production services.
+Phase 2 staging implements and verifies the update control plane plus R2 primary distribution path. It still does not deploy production services.
 
 ## Scope
 
 - Worker public API decides latest release from D1 channel state.
 - Downloads are gated by Worker HMAC tokens and D1 state checks.
-- Phase 1 download and fallback endpoints redirect only to approved immutable GitHub tag asset URLs.
+- Primary download endpoints stream verified R2 objects when `release_assets.r2_state = 'available'`.
+- GitHub fallback endpoints redirect only to approved immutable GitHub tag asset URLs after token and D1 state checks.
 - KV is used only for revision-keyed manifest render cache: `manifest:{appId}:{platform}:{channel}:{revision}`.
 - Durable Object handles coarse public rate limiting. KV is not used as a rate-limit counter.
 - CI registration creates `candidate` releases only. It requires a formal release intent and fixed Android signing.
-- Direct Worker admin mutation routes are disabled. Admin mutations must be added through an Access-protected Pages Functions facade or equivalent same-origin protected entry point.
+- Direct Worker admin mutation routes are disabled. Admin mutations are exposed through the Access-protected Pages Functions facade.
 
 ## Local Commands
 
@@ -50,16 +51,38 @@ The GitHub repository must define:
 
 - `TRACE_UPDATE_SERVICE_URL`
 - `TRACE_DEPLOY_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
 - Fixed Android release signing secrets
 
 The workflow uses:
 
 ```text
 cloudflare/update-service/scripts/build-github-release-metadata.mjs
+cloudflare/update-service/scripts/upload-r2-assets.mjs
 cloudflare/update-service/scripts/register-release.mjs
 ```
 
-Phase 1 candidate registration still uses immutable GitHub tag asset URLs as the download source. It does not publish the candidate to `stable` or `beta`.
+Phase 2 candidate registration uploads APK/manifest/patch assets to R2, verifies them by read-back SHA-256, writes `r2Key` and `r2Verified: true` into the metadata, and registers the candidate in D1. It does not publish the candidate to `stable` or `beta`.
+
+`upload-r2-assets.mjs` and `register-release.mjs` include bounded retries for transient network failures. Operators can tune slow staging networks with:
+
+```text
+TRACE_R2_UPLOAD_RETRIES=3
+TRACE_R2_OPERATION_TIMEOUT_MS=600000
+TRACE_REGISTER_RETRIES=5
+TRACE_REGISTER_TIMEOUT_MS=60000
+```
+
+Existing Phase 1 releases can be backfilled into R2 without rebuilding local APKs:
+
+```powershell
+.\cloudflare\update-service\scripts\backfill-r2-release.ps1 -ReleaseTag v1.0.5 -Yes
+```
+
+The backfill script downloads existing immutable GitHub Release assets, uploads them to R2, read-back verifies SHA-256, and calls the CI registration endpoint with `r2Backfill: true`. The Worker only updates an existing release when the release tag, commit SHA, asset IDs, sizes, and SHA-256 values match D1.
+
+Staging `v1.0.5` has been backfilled and verified: all seven Android update assets are in `trace-update-staging-releases`, D1 stores `r2_state = available`, primary patch download returns `X-Trace-Asset-Source: r2`, and fallback redirects remain tag-specific GitHub Release URLs under `/releases/download/v1.0.5/...`.
 
 Until a real `TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64` signing secret and matching client public key are configured, CI emits a staging-only placeholder `payloadSignature`. Do not publish those candidates to clients; the placeholder is intended to fail closed if accidentally exposed.
 
@@ -91,6 +114,6 @@ Set real values with `wrangler secret put` per environment before any remote dep
 
 The committed Wrangler config intentionally contains only non-secret settings and placeholder binding IDs.
 
-## Phase 2 Boundary
+## Phase 3 Boundary
 
-R2 upload and streaming are not enabled in Phase 1. `RELEASES_BUCKET` is configured as a future binding, but approved GitHub tag assets remain the actual download source until Phase 2.
+The current admin UI is a lightweight static operator surface. The fuller React console, R2 retention cleanup UI, backup controls, manifest preview polish, and lightweight statistics remain Phase 3+ work.

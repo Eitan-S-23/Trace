@@ -11,6 +11,7 @@ interface RegisterAsset {
   sizeBytes: number;
   githubUrl: string;
   r2Key?: string;
+  r2Verified?: boolean;
 }
 
 interface RegisterPatch {
@@ -37,6 +38,7 @@ interface RegisterReleaseRequest {
   payloadSignature: unknown;
   isFormalRelease: boolean;
   fixedSigningConfigured: boolean;
+  r2Backfill: boolean;
   assets: RegisterAsset[];
   patches: RegisterPatch[];
 }
@@ -65,7 +67,7 @@ export async function handleRegisterRelease(
   }
   const payloadSignature = normalizePayloadSignature(input.payloadSignature);
 
-  validateAssets(input, env);
+  await validateAssets(input, env);
   const releaseId = releaseIdFor(input.appId, input.platform, input.releaseTag);
   const existing = await env.DB.prepare(
     "SELECT id, run_id, commit_sha FROM releases WHERE app_id = ? AND platform = ? AND release_tag = ? LIMIT 1"
@@ -74,9 +76,26 @@ export async function handleRegisterRelease(
     .first<{ id: string; run_id: string; commit_sha: string }>();
   if (existing) {
     if (existing.run_id === input.runId && existing.commit_sha === input.commitSha) {
-      return json({ ok: true, releaseId: existing.id, idempotent: true });
+      const r2AssetsUpdated = await updateR2AssetState(env, input, existing.id, requestId);
+      return json({ ok: true, releaseId: existing.id, idempotent: true, r2AssetsUpdated });
+    }
+    if (input.r2Backfill) {
+      if (existing.commit_sha !== input.commitSha) {
+        throw invalidParameter("r2Backfill commitSha must match the existing release");
+      }
+      const r2AssetsUpdated = await updateR2AssetState(env, input, existing.id, requestId);
+      return json({
+        ok: true,
+        releaseId: existing.id,
+        idempotent: false,
+        r2Backfill: true,
+        r2AssetsUpdated
+      });
     }
     throw invalidParameter("releaseTag already exists with different runId or commitSha");
+  }
+  if (input.r2Backfill) {
+    throw invalidParameter("r2Backfill can only update an existing release");
   }
 
   const securityPayload = buildSecurityPayload(input);
@@ -146,7 +165,7 @@ export async function handleRegisterRelease(
             r2_state,
             github_url
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'not_uploaded', ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       ).bind(
         assetIdFor(releaseId, asset.assetType, asset.fileName),
@@ -158,6 +177,7 @@ export async function handleRegisterRelease(
         asset.sha256,
         asset.sizeBytes,
         asset.r2Key ?? null,
+        asset.r2Key ? "available" : "not_uploaded",
         asset.githubUrl
       )
     );
@@ -248,6 +268,7 @@ function parseRegisterReleaseRequest(value: unknown): RegisterReleaseRequest {
     payloadSignature: body.payloadSignature,
     isFormalRelease: body.isFormalRelease === true,
     fixedSigningConfigured: body.fixedSigningConfigured === true,
+    r2Backfill: body.r2Backfill === true,
     assets,
     patches
   };
@@ -272,7 +293,8 @@ function parseAsset(value: unknown): RegisterAsset {
     sha256: requireSha256(body.sha256, "sha256"),
     sizeBytes: requireInt(body.sizeBytes, "sizeBytes"),
     githubUrl: requireString(body.githubUrl, "githubUrl"),
-    r2Key: typeof body.r2Key === "string" ? body.r2Key : undefined
+    r2Key: typeof body.r2Key === "string" ? body.r2Key : undefined,
+    r2Verified: body.r2Verified === true
   };
 }
 
@@ -290,13 +312,84 @@ function parsePatch(value: unknown): RegisterPatch {
   };
 }
 
-function validateAssets(input: RegisterReleaseRequest, env: WorkerEnv): void {
+async function validateAssets(input: RegisterReleaseRequest, env: WorkerEnv): Promise<void> {
   if (input.platform === "android" && !input.assets.some((asset) => asset.assetType === "apk")) {
     throw invalidParameter("android candidate requires an APK asset");
   }
   for (const asset of input.assets) {
     assertImmutableGitHubAssetUrl(asset.githubUrl, env, input.releaseTag);
+    if (asset.r2Key) {
+      assertExpectedR2Key(input, asset);
+      if (!asset.r2Verified) {
+        throw invalidParameter("r2Verified must be true when r2Key is provided");
+      }
+      await assertR2ObjectMatches(env, asset);
+    }
   }
+}
+
+async function updateR2AssetState(
+  env: WorkerEnv,
+  input: RegisterReleaseRequest,
+  releaseId: string,
+  requestId: string
+): Promise<number> {
+  let updated = 0;
+  for (const asset of input.assets) {
+    if (!asset.r2Key) continue;
+    const result = await env.DB.prepare(
+      `
+        UPDATE release_assets
+        SET r2_key = ?, r2_state = 'available', updated_at = datetime('now')
+        WHERE id = ?
+          AND release_id = ?
+          AND sha256 = ?
+          AND size_bytes = ?
+          AND disabled = 0
+      `
+    )
+      .bind(
+        asset.r2Key,
+        assetIdFor(releaseId, asset.assetType, asset.fileName),
+        releaseId,
+        asset.sha256,
+        asset.sizeBytes
+      )
+      .run();
+    if (result.meta.changes !== 1) {
+      throw invalidParameter(`registered asset does not match R2 metadata: ${asset.fileName}`);
+    }
+    updated += 1;
+  }
+
+  if (updated > 0) {
+    await env.DB.prepare(
+      `
+        INSERT INTO audit_logs (
+          id,
+          app_id,
+          actor,
+          actor_type,
+          action,
+          target_type,
+          target_id,
+          request_id,
+          after_json
+        )
+        VALUES (?, ?, 'github-actions', 'ci', 'update_r2_assets', 'release', ?, ?, ?)
+      `
+    )
+      .bind(
+        crypto.randomUUID(),
+        input.appId,
+        releaseId,
+        requestId,
+        canonicalJson({ r2AssetsUpdated: updated })
+      )
+      .run();
+  }
+
+  return updated;
 }
 
 function buildSecurityPayload(input: RegisterReleaseRequest): SecurityPayload {
@@ -354,6 +447,69 @@ function assertImmutableGitHubAssetUrl(value: string, env: WorkerEnv, releaseTag
   const expectedPrefix = `/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/releases/download/`;
   if (!url.pathname.startsWith(expectedPrefix) || !url.pathname.includes(`/${releaseTag}/`)) {
     throw invalidParameter("GitHub asset URL must match releaseTag");
+  }
+}
+
+async function assertR2ObjectMatches(env: WorkerEnv, asset: RegisterAsset): Promise<void> {
+  if (!asset.r2Key) return;
+  const object = await env.RELEASES_BUCKET.head(asset.r2Key);
+  if (!object) {
+    throw invalidParameter(`R2 object is missing: ${asset.fileName}`);
+  }
+  if (object.size !== asset.sizeBytes) {
+    throw invalidParameter(`R2 object size mismatch: ${asset.fileName}`);
+  }
+  const metadataSha256 = object.customMetadata?.sha256?.toLowerCase();
+  if (metadataSha256 && metadataSha256 !== asset.sha256) {
+    throw invalidParameter(`R2 object sha256 metadata mismatch: ${asset.fileName}`);
+  }
+}
+
+function assertExpectedR2Key(input: RegisterReleaseRequest, asset: RegisterAsset): void {
+  const expected = r2KeyForAsset(input, asset);
+  if (asset.r2Key !== expected) {
+    throw invalidParameter(`R2 key does not match the release object key policy: ${asset.fileName}`);
+  }
+}
+
+function r2KeyForAsset(input: RegisterReleaseRequest, asset: RegisterAsset): string {
+  assertSafeFileName(asset.fileName);
+  assertSafePathPart(input.appId, "appId");
+  assertSafePathPart(input.releaseTag, "releaseTag");
+
+  const releasePrefix = `${input.appId}/releases/${input.versionCode}-${input.releaseTag}`;
+  if (asset.assetType === "patch") {
+    return `${releasePrefix}/android/patches/${asset.fileName}`;
+  }
+  if (asset.assetType === "manifest") {
+    return `${releasePrefix}/manifest/${asset.fileName}`;
+  }
+  if (asset.assetType === "windows_zip" || asset.assetType === "windows_exe") {
+    return `${releasePrefix}/windows/${asset.fileName}`;
+  }
+  return `${releasePrefix}/android/${asset.fileName}`;
+}
+
+function assertSafeFileName(fileName: string): void {
+  if (
+    fileName.includes("/") ||
+    fileName.includes("\\") ||
+    fileName === "." ||
+    fileName === ".." ||
+    fileName.trim() === ""
+  ) {
+    throw invalidParameter("asset fileName must be a plain file name");
+  }
+}
+
+function assertSafePathPart(value: string, fieldName: string): void {
+  if (
+    value.includes("/") ||
+    value.includes("\\") ||
+    value.includes("..") ||
+    value.trim() === ""
+  ) {
+    throw invalidParameter(`${fieldName} contains invalid R2 path characters`);
   }
 }
 
