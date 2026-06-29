@@ -586,6 +586,26 @@ Validation recorded:
 - `node --check cloudflare/update-service/scripts/publish-staging-release.mjs` passed after the Windows operator hardening.
 - Local Flutter/Gradle/Dart build or package commands were not run.
 
+### Phase 2 follow-up — v1.0.9 public Pages release on 2026-06-29
+
+Status: `v1.0.9` is published to Android staging stable/beta and is the first APK built with the public Pages manifest URL.
+
+Implemented:
+
+- Bumped `pubspec.yaml` from `1.0.8+34` to `1.0.9+35`.
+- Triggered formal GitHub Actions release run `28383587466` with `publish_release=true`, `release_tag=v1.0.9`, and `replace_existing_release=false`.
+- Published `rel_trace_android_v1_0_9` to Android `stable` and `beta` through the staging publish wrapper.
+
+Validation recorded:
+
+- GitHub Actions run `28383587466` completed successfully for Android, Windows, GitHub Pages, and Create GitHub Release.
+- Android build logs confirmed `Cloudflare public update manifest URL is configured for this APK` and `Cloudflare update payload public key is configured for this APK`.
+- `gh release view v1.0.9` confirmed the release targets commit `9ced5222a2c2e1ff014732175b3cc80b8bc6cf96` and includes APK, update manifest, nine patch assets, and Windows assets.
+- `publish-staging-release.ps1 -ReleaseTag v1.0.9 -Channels stable,beta -SkipBackfill -Yes -ActorEmail codex-staging -VerifyFromVersionCode 34` published stable/beta revision `7` and verified `34 -> 35` primary patch downloads from R2 through the Worker.
+- Public Pages latest for `versionCode=34` returned `v1.0.9` with Pages-origin signed download URLs and keyVersion `staging-public`.
+- Public Pages primary `34 -> 35` patch download returned HTTP `200`, `Content-Length: 25942025`, and `X-Trace-Asset-Source: r2`.
+- Local Flutter/Gradle/Dart build or package commands were not run.
+
 ### Phase 2 follow-up — public Pages endpoint and release immutability guard on 2026-06-29
 
 Status: staging public Pages endpoint deployed and verified.
@@ -607,7 +627,7 @@ Residual risks and follow-up:
 
 - Devices that installed a same-tag `v1.0.7` APK before the release assets were overwritten can still have an APK hash that no longer exists in the current GitHub Release. Without recovering that exact old APK, those devices must use full APK once.
 - Attempting to download old GitHub Actions APK artifacts from this Windows/proxy network was too slow to use for patch backfill; artifact metadata confirmed the old artifacts exist, but the APK ZIP download timed out.
-- The next Android APK must be built by GitHub Actions after this change before phones will use `trace-update-public-staging.pages.dev`; existing installed APKs still contain their previously compiled manifest URL.
+- Existing installed APKs still contain their previously compiled manifest URL until they install `v1.0.9` or later.
 - Local Dart/Flutter commands were unavailable, so Dart formatting/analyze could not run locally.
 
 Validation recorded:

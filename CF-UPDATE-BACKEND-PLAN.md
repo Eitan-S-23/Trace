@@ -801,3 +801,19 @@ Validation:
 Residual risk:
 
 - Any client that installed a pre-overwrite `v1.0.7` APK hash can still miss the `33 -> 34` patch and must use full APK once unless that exact old APK artifact is recovered and an extra patch is registered.
+
+### Phase 2 follow-up — v1.0.9 public Pages APK on 2026-06-29
+
+Implemented:
+
+- Bumped the app to `1.0.9+35`, pushed commit `9ced5222a2c2e1ff014732175b3cc80b8bc6cf96`, and triggered formal release run `28383587466`.
+- Built and published GitHub Release `v1.0.9` with `replace_existing_release=false`.
+- Published `v1.0.9` to Android staging `stable` and `beta` revisions `7`.
+
+Validation:
+
+- The Android build log confirmed the public Pages manifest URL and payload public key were compiled into the APK.
+- GitHub Release `v1.0.9` contains the APK, update manifest, nine Android patch assets, and Windows assets.
+- Public Pages latest for `versionCode=34` returns `v1.0.9` with Pages-origin signed URLs.
+- Public Pages primary `34 -> 35` patch download returned `200`, `Content-Length: 25942025`, and `X-Trace-Asset-Source: r2`.
+- Local Flutter/Gradle/Dart build or package commands were not run.

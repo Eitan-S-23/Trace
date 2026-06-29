@@ -115,6 +115,8 @@ Staging now also has a standalone public Pages endpoint at `https://trace-update
 
 Do not rebuild or re-upload assets for an existing release tag after clients may have installed it. If a same-tag APK was overwritten before this guard existed, old clients with the replaced APK hash may not have a matching patch and should use the full APK once. Future releases must bump `pubspec.yaml` and use a new tag.
 
+Staging `v1.0.9` is the first release built after the public Pages split. GitHub Actions run `28383587466` built `1.0.9+35` with `TRACE_PUBLIC_UPDATE_SERVICE_URL=https://trace-update-public-staging.pages.dev`, uploaded assets to R2, registered the Cloudflare candidate, and the staging publish wrapper published it to Android `stable` and `beta`. The public Pages latest endpoint returns `v1.0.9`, and the `34 -> 35` primary patch download returns `X-Trace-Asset-Source: r2`.
+
 Until a real `TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64` signing secret and matching client public key are configured, CI emits a staging-only placeholder `payloadSignature`. Do not publish those candidates to clients; the placeholder is intended to fail closed if accidentally exposed.
 
 Generate payload signing keys with:
