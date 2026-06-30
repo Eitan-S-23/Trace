@@ -10,6 +10,7 @@ const APK_SHA = "a".repeat(64);
 const OLD_SHA = "b".repeat(64);
 const PATCH_SHA = "c".repeat(64);
 const OUTPUT_SHA = "d".repeat(64);
+const FIRMWARE_SHA = "f".repeat(64);
 
 describe("Phase 1 update-service invariants", () => {
   it("detects CAS conflict without writing channel_history", async () => {
@@ -506,6 +507,75 @@ describe("Phase 1 update-service invariants", () => {
     expect(after.releaseNotes).toBe("Edited notes");
     expect(after.payloadSignature).toEqual(before.payloadSignature);
     expect(after.assets).toEqual(before.assets);
+  });
+
+  it("registers published MCU firmware and streams it from R2", async () => {
+    const appId = appIdFor("firmware");
+    const deviceModel = "igpsport-bsc300";
+    const releaseTag = "mcu-v1.2.0";
+    const versionCode = 120;
+    const fileName = "igpsport-bsc300-1.2.0.bin";
+    const r2Key = `${appId}/firmware/${deviceModel}/${versionCode}-${releaseTag}/${fileName}`;
+    await env.RELEASES_BUCKET.put(r2Key, new Uint8Array(32));
+
+    const register = await SELF.fetch("http://example.com/api/ci/firmware/releases", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-deploy-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        appId,
+        deviceModel,
+        releaseTag,
+        runId: `${appId}-${versionCode}-run`,
+        commitSha: `${appId}-${versionCode}-commit`,
+        versionName: "1.2.0",
+        versionCode,
+        releaseNotes: "Firmware notes",
+        fileName,
+        sha256: FIRMWARE_SHA,
+        sizeBytes: 32,
+        githubUrl: `https://github.com/Eitan-S-23/Trace/releases/download/${releaseTag}/${fileName}`,
+        r2Key,
+        r2Verified: true,
+        targetHardware: "BSC300",
+        transport: "ble",
+        isFormalRelease: true
+      })
+    });
+    const registered = await register.json<{ releaseId: string }>();
+    expect(register.status).toBe(201);
+
+    await env.DB.prepare(
+      `
+        UPDATE firmware_channels
+        SET current_release_id = ?, revision = revision + 1, last_action = 'publish'
+        WHERE app_id = ? AND device_model = ? AND name = 'stable'
+      `
+    )
+      .bind(registered.releaseId, appId, deviceModel)
+      .run();
+
+    const latest = await SELF.fetch(
+      `http://example.com/api/public/firmware/latest?appId=${appId}&deviceModel=${deviceModel}&channel=stable&currentVersionCode=1`
+    );
+    const latestBody = await latest.json<Record<string, unknown>>();
+    expect(latest.status).toBe(200);
+    expect(latestBody).toMatchObject({
+      updateAvailable: true,
+      versionName: "1.2.0",
+      versionCode,
+      fileName,
+      sha256: FIRMWARE_SHA,
+      sizeBytes: 32
+    });
+    expect(String(latestBody.downloadUrl)).toContain("/api/public/firmware/download");
+
+    const download = await SELF.fetch(String(latestBody.downloadUrl));
+    expect(download.status).toBe(200);
+    expect(download.headers.get("X-Trace-Asset-Type")).toBe("firmware");
+    expect((await download.arrayBuffer()).byteLength).toBe(32);
   });
 });
 

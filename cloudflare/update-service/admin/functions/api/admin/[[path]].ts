@@ -4,6 +4,7 @@ type ActorRole = "viewer" | "publisher" | "owner";
 
 interface AdminEnv {
   DB: D1Database;
+  RELEASES_BUCKET: R2Bucket;
   ENVIRONMENT: string;
   APP_ID: string;
   ACCESS_JWT_ISSUER?: string;
@@ -44,6 +45,58 @@ interface ReleaseRow {
   release_notes: string;
   archived: number;
   fallback_only: number;
+}
+
+interface ReleaseAssetRow {
+  id: string;
+  asset_type: "apk" | "windows_zip" | "windows_exe" | "manifest" | "patch";
+  file_name: string;
+  size_bytes: number;
+  r2_key: string | null;
+  r2_state: "not_uploaded" | "available" | "r2_deleted" | "archived";
+}
+
+interface FirmwareReleaseRow {
+  id: string;
+  app_id: string;
+  device_model: string;
+  version_name: string;
+  version_code: number;
+  release_tag: string;
+  state: "candidate" | "disabled";
+  release_notes: string;
+  file_name: string;
+  sha256: string;
+  size_bytes: number;
+  r2_key: string | null;
+  r2_state: "not_uploaded" | "available" | "r2_deleted" | "archived";
+  github_url: string;
+  target_hardware: string | null;
+  transport: string;
+  archived: number;
+}
+
+interface FirmwareChannelRow {
+  id: string;
+  app_id: string;
+  device_model: string;
+  name: ChannelName;
+  current_release_id: string | null;
+  revision: number;
+  disable_latest: number;
+  disable_downloads: number;
+  maintenance_message: string | null;
+}
+
+interface StorageTypeSummary {
+  type: string;
+  objectCount: number;
+  totalSizeBytes: number;
+}
+
+interface DeleteR2Result {
+  objectCount: number;
+  totalSizeBytes: number;
 }
 
 interface AccessJwk {
@@ -131,6 +184,21 @@ async function routeAdminRequest(
     return listReleases(context.env, url);
   }
 
+  if (method === "GET" && route.length === 1 && route[0] === "storage") {
+    requireRole(actor, "viewer");
+    return storageSummary(context.env, url);
+  }
+
+  if (method === "GET" && route.length === 2 && route[0] === "firmware" && route[1] === "releases") {
+    requireRole(actor, "viewer");
+    return listFirmwareReleases(context.env, url);
+  }
+
+  if (method === "GET" && route.length === 2 && route[0] === "firmware" && route[1] === "channels") {
+    requireRole(actor, "viewer");
+    return listFirmwareChannels(context.env, url);
+  }
+
   if (
     method === "POST" &&
     route.length === 3 &&
@@ -162,6 +230,40 @@ async function routeAdminRequest(
   ) {
     requireRole(actor, "owner");
     return disableRelease(context.env, actor, route[1]);
+  }
+
+  if (
+    method === "POST" &&
+    route.length === 3 &&
+    route[0] === "releases" &&
+    route[2] === "delete"
+  ) {
+    requireRole(actor, "owner");
+    return deleteRelease(context.env, actor, route[1]);
+  }
+
+  if (
+    method === "POST" &&
+    route.length === 4 &&
+    route[0] === "firmware" &&
+    route[1] === "channels" &&
+    route[3] === "publish"
+  ) {
+    const channel = parseChannel(route[2]);
+    requireRole(actor, channel === "stable" ? "owner" : "publisher");
+    const body = await requestJson(context.request);
+    return publishFirmwareRelease(context.env, actor, channel, body);
+  }
+
+  if (
+    method === "POST" &&
+    route.length === 4 &&
+    route[0] === "firmware" &&
+    route[1] === "releases" &&
+    route[3] === "disable"
+  ) {
+    requireRole(actor, "owner");
+    return disableFirmwareRelease(context.env, actor, route[2]);
   }
 
   throw new AdminError("NOT_FOUND", "Admin route not found", 404);
@@ -208,6 +310,14 @@ async function listReleases(env: AdminEnv, url: URL): Promise<Response> {
           WHERE a.release_id = r.id AND a.disabled = 0 AND a.r2_state = 'available'
         ) AS r2_available_count,
         (
+          SELECT COALESCE(max(a.size_bytes), 0)
+          FROM release_assets a
+          WHERE a.release_id = r.id
+            AND a.disabled = 0
+            AND a.platform = r.platform
+            AND a.asset_type IN ('apk', 'windows_zip', 'windows_exe')
+        ) AS installer_size_bytes,
+        (
           SELECT count(*)
           FROM release_assets a
           WHERE a.release_id = r.id AND a.disabled = 0 AND a.r2_state <> 'available'
@@ -220,6 +330,21 @@ async function listReleases(env: AdminEnv, url: URL): Promise<Response> {
       FROM releases r
       LEFT JOIN channels c ON c.current_release_id = r.id
       WHERE r.app_id = ? AND r.platform = ?
+        AND r.archived = 0
+        AND EXISTS (
+          SELECT 1
+          FROM release_assets a
+          WHERE a.release_id = r.id
+            AND a.disabled = 0
+            AND a.r2_state = 'available'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM release_assets a
+          WHERE a.release_id = r.id
+            AND a.disabled = 0
+            AND a.r2_state <> 'available'
+        )
       GROUP BY r.id
       ORDER BY r.version_code DESC, r.created_at DESC
       LIMIT 50
@@ -228,6 +353,149 @@ async function listReleases(env: AdminEnv, url: URL): Promise<Response> {
     .bind(appId, platform)
     .all();
   return json({ ok: true, releases: result.results });
+}
+
+async function storageSummary(env: AdminEnv, url: URL): Promise<Response> {
+  const appId = queryString(url, "appId") ?? env.APP_ID;
+  const platform = parsePlatform(queryString(url, "platform") ?? "android");
+  const prefix = `${appId}/`;
+  const [r2, trackedRows, trackedTotal, fullyR2Releases] = await Promise.all([
+    listR2Usage(env, prefix),
+    env.DB.prepare(
+      `
+        SELECT type, count(*) AS objectCount, COALESCE(sum(size_bytes), 0) AS totalSizeBytes
+        FROM (
+          SELECT asset_type AS type, size_bytes
+          FROM release_assets
+          WHERE app_id = ?
+            AND platform = ?
+            AND disabled = 0
+            AND r2_state = 'available'
+          UNION ALL
+          SELECT 'firmware' AS type, size_bytes
+          FROM firmware_releases
+          WHERE app_id = ?
+            AND archived = 0
+            AND state <> 'disabled'
+            AND r2_state = 'available'
+        )
+        GROUP BY type
+        ORDER BY type
+      `
+    )
+      .bind(appId, platform, appId)
+      .all<StorageTypeSummary>(),
+    env.DB.prepare(
+      `
+        SELECT
+          count(*) AS objectCount,
+          COALESCE(sum(size_bytes), 0) AS totalSizeBytes
+        FROM (
+          SELECT size_bytes
+          FROM release_assets
+          WHERE app_id = ?
+            AND platform = ?
+            AND disabled = 0
+            AND r2_state = 'available'
+          UNION ALL
+          SELECT size_bytes
+          FROM firmware_releases
+          WHERE app_id = ?
+            AND archived = 0
+            AND state <> 'disabled'
+            AND r2_state = 'available'
+        )
+      `
+    )
+      .bind(appId, platform, appId)
+      .first<{ objectCount: number; totalSizeBytes: number }>(),
+    env.DB.prepare(
+      `
+        SELECT count(*) AS releaseCount
+        FROM releases r
+        WHERE r.app_id = ?
+          AND r.platform = ?
+          AND r.archived = 0
+          AND EXISTS (
+            SELECT 1
+            FROM release_assets a
+            WHERE a.release_id = r.id
+              AND a.disabled = 0
+              AND a.r2_state = 'available'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM release_assets a
+            WHERE a.release_id = r.id
+              AND a.disabled = 0
+              AND a.r2_state <> 'available'
+          )
+      `
+    )
+      .bind(appId, platform)
+      .first<{ releaseCount: number }>()
+  ]);
+
+  return json({
+    ok: true,
+    storage: {
+      prefix,
+      r2,
+      tracked: {
+        objectCount: trackedTotal?.objectCount ?? 0,
+        totalSizeBytes: trackedTotal?.totalSizeBytes ?? 0,
+        releaseCount: fullyR2Releases?.releaseCount ?? 0,
+        byType: trackedRows.results
+      }
+    }
+  });
+}
+
+async function listFirmwareReleases(env: AdminEnv, url: URL): Promise<Response> {
+  const appId = queryString(url, "appId") ?? env.APP_ID;
+  const deviceModel = optionalDeviceModel(queryString(url, "deviceModel"));
+  const baseSql = `
+      SELECT
+        f.*,
+        group_concat(c.name) AS published_channels
+      FROM firmware_releases f
+      LEFT JOIN firmware_channels c ON c.current_release_id = f.id
+      WHERE f.app_id = ?
+        AND f.archived = 0
+        AND f.r2_state = 'available'
+        ${deviceModel ? "AND f.device_model = ?" : ""}
+      GROUP BY f.id
+      ORDER BY f.device_model ASC, f.version_code DESC, f.created_at DESC
+      LIMIT 100
+    `;
+  const statement = env.DB.prepare(baseSql);
+  const result = deviceModel
+    ? await statement.bind(appId, deviceModel).all()
+    : await statement.bind(appId).all();
+  return json({ ok: true, firmwareReleases: result.results });
+}
+
+async function listFirmwareChannels(env: AdminEnv, url: URL): Promise<Response> {
+  const appId = queryString(url, "appId") ?? env.APP_ID;
+  const deviceModel = optionalDeviceModel(queryString(url, "deviceModel"));
+  const baseSql = `
+      SELECT
+        c.*,
+        f.release_tag,
+        f.version_name,
+        f.version_code,
+        f.state AS release_state
+      FROM firmware_channels c
+      LEFT JOIN firmware_releases f ON f.id = c.current_release_id
+      WHERE c.app_id = ?
+        ${deviceModel ? "AND c.device_model = ?" : ""}
+      ORDER BY c.device_model ASC, c.name ASC
+    `;
+  const statement = env.DB.prepare(baseSql);
+  const result = deviceModel
+    ? await statement.bind(appId, deviceModel).all()
+    : await statement.bind(appId).all();
+  return json({ ok: true, firmwareChannels: result.results });
 }
 
 async function publishRelease(
@@ -319,6 +587,117 @@ async function publishRelease(
   return json({ ok: true, revision: updatedChannel.revision });
 }
 
+async function publishFirmwareRelease(
+  env: AdminEnv,
+  actor: Actor,
+  channelName: ChannelName,
+  body: Record<string, unknown>
+): Promise<Response> {
+  const appId = requireString(body.appId ?? env.APP_ID, "appId");
+  const deviceModel = parseDeviceModel(body.deviceModel);
+  const releaseId = requireString(body.releaseId, "releaseId");
+  const expectedRevision = requireInt(body.expectedRevision, "expectedRevision");
+  const rollback = body.rollback === true;
+
+  const channel = await env.DB.prepare(
+    "SELECT * FROM firmware_channels WHERE app_id = ? AND device_model = ? AND name = ? LIMIT 1"
+  )
+    .bind(appId, deviceModel, channelName)
+    .first<FirmwareChannelRow>();
+  if (!channel) throw new AdminError("RELEASE_NOT_FOUND", "Firmware channel not found", 404);
+
+  const target = await env.DB.prepare("SELECT * FROM firmware_releases WHERE id = ? LIMIT 1")
+    .bind(releaseId)
+    .first<FirmwareReleaseRow>();
+  if (!target || target.app_id !== appId || target.device_model !== deviceModel) {
+    throw new AdminError("RELEASE_NOT_FOUND", "Firmware release not found", 404);
+  }
+  if (target.state === "disabled") {
+    throw new AdminError("RELEASE_DISABLED", "Disabled firmware release cannot be published", 410);
+  }
+  if (target.archived === 1 || target.r2_state !== "available" || !target.r2_key) {
+    throw new AdminError("ASSET_ARCHIVED", "Firmware R2 asset is not available", 409);
+  }
+
+  if (channel.current_release_id && !rollback) {
+    const current = await env.DB.prepare("SELECT version_code FROM firmware_releases WHERE id = ? LIMIT 1")
+      .bind(channel.current_release_id)
+      .first<{ version_code: number }>();
+    if (current && target.version_code <= current.version_code) {
+      throw new AdminError(
+        "VERSION_REGRESSION",
+        "Publishing a non-rollback firmware versionCode regression is blocked",
+        409
+      );
+    }
+  }
+
+  const beforeJson = canonicalJson(channel);
+  const afterJson = canonicalJson({ ...channel, current_release_id: releaseId });
+  const updatedChannel = await env.DB.prepare(
+    `
+      UPDATE firmware_channels
+      SET
+        current_release_id = ?,
+        revision = revision + 1,
+        last_action = ?,
+        last_actor = ?,
+        last_actor_type = 'access',
+        last_request_id = ?,
+        last_before_json = ?,
+        last_after_json = ?,
+        updated_at = datetime('now')
+      WHERE id = ? AND revision = ? AND disable_latest = 0
+      RETURNING revision
+    `
+  )
+    .bind(
+      releaseId,
+      rollback ? "rollback" : "publish",
+      actor.email,
+      actor.requestId,
+      beforeJson,
+      afterJson,
+      channel.id,
+      expectedRevision
+    )
+    .first<{ revision: number }>();
+
+  if (!updatedChannel) {
+    throw new AdminError("CAS_CONFLICT", "Firmware channel revision changed or latest is disabled", 409);
+  }
+
+  await env.DB.prepare(
+    `
+      INSERT INTO audit_logs (
+        id,
+        app_id,
+        actor,
+        actor_type,
+        action,
+        target_type,
+        target_id,
+        request_id,
+        before_json,
+        after_json
+      )
+      VALUES (?, ?, ?, 'access', 'publish_firmware', 'firmware_channel', ?, ?, ?, ?)
+    `
+  )
+    .bind(
+      crypto.randomUUID(),
+      appId,
+      actor.email,
+      channel.id,
+      actor.requestId,
+      beforeJson,
+      afterJson
+    )
+    .run();
+
+  return json({ ok: true, revision: updatedChannel.revision });
+}
+
 async function editReleaseNotes(
   env: AdminEnv,
   actor: Actor,
@@ -385,6 +764,68 @@ async function editReleaseNotes(
   return json({ ok: true });
 }
 
+async function disableFirmwareRelease(
+  env: AdminEnv,
+  actor: Actor,
+  releaseId: string
+): Promise<Response> {
+  const referenced = await env.DB.prepare(
+    "SELECT id FROM firmware_channels WHERE current_release_id = ? LIMIT 1"
+  )
+    .bind(releaseId)
+    .first<{ id: string }>();
+  if (referenced) {
+    throw new AdminError(
+      "RELEASE_DISABLED",
+      "Published firmware cannot be disabled before moving the channel",
+      409
+    );
+  }
+
+  const release = await env.DB.prepare("SELECT app_id, state FROM firmware_releases WHERE id = ? LIMIT 1")
+    .bind(releaseId)
+    .first<{ app_id: string; state: string }>();
+  if (!release) throw new AdminError("RELEASE_NOT_FOUND", "Firmware release not found", 404);
+
+  const result = await env.DB.prepare(
+    "UPDATE firmware_releases SET state = 'disabled', updated_at = datetime('now') WHERE id = ?"
+  )
+    .bind(releaseId)
+    .run();
+  if (result.meta.changes !== 1) {
+    throw new AdminError("RELEASE_NOT_FOUND", "Firmware release not found", 404);
+  }
+
+  await env.DB.prepare(
+    `
+      INSERT INTO audit_logs (
+        id,
+        app_id,
+        actor,
+        actor_type,
+        action,
+        target_type,
+        target_id,
+        request_id,
+        before_json,
+        after_json
+      )
+      VALUES (?, ?, ?, 'access', 'disable_firmware', 'firmware_release', ?, ?, ?, '{"state":"disabled"}')
+    `
+  )
+    .bind(
+      crypto.randomUUID(),
+      release.app_id,
+      actor.email,
+      releaseId,
+      actor.requestId,
+      canonicalJson({ state: release.state })
+    )
+    .run();
+
+  return json({ ok: true });
+}
+
 async function disableRelease(env: AdminEnv, actor: Actor, releaseId: string): Promise<Response> {
   const referenced = await env.DB.prepare(
     "SELECT id FROM channels WHERE current_release_id = ? LIMIT 1"
@@ -441,6 +882,123 @@ async function disableRelease(env: AdminEnv, actor: Actor, releaseId: string): P
     .run();
 
   return json({ ok: true });
+}
+
+async function deleteRelease(env: AdminEnv, actor: Actor, releaseId: string): Promise<Response> {
+  const referenced = await env.DB.prepare(
+    "SELECT name FROM channels WHERE current_release_id = ? LIMIT 1"
+  )
+    .bind(releaseId)
+    .first<{ name: string }>();
+  if (referenced) {
+    throw new AdminError(
+      "RELEASE_IN_USE",
+      "Published release cannot be deleted before moving the channel",
+      409
+    );
+  }
+
+  const release = await env.DB.prepare("SELECT * FROM releases WHERE id = ? LIMIT 1")
+    .bind(releaseId)
+    .first<ReleaseRow>();
+  if (!release) throw new AdminError("RELEASE_NOT_FOUND", "Release not found", 404);
+
+  const assets = await env.DB.prepare(
+    "SELECT id, asset_type, file_name, size_bytes, r2_key, r2_state FROM release_assets WHERE release_id = ?"
+  )
+    .bind(releaseId)
+    .all<ReleaseAssetRow>();
+  const [patchRows, historyRows] = await Promise.all([
+    env.DB.prepare("SELECT count(*) AS count FROM patches WHERE to_release_id = ?")
+      .bind(releaseId)
+      .first<{ count: number }>(),
+    env.DB.prepare("SELECT count(*) AS count FROM channel_history WHERE release_id = ?")
+      .bind(releaseId)
+      .first<{ count: number }>()
+  ]);
+  const deletedR2 = await deleteR2ObjectsForRelease(env, release, assets.results);
+  const assetRowCount = assets.results.length;
+  const patchRowCount = patchRows?.count ?? 0;
+  const historyRowCount = historyRows?.count ?? 0;
+  const hardDeleteRelease = historyRowCount === 0;
+
+  const beforeJson = canonicalJson({
+    release,
+    assets: assets.results.map((asset) => ({
+      assetType: asset.asset_type,
+      fileName: asset.file_name,
+      sizeBytes: asset.size_bytes,
+      r2Key: asset.r2_key,
+      r2State: asset.r2_state
+    }))
+  });
+
+  const statements = [
+    env.DB.prepare("DELETE FROM patches WHERE to_release_id = ?").bind(releaseId),
+    env.DB.prepare("DELETE FROM release_assets WHERE release_id = ?").bind(releaseId),
+    hardDeleteRelease
+      ? env.DB.prepare("DELETE FROM releases WHERE id = ?").bind(releaseId)
+      : env.DB.prepare(
+          `
+            UPDATE releases
+            SET
+              archived = 1,
+              state = 'disabled',
+              payload_signature_json = NULL,
+              security_payload_json = '{}',
+              release_notes = '',
+              capabilities_json = '[]',
+              fallback_only = 0,
+              updated_at = datetime('now')
+            WHERE id = ?
+          `
+        ).bind(releaseId),
+    env.DB.prepare(
+      `
+        INSERT INTO audit_logs (
+          id,
+          app_id,
+          actor,
+          actor_type,
+          action,
+          target_type,
+          target_id,
+          request_id,
+          before_json,
+          after_json
+        )
+        VALUES (?, ?, ?, 'access', 'delete_release', 'release', ?, ?, ?, ?)
+      `
+    ).bind(
+      crypto.randomUUID(),
+      release.app_id,
+      actor.email,
+      releaseId,
+      actor.requestId,
+      beforeJson,
+      canonicalJson({
+        deleted: true,
+        hardDeletedRelease: hardDeleteRelease,
+        retainedReleaseTombstone: !hardDeleteRelease,
+        retainedD1HistoryRows: historyRowCount,
+        deletedR2Objects: deletedR2.objectCount,
+        deletedR2Bytes: deletedR2.totalSizeBytes,
+        deletedD1Rows: patchRowCount + assetRowCount + (hardDeleteRelease ? 1 : 0)
+      })
+    )
+  ];
+
+  await env.DB.batch(statements);
+
+  return json({
+    ok: true,
+    hardDeletedRelease: hardDeleteRelease,
+    retainedReleaseTombstone: !hardDeleteRelease,
+    retainedD1HistoryRows: historyRowCount,
+    deletedR2Objects: deletedR2.objectCount,
+    deletedR2Bytes: deletedR2.totalSizeBytes,
+    deletedD1Rows: patchRowCount + assetRowCount + (hardDeleteRelease ? 1 : 0)
+  });
 }
 
 async function ensureAndroidCompleteness(env: AdminEnv, releaseId: string): Promise<void> {
@@ -661,6 +1219,89 @@ function parsePlatform(value: unknown): Platform {
 function parseChannel(value: unknown): ChannelName {
   if (value === "stable" || value === "beta") return value;
   throw new AdminError("INVALID_PARAMETER", "channel must be stable or beta", 400);
+}
+
+function parseDeviceModel(value: unknown): string {
+  return requireString(value, "deviceModel").toLowerCase().replace(/\s+/g, "-");
+}
+
+function optionalDeviceModel(value: string | null): string | null {
+  return value ? value.toLowerCase().replace(/\s+/g, "-") : null;
+}
+
+async function listR2Usage(
+  env: AdminEnv,
+  prefix: string
+): Promise<{ prefix: string; objectCount: number; totalSizeBytes: number; byType: StorageTypeSummary[] }> {
+  let cursor: string | undefined;
+  let objectCount = 0;
+  let totalSizeBytes = 0;
+  const byType = new Map<string, StorageTypeSummary>();
+
+  do {
+    const page = await env.RELEASES_BUCKET.list({ prefix, cursor });
+    for (const object of page.objects) {
+      const type = assetTypeForR2Key(object.key);
+      objectCount += 1;
+      totalSizeBytes += object.size;
+      const current = byType.get(type) ?? { type, objectCount: 0, totalSizeBytes: 0 };
+      current.objectCount += 1;
+      current.totalSizeBytes += object.size;
+      byType.set(type, current);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  return {
+    prefix,
+    objectCount,
+    totalSizeBytes,
+    byType: [...byType.values()].sort((left, right) => left.type.localeCompare(right.type))
+  };
+}
+
+async function deleteR2ObjectsForRelease(
+  env: AdminEnv,
+  release: ReleaseRow,
+  assets: ReleaseAssetRow[]
+): Promise<DeleteR2Result> {
+  const objects = new Map<string, number>();
+  let cursor: string | undefined;
+  const prefix = `${release.app_id}/releases/${release.version_code}-${release.release_tag}/`;
+
+  do {
+    const page = await env.RELEASES_BUCKET.list({ prefix, cursor });
+    for (const object of page.objects) {
+      objects.set(object.key, object.size);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  for (const asset of assets) {
+    if (!asset.r2_key || objects.has(asset.r2_key)) continue;
+    const object = await env.RELEASES_BUCKET.head(asset.r2_key);
+    if (object) objects.set(asset.r2_key, object.size);
+  }
+
+  let totalSizeBytes = 0;
+  for (const [key, size] of objects) {
+    await env.RELEASES_BUCKET.delete(key);
+    totalSizeBytes += size;
+  }
+
+  return {
+    objectCount: objects.size,
+    totalSizeBytes
+  };
+}
+
+function assetTypeForR2Key(key: string): string {
+  if (key.includes("/firmware/")) return "firmware";
+  if (key.includes("/android/patches/")) return "patch";
+  if (key.includes("/manifest/")) return "manifest";
+  if (key.includes("/android/")) return "apk";
+  if (key.includes("/windows/")) return "windows";
+  return "other";
 }
 
 function canonicalJson(value: unknown): string {

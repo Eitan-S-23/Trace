@@ -3,7 +3,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:get/get.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/ota_service.dart';
-import '../controllers/ble_controller.dart';
 
 class OtaUpgradePage extends StatefulWidget {
   final BluetoothDevice? connectedDevice;
@@ -16,7 +15,6 @@ class OtaUpgradePage extends StatefulWidget {
 
 class _OtaUpgradePageState extends State<OtaUpgradePage> {
   OtaService get otaService => Get.put(OtaService(), permanent: true);
-  BleController get bleController => Get.put(BleController(), permanent: true);
 
   Map<String, dynamic>? _firmwareInfo;
   bool _isChecking = false;
@@ -27,7 +25,7 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: const Text(
-          'OTA升级',
+          '码表固件',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -129,7 +127,7 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
           ),
           const SizedBox(height: 8),
           Text(
-            widget.connectedDevice?.platformName ?? '请连接码表设备以开始升级',
+            widget.connectedDevice?.platformName ?? '未连接设备时也可先下载固件',
             style: const TextStyle(
               fontSize: 14,
               color: Colors.white70,
@@ -140,34 +138,36 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Obx(() => Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      otaService.isFirmwareServiceConfigured
+                          ? Icons.cloud_done
+                          : Icons.cloud_off,
+                      size: 16,
+                      color: Colors.white,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          otaService.isConnectedToMqtt
-                              ? Icons.cloud_done
-                              : Icons.cloud_off,
-                          size: 16,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          otaService.isConnectedToMqtt ? 'MQTT已连接' : 'MQTT未连接',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 8),
+                    Text(
+                      otaService.isFirmwareServiceConfigured
+                          ? 'Cloudflare可用'
+                          : '固件服务未配置',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white,
+                      ),
                     ),
-                  )),
+                  ],
+                ),
+              ),
             ],
           ),
         ],
@@ -208,7 +208,7 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '点击按钮检查是否有新的固件版本',
+            '从Cloudflare检查并下载最新单片机固件',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey,
@@ -217,7 +217,7 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
           ),
           const SizedBox(height: 20),
           ElevatedButton.icon(
-            onPressed: widget.connectedDevice != null && !_isChecking
+            onPressed: !_isChecking && otaService.isFirmwareServiceConfigured
                 ? _checkForUpdate
                 : null,
             icon: _isChecking
@@ -287,12 +287,13 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildInfoRow('版本号', _firmwareInfo!['version']),
+          _buildInfoRow('版本号', '${_firmwareInfo!['version'] ?? '--'}'),
           const SizedBox(height: 12),
-          _buildInfoRow('文件大小',
-              '${(_firmwareInfo!['file_size'] / 1024).toStringAsFixed(1)} KB'),
+          _buildInfoRow('文件大小', _formatBytes(_firmwareInfo!['fileSizeBytes'])),
           const SizedBox(height: 12),
-          _buildDescriptionSection('更新说明', _firmwareInfo!['description']),
+          _buildInfoRow('SHA-256', '${_firmwareInfo!['sha256'] ?? '--'}'),
+          const SizedBox(height: 12),
+          _buildDescriptionSection('更新说明', '${_firmwareInfo!['description'] ?? ''}'),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -313,12 +314,12 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _startUpgrade,
+                  onPressed: _downloadFirmware,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF4A90E2),
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('开始升级'),
+                  child: const Text('下载固件'),
                 ),
               ),
             ],
@@ -422,14 +423,14 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
-                  Icons.upload,
+                  Icons.download,
                   color: Color(0xFF4A90E2),
                   size: 24,
                 ),
               ),
               const SizedBox(width: 12),
               const Text(
-                '升级进度',
+                '下载进度',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -477,7 +478,7 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
                   foregroundColor: Colors.red,
                   side: const BorderSide(color: Colors.red),
                 ),
-                child: const Text('取消升级'),
+                child: const Text('取消下载'),
               ),
             ),
           ],
@@ -584,16 +585,15 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
   }
 
   void _checkForUpdate() async {
-    if (widget.connectedDevice == null) return;
-
     setState(() {
       _isChecking = true;
     });
 
     try {
-      // 模拟设备型号和当前版本
-      const deviceModel = 'SmartBike_Pro';
-      const currentVersion = '1.0.0';
+      // TODO: replace with values read from the connected code table once the
+      // device firmware protocol is finalized.
+      const deviceModel = 'igpsport-bsc300';
+      const currentVersion = '0.0.0';
 
       final firmwareInfo = await otaService.checkFirmwareUpdate(
         deviceModel,
@@ -616,44 +616,29 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
     }
   }
 
-  void _startUpgrade() async {
-    if (widget.connectedDevice == null) return;
-
-    // 首先下载固件
+  void _downloadFirmware() async {
     final downloadSuccess = await otaService.downloadFirmware();
     if (!downloadSuccess) return;
 
-    // 开始OTA升级
-    final upgradeSuccess =
-        await otaService.startOtaUpgrade(widget.connectedDevice!);
-
-    if (upgradeSuccess) {
-      setState(() {
-        _firmwareInfo = null;
-      });
-      Get.snackbar('成功', 'OTA升级完成！',
-          backgroundColor: Colors.green.withOpacity(0.1),
-          colorText: Colors.green.shade700,
-          snackPosition: SnackPosition.TOP,
-          icon: const Icon(Icons.check_circle, color: Colors.green));
-    } else {
-      Get.snackbar('失败', 'OTA升级失败，请重试',
-          backgroundColor: Colors.red.withOpacity(0.1),
-          colorText: Colors.red.shade700,
-          snackPosition: SnackPosition.TOP,
-          icon: const Icon(Icons.error_outline, color: Colors.red));
-    }
+    setState(() {
+      _firmwareInfo = null;
+    });
+    Get.snackbar('成功', '固件已下载，BLE分包传输功能待实现',
+        backgroundColor: Colors.green.withOpacity(0.1),
+        colorText: Colors.green.shade700,
+        snackPosition: SnackPosition.TOP,
+        icon: const Icon(Icons.check_circle, color: Colors.green));
   }
 
   void _showCancelDialog() {
     Get.dialog(
       AlertDialog(
-        title: const Text('取消升级'),
-        content: const Text('确定要取消当前的升级过程吗？'),
+        title: const Text('取消下载'),
+        content: const Text('确定要取消当前的下载过程吗？'),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
-            child: const Text('继续升级'),
+            child: const Text('继续下载'),
           ),
           ElevatedButton(
             onPressed: () {
@@ -664,11 +649,24 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('取消升级'),
+            child: const Text('取消下载'),
           ),
         ],
       ),
     );
+  }
+
+  String _formatBytes(Object? value) {
+    final bytes = value is int
+        ? value
+        : value is num
+            ? value.toInt()
+            : int.tryParse('${value ?? ''}') ?? 0;
+    if (bytes <= 0) return '--';
+    if (bytes < 1024) return '$bytes B';
+    final kb = bytes / 1024;
+    if (kb < 1024) return '${kb.toStringAsFixed(1)} KB';
+    return '${(kb / 1024).toStringAsFixed(2)} MB';
   }
 
   String _formatDate(DateTime date) {

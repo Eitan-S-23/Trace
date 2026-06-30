@@ -1,5 +1,6 @@
 import { handleDownload } from "../../worker/src/downloads";
 import { ApiError } from "../../worker/src/errors";
+import { handleFirmwareDownload, handleFirmwareLatest } from "../../worker/src/firmware";
 import { errorJson, json, requestIdFrom, withRequestId } from "../../worker/src/http";
 import { handleLatest } from "../../worker/src/latest";
 import type { WorkerEnv } from "../../worker/src/types";
@@ -39,8 +40,16 @@ async function routePublicRequest(
     return handleLatest(context.request, context.env, requestId);
   }
 
+  if (method === "GET" && url.pathname === "/api/public/firmware/latest") {
+    return handleFirmwareLatest(context.request, context.env, requestId);
+  }
+
   if (method === "GET" && url.pathname === "/api/public/download") {
     return handleDownload(context.request, context.env, requestId, "primary");
+  }
+
+  if (method === "GET" && url.pathname === "/api/public/firmware/download") {
+    return handleFirmwareDownload(context.request, context.env, requestId);
   }
 
   if (method === "GET" && url.pathname === "/api/public/github-fallback") {

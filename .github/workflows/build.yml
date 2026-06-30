@@ -158,9 +158,10 @@ jobs:
           if [[ -n "${TRACE_PUBLIC_UPDATE_SERVICE_URL:-}" ]]; then
             update_service_url="${TRACE_PUBLIC_UPDATE_SERVICE_URL%/}"
             build_args+=(--dart-define="TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL=${update_service_url}/api/public/latest")
+            build_args+=(--dart-define="TRACE_CLOUDFLARE_FIRMWARE_LATEST_URL=${update_service_url}/api/public/firmware/latest")
             echo "Cloudflare public update manifest URL is configured for this APK."
           else
-            echo "Cloudflare update manifest URL is not configured; APK will use the legacy GitHub latest manifest."
+            echo "Cloudflare update manifest URL is not configured; APK will use the legacy GitHub latest manifest and no default firmware endpoint."
           fi
           if [[ -n "${TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64:-}" ]]; then
             build_args+=(--dart-define="TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64=${TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64}")

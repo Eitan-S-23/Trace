@@ -87,6 +87,41 @@ export interface PatchRow {
   file_name: string;
 }
 
+export interface FirmwareReleaseRow {
+  id: string;
+  app_id: string;
+  device_model: string;
+  version_name: string;
+  version_code: number;
+  release_tag: string;
+  commit_sha: string;
+  run_id: string;
+  state: ReleaseState;
+  release_notes: string;
+  file_name: string;
+  sha256: string;
+  size_bytes: number;
+  r2_key: string | null;
+  r2_state: "not_uploaded" | "available" | "r2_deleted" | "archived";
+  github_url: string;
+  target_hardware: string | null;
+  transport: string;
+  min_app_version_code: number;
+  archived: number;
+}
+
+export interface FirmwareChannelRow {
+  id: string;
+  app_id: string;
+  device_model: string;
+  name: ChannelName;
+  current_release_id: string | null;
+  revision: number;
+  disable_latest: number;
+  disable_downloads: number;
+  maintenance_message: string | null;
+}
+
 export interface ChannelRow {
   id: string;
   app_id: string;

@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/share_links.dart';
 import '../controllers/ride_controller.dart';
 import '../models/ride_models.dart';
+import 'ota_upgrade_page.dart';
 
 class SpeedometerPage extends StatefulWidget {
   const SpeedometerPage({super.key});
@@ -10030,7 +10031,7 @@ Future<void> _showDeviceSyncActions(BuildContext context) {
         label: '检查固件更新',
         onTap: () {
           Navigator.of(sheetContext).pop();
-          _showUiMessage('固件更新', '正在检查 iGPSPORT BSC300 固件版本');
+          Get.to(() => const OtaUpgradePage());
         },
       ),
     ],

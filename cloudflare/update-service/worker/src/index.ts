@@ -3,6 +3,11 @@ import { handleRegisterRelease } from "./ci";
 import { ApiError } from "./errors";
 import { errorJson, json, requestIdFrom, withRequestId } from "./http";
 import { handleDownload } from "./downloads";
+import {
+  handleFirmwareDownload,
+  handleFirmwareLatest,
+  handleRegisterFirmwareRelease
+} from "./firmware";
 import { handleLatest } from "./latest";
 import type { WorkerEnv } from "./types";
 
@@ -32,8 +37,16 @@ app.get("/api/public/latest", async (c) =>
   handleLatest(c.req.raw, c.env, c.get("requestId"))
 );
 
+app.get("/api/public/firmware/latest", async (c) =>
+  handleFirmwareLatest(c.req.raw, c.env, c.get("requestId"))
+);
+
 app.get("/api/public/download", async (c) =>
   handleDownload(c.req.raw, c.env, c.get("requestId"), "primary")
+);
+
+app.get("/api/public/firmware/download", async (c) =>
+  handleFirmwareDownload(c.req.raw, c.env, c.get("requestId"))
 );
 
 app.get("/api/public/github-fallback", async (c) =>
@@ -42,6 +55,10 @@ app.get("/api/public/github-fallback", async (c) =>
 
 app.post("/api/ci/releases", async (c) =>
   handleRegisterRelease(c.req.raw, c.env, c.get("requestId"))
+);
+
+app.post("/api/ci/firmware/releases", async (c) =>
+  handleRegisterFirmwareRelease(c.req.raw, c.env, c.get("requestId"))
 );
 
 app.all("/api/admin/*", () => {
