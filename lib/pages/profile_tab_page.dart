@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
 import '../services/app_update_service.dart';
 import '../services/database_service.dart';
+import 'trace_ui.dart';
 
 const String _appName = 'BLE Monitor';
 const MethodChannel _appUpdateChannel = MethodChannel('trace/app_update');
@@ -15,10 +17,6 @@ Future<String> _loadAppVersionLabel() async {
     final result =
         await _appUpdateChannel.invokeMapMethod<String, dynamic>('getAppInfo');
     final versionName = result?['versionName']?.toString().trim() ?? '';
-    final versionCode = result?['versionCode']?.toString().trim() ?? '';
-    if (versionName.isNotEmpty && versionCode.isNotEmpty) {
-      return '$_appName v$versionName+$versionCode';
-    }
     if (versionName.isNotEmpty) {
       return '$_appName v$versionName';
     }
@@ -34,152 +32,173 @@ class ProfileTabPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        title: const Text(
-          '我的',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF2E3A59),
+    return TracePageScaffold(
+      child: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            TraceTheme.bottomNavHeight + 26,
           ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: false,
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // 用户信息卡片
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF4A90E2),
-                    Color(0xFF357ABD),
-                  ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const TracePageTitle(
+                eyebrow: 'PROFILE CONSOLE',
+                title: '我的',
+                subtitle: '账号信息、数据统计和应用维护集中在一个深海控制面板中。',
+                trailing: TracePill(
+                  icon: Icons.person,
+                  label: 'USER',
+                  color: TraceColors.mint,
                 ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF4A90E2).withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.person,
-                      size: 32,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
+              ).animate().fadeIn(duration: 520.ms).slideY(begin: 0.16, end: 0),
+              const SizedBox(height: 20),
+              _buildIdentityCore()
+                  .animate(delay: 120.ms)
+                  .fadeIn(duration: 620.ms)
+                  .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
+              const SizedBox(height: 18),
+              Transform.rotate(
+                angle: -0.018,
+                child: TraceGlassPanel(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+                  child: Transform.rotate(
+                    angle: 0.018,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '智能设备用户',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                        _buildMenuItem(
+                          icon: Icons.storage,
+                          title: '数据统计',
+                          subtitle: '查看设备数据统计',
+                          color: TraceColors.cyan,
+                          onTap: () => _showDataStatistics(),
                         ),
-                        const SizedBox(height: 4),
-                        _buildVersionText(
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.8),
-                          ),
+                        _buildMenuItem(
+                          icon: Icons.settings,
+                          title: '应用设置',
+                          subtitle: '个性化设置选项',
+                          color: TraceColors.mint,
+                          onTap: () {
+                            Get.snackbar('提示', '设置功能开发中');
+                          },
+                        ),
+                        _buildUpdateMenuItem(),
+                        _buildMenuItem(
+                          icon: Icons.help_outline,
+                          title: '帮助与反馈',
+                          subtitle: '使用帮助和问题反馈',
+                          color: TraceColors.rose,
+                          onTap: () => _showHelpDialog(),
+                        ),
+                        _buildMenuItem(
+                          icon: Icons.info_outline,
+                          title: '关于应用',
+                          subtitle: '版本信息和开发团队',
+                          color: TraceColors.cyanSoft,
+                          onTap: () => _showAboutDialog(),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
+              ).animate(delay: 220.ms).fadeIn(duration: 560.ms).slideY(begin: 0.14, end: 0),
+              const SizedBox(height: 28),
+              Center(
+                child: Text(
+                  '© 2024 BLE Monitor\n智能设备管理助手',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: TraceColors.muted.withOpacity(0.72),
+                    height: 1.6,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIdentityCore() {
+    return TraceGlassPanel(
+      padding: const EdgeInsets.all(18),
+      child: SizedBox(
+        height: 218,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Positioned.fill(
+              child: CustomPaint(painter: TraceOrbitPainter(progress: 0.88)),
+            ),
+            Positioned(
+              top: 8,
+              right: 4,
+              child: TracePill(
+                icon: Icons.system_update_alt,
+                label: 'UPDATE',
+                color: TraceColors.amber,
               ),
             ),
-
-            // 功能列表
+            Positioned(
+              left: 0,
+              bottom: 10,
+              child: TracePill(
+                icon: Icons.storage,
+                label: 'DATA',
+                color: TraceColors.cyan,
+              ),
+            ),
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
+              width: 138,
+              height: 138,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    TraceColors.mint.withOpacity(0.28),
+                    TraceColors.ocean.withOpacity(0.24),
+                    TraceColors.ink.withOpacity(0.95),
+                  ],
+                ),
+                border: Border.all(color: TraceColors.cyan.withOpacity(0.38)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    color: TraceColors.cyan.withOpacity(0.25),
+                    blurRadius: 38,
                   ),
                 ],
               ),
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildMenuItem(
-                    icon: Icons.storage,
-                    title: '数据统计',
-                    subtitle: '查看设备数据统计',
-                    onTap: () => _showDataStatistics(),
+                  const Icon(Icons.person, color: TraceColors.cyan, size: 34),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '智能设备用户',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: TraceColors.text,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                  _buildDivider(),
-                  _buildMenuItem(
-                    icon: Icons.settings,
-                    title: '应用设置',
-                    subtitle: '个性化设置选项',
-                    onTap: () {
-                      Get.snackbar('提示', '设置功能开发中');
-                    },
-                  ),
-                  _buildDivider(),
-                  _buildUpdateMenuItem(),
-                  _buildDivider(),
-                  _buildMenuItem(
-                    icon: Icons.help_outline,
-                    title: '帮助与反馈',
-                    subtitle: '使用帮助和问题反馈',
-                    onTap: () => _showHelpDialog(),
-                  ),
-                  _buildDivider(),
-                  _buildMenuItem(
-                    icon: Icons.info_outline,
-                    title: '关于应用',
-                    subtitle: '版本信息和开发团队',
-                    onTap: () => _showAboutDialog(),
+                  const SizedBox(height: 5),
+                  _buildVersionText(
+                    style: const TextStyle(
+                      color: TraceColors.muted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 32),
-
-            // 版权信息
-            Text(
-              '© 2024 BLE Monitor\n智能设备管理助手',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
-                height: 1.5,
-              ),
-            ),
-
-            const SizedBox(height: 32),
           ],
         ),
       ),
@@ -203,44 +222,66 @@ class ProfileTabPage extends StatelessWidget {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    required Color color,
     Widget? trailing,
   }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF4A90E2).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          color: const Color(0xFF4A90E2),
-          size: 20,
-        ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: color.withOpacity(0.18)),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          color: Color(0xFF2E3A59),
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: TextStyle(
-          fontSize: 12,
-          color: Colors.grey[600],
-        ),
-      ),
-      trailing: trailing ??
-          const Icon(
-            Icons.arrow_forward_ios,
-            size: 16,
-            color: Colors.grey,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 21),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: TraceColors.text,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: TraceColors.muted,
+                          fontSize: 12,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                trailing ?? Icon(Icons.arrow_forward_ios, color: color.withOpacity(0.72), size: 14),
+              ],
+            ),
           ),
-      onTap: onTap,
+        ),
+      ),
     );
   }
 
@@ -250,6 +291,7 @@ class ProfileTabPage extends StatelessWidget {
         icon: Icons.system_update_alt,
         title: '检查更新',
         subtitle: '检查 Cloudflare 增量更新',
+        color: TraceColors.amber,
         onTap: _checkForUpdates,
       );
     }
@@ -265,11 +307,15 @@ class ProfileTabPage extends StatelessWidget {
                 ? '正在连接更新服务器'
                 : service.updateStatus.value)
             : '检查 Cloudflare 增量更新',
+        color: TraceColors.amber,
         trailing: busy
             ? const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2.2),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: TraceColors.amber,
+                ),
               )
             : null,
         onTap: _checkForUpdates,
@@ -282,14 +328,6 @@ class ProfileTabPage extends StatelessWidget {
         ? AppUpdateService.to
         : Get.put(AppUpdateService(), permanent: true);
     unawaited(service.checkForUpdates());
-  }
-
-  Widget _buildDivider() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      height: 1,
-      color: Colors.grey[200],
-    );
   }
 
   void _showDataStatistics() async {
@@ -331,7 +369,7 @@ class ProfileTabPage extends StatelessWidget {
           value,
           style: const TextStyle(
             fontWeight: FontWeight.w600,
-            color: Color(0xFF4A90E2),
+            color: TraceColors.cyan,
           ),
         ),
       ],

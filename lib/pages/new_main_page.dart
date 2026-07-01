@@ -78,11 +78,11 @@ class _NewMainPageState extends State<NewMainPage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  _currentIndex == 1 ? Icons.store : Icons.store_outlined,
+                  _currentIndex == 1 ? Icons.explore : Icons.explore_outlined,
                   size: 24,
                 ),
               ),
-              label: '商城',
+              label: '发现',
             ),
             BottomNavigationBarItem(
               icon: Container(
