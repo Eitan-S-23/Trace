@@ -7806,6 +7806,8 @@ class _ConnectedDevicePanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
+          const _DeviceFirmwareUpdateRow(),
+          const SizedBox(height: 6),
           const _DeviceSettingRow(
             icon: Icons.settings,
             color: Color(0xFF268DFF),
@@ -7926,6 +7928,86 @@ class _RideDeviceDetailPage extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeviceFirmwareUpdateRow extends StatelessWidget {
+  const _DeviceFirmwareUpdateRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Get.to(() => const OtaUpgradePage()),
+        child: Ink(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF1C8CFF).withOpacity(0.34),
+                const Color(0xFF55E8E6).withOpacity(0.18),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(0.13)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFF55E8E6).withOpacity(0.5),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.system_update_alt,
+                  color: Color(0xFF55E8E6),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '检查单片机固件更新',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '下载 Cloudflare 中最新的码表固件',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.62),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withOpacity(0.78),
+              ),
+            ],
+          ),
         ),
       ),
     );

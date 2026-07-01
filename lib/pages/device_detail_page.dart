@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:share_plus/share_plus.dart';
 import '../config/share_links.dart';
 import '../controllers/ble_controller.dart';
+import 'ota_upgrade_page.dart';
 
 // AD Type data structure
 class AdTypeData {
@@ -78,6 +79,13 @@ class DeviceDetailPage extends StatelessWidget {
                 .slideY(begin: 0.3, end: 0),
             const SizedBox(height: 16),
 
+            if (isConnected)
+              _buildFirmwareUpdateCard()
+                  .animate(delay: 150.ms)
+                  .fadeIn(duration: 600.ms)
+                  .slideY(begin: 0.3, end: 0),
+            if (isConnected) const SizedBox(height: 16),
+
             // 信号强度卡片
             _buildSignalCard(controller)
                 .animate(delay: 200.ms)
@@ -125,6 +133,88 @@ class DeviceDetailPage extends StatelessWidget {
                 .fadeIn(duration: 600.ms)
                 .slideY(begin: 0.3, end: 0),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFirmwareUpdateCard() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Get.to(() => OtaUpgradePage(connectedDevice: device)),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF0EA5E9),
+                Color(0xFF2563EB),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF2563EB).withOpacity(0.22),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.24),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.system_update_alt,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '检查单片机固件更新',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '从 Cloudflare 下载最新码表固件',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.82),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Icon(
+                Icons.chevron_right,
+                color: Colors.white.withValues(alpha: 0.86),
+              ),
+            ],
+          ),
         ),
       ),
     );
