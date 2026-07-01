@@ -3,16 +3,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 class TraceColors {
-  static const ink = Color(0xFF06141D);
-  static const deep = Color(0xFF082735);
-  static const ocean = Color(0xFF0B4F5C);
-  static const cyan = Color(0xFF3EF7D4);
-  static const cyanSoft = Color(0xFF79FFE5);
-  static const mint = Color(0xFF9AF7C9);
-  static const amber = Color(0xFFFFC66E);
-  static const rose = Color(0xFFFF6E9F);
+  static const ink = Color(0xFF02070C);
+  static const deep = Color(0xFF061821);
+  static const ocean = Color(0xFF0B3540);
+  static const cyan = Color(0xFF24F6DE);
+  static const cyanSoft = Color(0xFF8DFFF0);
+  static const mint = Color(0xFF5EF1C7);
+  static const amber = Color(0xFFFFCF66);
+  static const rose = Color(0xFFFF5E8E);
   static const text = Color(0xFFEAFDF7);
-  static const muted = Color(0xFFA3C7C2);
+  static const muted = Color(0xFF8FB8B6);
 }
 
 class TraceTheme {
@@ -23,9 +23,9 @@ class TraceTheme {
     end: Alignment.bottomRight,
     colors: [
       TraceColors.ink,
-      Color(0xFF09212E),
+      Color(0xFF04111A),
       TraceColors.deep,
-      Color(0xFF051019),
+      Color(0xFF010409),
     ],
   );
 }
@@ -37,18 +37,15 @@ class TracePageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: TraceColors.ink,
-      body: Container(
-        decoration: const BoxDecoration(gradient: TraceTheme.pageGradient),
-        child: Stack(
-          children: [
-            const Positioned.fill(
-              child: CustomPaint(painter: TraceAtmospherePainter()),
-            ),
-            child,
-          ],
-        ),
+    return Container(
+      decoration: const BoxDecoration(gradient: TraceTheme.pageGradient),
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: CustomPaint(painter: TraceAtmospherePainter()),
+          ),
+          child,
+        ],
       ),
     );
   }
@@ -60,10 +57,10 @@ class TraceAtmospherePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final gridPaint = Paint()
-      ..color = TraceColors.cyan.withOpacity(0.035)
+      ..color = TraceColors.cyan.withOpacity(0.026)
       ..strokeWidth = 1;
 
-    const step = 34.0;
+    const step = 36.0;
     for (double x = -size.height; x < size.width; x += step) {
       canvas.drawLine(
         Offset(x, 0),
@@ -75,35 +72,35 @@ class TraceAtmospherePainter extends CustomPainter {
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          TraceColors.cyan.withOpacity(0.22),
-          TraceColors.ocean.withOpacity(0.08),
+          TraceColors.cyan.withOpacity(0.2),
+          TraceColors.ocean.withOpacity(0.06),
           Colors.transparent,
         ],
       ).createShader(
         Rect.fromCircle(
-          center: Offset(size.width * 0.18, size.height * 0.22),
+          center: Offset(size.width * 0.28, size.height * 0.28),
           radius: size.width * 0.85,
         ),
       );
     canvas.drawCircle(
-      Offset(size.width * 0.18, size.height * 0.22),
+      Offset(size.width * 0.28, size.height * 0.28),
       size.width * 0.85,
       glowPaint,
     );
 
-    final amberPaint = Paint()
+    final cornerGlowPaint = Paint()
       ..shader = RadialGradient(
-        colors: [TraceColors.amber.withOpacity(0.14), Colors.transparent],
+        colors: [TraceColors.cyanSoft.withOpacity(0.1), Colors.transparent],
       ).createShader(
         Rect.fromCircle(
-          center: Offset(size.width * 0.94, size.height * 0.1),
-          radius: size.width * 0.42,
+          center: Offset(size.width * 0.94, size.height * 0.14),
+          radius: size.width * 0.5,
         ),
       );
     canvas.drawCircle(
-      Offset(size.width * 0.94, size.height * 0.1),
-      size.width * 0.42,
-      amberPaint,
+      Offset(size.width * 0.94, size.height * 0.14),
+      size.width * 0.5,
+      cornerGlowPaint,
     );
   }
 
@@ -130,19 +127,19 @@ class TraceGlassPanel extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.055),
+        color: const Color(0xFF071923).withOpacity(0.76),
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: glowColor.withOpacity(0.18)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.28),
+            color: Colors.black.withOpacity(0.36),
             blurRadius: 30,
             offset: const Offset(0, 18),
           ),
           BoxShadow(
-            color: glowColor.withOpacity(0.12),
-            blurRadius: 26,
-            spreadRadius: -10,
+            color: glowColor.withOpacity(0.14),
+            blurRadius: 34,
+            spreadRadius: -12,
           ),
         ],
       ),
@@ -188,10 +185,16 @@ class TracePageTitle extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   color: TraceColors.text,
-                  fontSize: 34,
-                  height: 1.02,
+                  fontSize: 40,
+                  height: 1,
                   fontWeight: FontWeight.w900,
-                  letterSpacing: -1.2,
+                  letterSpacing: -1.6,
+                  shadows: [
+                    Shadow(
+                      color: Color(0x5524F6DE),
+                      blurRadius: 18,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 10),
@@ -216,7 +219,6 @@ class TracePageTitle extends StatelessWidget {
   }
 }
 
-
 class TraceFirstViewportSpacer extends StatelessWidget {
   const TraceFirstViewportSpacer({
     super.key,
@@ -236,6 +238,7 @@ class TraceFirstViewportSpacer extends StatelessWidget {
     return SizedBox(height: math.max(minHeight, height));
   }
 }
+
 class TracePill extends StatelessWidget {
   const TracePill({
     super.key,
@@ -336,5 +339,432 @@ class TraceOrbitPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant TraceOrbitPainter oldDelegate) {
     return oldDelegate.progress != progress;
+  }
+}
+
+class TraceOrbitAction {
+  const TraceOrbitAction({
+    required this.title,
+    required this.subtitle,
+    required this.code,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final String code;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+}
+
+class TraceRadialConsole extends StatelessWidget {
+  const TraceRadialConsole({
+    super.key,
+    required this.centerTitle,
+    required this.centerSubtitle,
+    required this.centerIcon,
+    required this.actions,
+    this.badgeLabel = 'TRACE',
+    this.footerLabel = 'READY',
+    this.primaryColor = TraceColors.cyan,
+  }) : assert(actions.length > 0 && actions.length <= 4);
+
+  final String centerTitle;
+  final String centerSubtitle;
+  final IconData centerIcon;
+  final List<TraceOrbitAction> actions;
+  final String badgeLabel;
+  final String footerLabel;
+  final Color primaryColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 1,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = math.min(constraints.maxWidth, constraints.maxHeight);
+          final nodeSize = math.min(size * 0.255, 92.0);
+          final coreSize = math.min(size * 0.4, 148.0);
+          final edge = size * 0.035;
+          final middle = (size - nodeSize) / 2;
+
+          final positions = <Offset>[
+            Offset(middle, edge),
+            Offset(size - nodeSize - edge, middle),
+            Offset(edge, middle),
+            Offset(middle, size - nodeSize - edge),
+          ];
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: TraceRadialConsolePainter(
+                    primaryColor: primaryColor,
+                    actionCount: actions.length,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 14,
+                top: 12,
+                child: _TraceConsoleReadout(
+                  label: badgeLabel,
+                  value: '${actions.length.toString().padLeft(2, '0')} NODES',
+                  color: primaryColor,
+                ),
+              ),
+              Positioned(
+                right: 14,
+                bottom: 12,
+                child: _TraceConsoleReadout(
+                  label: footerLabel,
+                  value: 'ONLINE',
+                  color: primaryColor,
+                  alignEnd: true,
+                ),
+              ),
+              for (var i = 0; i < actions.length; i++)
+                Positioned(
+                  left: positions[i].dx,
+                  top: positions[i].dy,
+                  child: TraceOrbitButton(
+                    size: nodeSize,
+                    action: actions[i],
+                  ),
+                ),
+              Center(
+                child: _TraceConsoleCore(
+                  size: coreSize,
+                  title: centerTitle,
+                  subtitle: centerSubtitle,
+                  icon: centerIcon,
+                  color: primaryColor,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class TraceRadialConsolePainter extends CustomPainter {
+  const TraceRadialConsolePainter({
+    required this.primaryColor,
+    required this.actionCount,
+  });
+
+  final Color primaryColor;
+  final int actionCount;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shortest = math.min(size.width, size.height);
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = shortest * 0.45;
+
+    final glowPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          primaryColor.withOpacity(0.22),
+          TraceColors.ocean.withOpacity(0.12),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: radius * 1.12));
+    canvas.drawCircle(center, radius * 1.12, glowPaint);
+
+    final ringPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.15
+      ..color = primaryColor.withOpacity(0.22);
+
+    for (final factor in [0.34, 0.5, 0.66, 0.82, 1.0]) {
+      canvas.drawCircle(center, radius * factor, ringPaint);
+    }
+
+    final connectorPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..color = primaryColor.withOpacity(0.22);
+    for (final angle in [-math.pi / 2, 0.0, math.pi, math.pi / 2]) {
+      final start = center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.25;
+      final end = center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.72;
+      canvas.drawLine(start, end, connectorPaint);
+    }
+
+    final tickPaint = Paint()
+      ..color = primaryColor.withOpacity(0.56)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    for (int i = 0; i < 72; i++) {
+      final angle = (math.pi * 2 / 72) * i;
+      final isMajor = i % 6 == 0;
+      final start = radius * (isMajor ? 0.93 : 0.975);
+      final end = radius * 1.035;
+      canvas.drawLine(
+        center + Offset(math.cos(angle) * start, math.sin(angle) * start),
+        center + Offset(math.cos(angle) * end, math.sin(angle) * end),
+        tickPaint,
+      );
+    }
+
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        colors: [
+          Colors.transparent,
+          primaryColor.withOpacity(0.05),
+          primaryColor,
+          TraceColors.cyanSoft,
+          Colors.transparent,
+        ],
+        stops: const [0, 0.28, 0.48, 0.58, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.77),
+      -math.pi * 0.84,
+      math.pi * 1.18,
+      false,
+      arcPaint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.96),
+      math.pi * 0.18,
+      math.pi * 0.72,
+      false,
+      arcPaint,
+    );
+
+    final cornerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = primaryColor.withOpacity(0.28);
+    const corner = 24.0;
+    final rect = Offset.zero & size;
+    canvas.drawLine(rect.topLeft + const Offset(4, corner), rect.topLeft + const Offset(4, 4), cornerPaint);
+    canvas.drawLine(rect.topLeft + const Offset(4, 4), rect.topLeft + const Offset(corner, 4), cornerPaint);
+    canvas.drawLine(rect.topRight + const Offset(-corner, 4), rect.topRight + const Offset(-4, 4), cornerPaint);
+    canvas.drawLine(rect.topRight + const Offset(-4, 4), rect.topRight + const Offset(-4, corner), cornerPaint);
+    canvas.drawLine(rect.bottomLeft + const Offset(4, -corner), rect.bottomLeft + const Offset(4, -4), cornerPaint);
+    canvas.drawLine(rect.bottomLeft + const Offset(4, -4), rect.bottomLeft + const Offset(corner, -4), cornerPaint);
+    canvas.drawLine(rect.bottomRight + const Offset(-corner, -4), rect.bottomRight + const Offset(-4, -4), cornerPaint);
+    canvas.drawLine(rect.bottomRight + const Offset(-4, -corner), rect.bottomRight + const Offset(-4, -4), cornerPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant TraceRadialConsolePainter oldDelegate) {
+    return oldDelegate.primaryColor != primaryColor ||
+        oldDelegate.actionCount != actionCount;
+  }
+}
+
+class TraceOrbitButton extends StatelessWidget {
+  const TraceOrbitButton({
+    super.key,
+    required this.size,
+    required this.action,
+  });
+
+  final double size;
+  final TraceOrbitAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '${action.title} ${action.subtitle}',
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: action.onTap,
+          child: Ink(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF061923).withOpacity(0.94),
+              border: Border.all(color: action.color.withOpacity(0.55)),
+              boxShadow: [
+                BoxShadow(
+                  color: action.color.withOpacity(0.26),
+                  blurRadius: 26,
+                  spreadRadius: -5,
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.38),
+                  blurRadius: 20,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(size * 0.11),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(action.icon, color: action.color, size: size * 0.25),
+                  SizedBox(height: size * 0.08),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      action.title,
+                      maxLines: 1,
+                      style: const TextStyle(
+                        color: TraceColors.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: size * 0.03),
+                  Text(
+                    action.code,
+                    style: TextStyle(
+                      color: action.color,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TraceConsoleCore extends StatelessWidget {
+  const _TraceConsoleCore({
+    required this.size,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+
+  final double size;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [
+            color.withOpacity(0.36),
+            TraceColors.ocean.withOpacity(0.26),
+            TraceColors.ink.withOpacity(0.98),
+          ],
+        ),
+        border: Border.all(color: color.withOpacity(0.58), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.34),
+            blurRadius: 44,
+            spreadRadius: -1,
+          ),
+        ],
+      ),
+      child: Container(
+        margin: EdgeInsets.all(size * 0.085),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: size * 0.24),
+            SizedBox(height: size * 0.07),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: TraceColors.text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+            SizedBox(height: size * 0.035),
+            Text(
+              subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: TraceColors.muted.withOpacity(0.92),
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TraceConsoleReadout extends StatelessWidget {
+  const _TraceConsoleReadout({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: color.withOpacity(0.64),
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.6,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            color: TraceColors.muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
   }
 }

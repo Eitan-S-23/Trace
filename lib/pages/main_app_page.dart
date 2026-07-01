@@ -54,17 +54,14 @@ class _MainAppPageState extends State<MainAppPage> {
             bottom: 10,
             child: SafeArea(
               top: false,
-              child: Opacity(
-                opacity: 0,
-                child: _TraceBottomNavigation(
-                  currentIndex: _selectedIndex,
-                  items: _navItems,
-                  onChanged: (index) {
-                    setState(() {
-                      _selectedIndex = index;
-                    });
-                  },
-                ),
+              child: _TraceBottomNavigation(
+                currentIndex: _selectedIndex,
+                items: _navItems,
+                onChanged: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
               ),
             ),
           ),
@@ -100,21 +97,21 @@ class _TraceBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 72,
+      height: 74,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: const Color(0xFF071923).withOpacity(0.86),
+        color: const Color(0xFF031018).withOpacity(0.92),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.13)),
+        border: Border.all(color: TraceColors.cyan.withOpacity(0.18)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.32),
-            blurRadius: 28,
+            color: Colors.black.withOpacity(0.42),
+            blurRadius: 30,
             offset: const Offset(0, 16),
           ),
           BoxShadow(
-            color: TraceColors.cyan.withOpacity(0.14),
-            blurRadius: 28,
+            color: TraceColors.cyan.withOpacity(0.16),
+            blurRadius: 30,
             spreadRadius: -8,
           ),
         ],
@@ -123,49 +120,57 @@ class _TraceBottomNavigation extends StatelessWidget {
         children: List.generate(items.length, (index) {
           final item = items[index];
           final selected = currentIndex == index;
+          final color = selected ? TraceColors.cyan : TraceColors.muted;
+
           return Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(999),
-              onTap: () => onChanged(index),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? TraceColors.cyan.withOpacity(0.16)
-                      : Colors.transparent,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
+                child: InkWell(
                   borderRadius: BorderRadius.circular(999),
-                  border: selected
-                      ? Border.all(color: TraceColors.cyan.withOpacity(0.34))
-                      : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      selected ? item.activeIcon : item.icon,
-                      color: selected ? TraceColors.cyan : TraceColors.muted,
-                      size: 22,
+                  onTap: () => onChanged(index),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    height: 58,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? TraceColors.cyan.withOpacity(0.16)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: selected
+                            ? TraceColors.cyan.withOpacity(0.38)
+                            : Colors.transparent,
+                      ),
                     ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOutCubic,
-                      child: selected
-                          ? Padding(
-                              padding: const EdgeInsets.only(left: 7),
-                              child: Text(
-                                item.label,
-                                style: const TextStyle(
-                                  color: TraceColors.text,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink(),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          selected ? item.activeIcon : item.icon,
+                          color: color,
+                          size: selected ? 22 : 21,
+                        ),
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            item.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: selected ? TraceColors.text : TraceColors.muted,
+                              fontSize: 13,
+                              fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
