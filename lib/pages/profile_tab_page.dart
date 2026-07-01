@@ -40,7 +40,7 @@ class ProfileTabPage extends StatelessWidget {
         bottom: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final stageWidth = math.min(constraints.maxWidth - 8, 430.0);
+            final stageWidth = math.min(constraints.maxWidth - 42, 392.0);
             final compact = constraints.maxHeight < 720;
 
             return SingleChildScrollView(
