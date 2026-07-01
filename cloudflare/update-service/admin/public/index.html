@@ -4826,7 +4826,8 @@
           throw new Error(t("status.expectedJson", { path, status: response.status }));
         }
         if (!response.ok || payload.ok === false) {
-          throw new Error(`${payload.errorCode ?? response.status}: ${payload.message ?? t("status.requestFailed")}`);
+          const detail = payload.detail ? ` / ${payload.detail}` : "";
+          throw new Error(`${payload.errorCode ?? response.status}: ${payload.message ?? t("status.requestFailed")}${detail}`);
         }
         return payload;
       }

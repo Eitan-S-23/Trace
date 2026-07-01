@@ -73,6 +73,48 @@ jobs:
       - name: Typecheck
         run: npm run check
 
+  deploy-admin:
+    name: Deploy Admin Pages
+    runs-on: ubuntu-latest
+    needs: admin
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    defaults:
+      run:
+        working-directory: cloudflare/update-service/admin
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: cloudflare/update-service/admin/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy Admin Pages
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TRACE_CF_ADMIN_PROJECT_NAME: ${{ vars.TRACE_CF_ADMIN_PROJECT_NAME || 'trace-update-admin-staging' }}
+          TRACE_CF_ADMIN_BRANCH: ${{ vars.TRACE_CF_ADMIN_BRANCH || 'main' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID:-}" || -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+            echo "::warning title=Admin Pages deploy skipped::Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN secrets to deploy the Access-protected admin facade."
+            exit 0
+          fi
+
+          npx wrangler pages deploy ./public \
+            --project-name "${TRACE_CF_ADMIN_PROJECT_NAME}" \
+            --branch "${TRACE_CF_ADMIN_BRANCH}" \
+            --commit-dirty=true
   worker:
     name: Worker Typecheck and Invariants
     runs-on: ubuntu-latest
