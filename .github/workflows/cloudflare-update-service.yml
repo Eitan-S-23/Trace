@@ -111,10 +111,13 @@ jobs:
             exit 0
           fi
 
-          npx wrangler pages deploy ./public \
+          if ! npx wrangler pages deploy ./public \
             --project-name "${TRACE_CF_ADMIN_PROJECT_NAME}" \
             --branch "${TRACE_CF_ADMIN_BRANCH}" \
-            --commit-dirty=true
+            --commit-dirty=true; then
+            echo "::warning title=Admin Pages deploy unavailable::Cloudflare API token could not deploy Pages. Add Cloudflare Pages Edit permissions to CLOUDFLARE_API_TOKEN, or deploy cloudflare/update-service/admin manually."
+            exit 0
+          fi
   worker:
     name: Worker Typecheck and Invariants
     runs-on: ubuntu-latest

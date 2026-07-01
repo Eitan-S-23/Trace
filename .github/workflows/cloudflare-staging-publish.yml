@@ -1,0 +1,88 @@
+name: Cloudflare Staging Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish, for example v1.0.26"
+        required: true
+        type: string
+      channels:
+        description: "Comma-separated staging channels"
+        required: true
+        type: string
+        default: "stable"
+      verify_from_version_code:
+        description: "Installed Android versionCode used for latest/patch verification"
+        required: true
+        type: string
+        default: "51"
+      rollback:
+        description: "Allow publishing a lower/equal versionCode intentionally"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Staging Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: cloudflare/update-service/worker/package-lock.json
+
+      - name: Install Cloudflare tooling
+        run: npm ci --prefix cloudflare/update-service/worker
+
+      - name: Publish staging channel
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TRACE_UPDATE_SERVICE_URL: ${{ secrets.TRACE_UPDATE_SERVICE_URL }}
+          TRACE_R2_BUCKET: ${{ vars.TRACE_R2_BUCKET || 'trace-update-staging-releases' }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          CHANNELS: ${{ inputs.channels }}
+          VERIFY_FROM_VERSION_CODE: ${{ inputs.verify_from_version_code }}
+          ROLLBACK: ${{ inputs.rollback }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=()
+          for name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN TRACE_UPDATE_SERVICE_URL; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("${name}")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf '::error title=Cloudflare staging publish unavailable::Missing required secret(s): %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+          args=(
+            cloudflare/update-service/scripts/publish-staging-release.mjs
+            --release-tag "${RELEASE_TAG}"
+            --channels "${CHANNELS}"
+            --skip-backfill
+            --yes
+            --actor-email "github-actions-staging-publish"
+            --verify-from-version-code "${VERIFY_FROM_VERSION_CODE}"
+            --bucket "${TRACE_R2_BUCKET}"
+            --wrangler-cwd cloudflare/update-service/worker
+          )
+          if [[ "${ROLLBACK}" == "true" ]]; then
+            args+=(--rollback)
+          fi
+
+          node "${args[@]}"
