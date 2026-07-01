@@ -370,7 +370,7 @@ class TraceRadialConsole extends StatelessWidget {
     this.badgeLabel = 'TRACE',
     this.footerLabel = 'READY',
     this.primaryColor = TraceColors.cyan,
-  }) : assert(actions.length > 0 && actions.length <= 4);
+  }) : assert(actions.length > 0 && actions.length <= 5);
 
   final String centerTitle;
   final String centerSubtitle;
@@ -380,6 +380,24 @@ class TraceRadialConsole extends StatelessWidget {
   final String footerLabel;
   final Color primaryColor;
 
+  static List<Offset> _orbitPositions(int count, double size, double nodeSize) {
+    final center = Offset(size / 2, size / 2);
+    final orbitRadius = size * (count > 4 ? 0.36 : 0.347);
+    final angles = count == 4
+        ? <double>[-math.pi / 2, 0, math.pi, math.pi / 2]
+        : List<double>.generate(
+            count,
+            (index) => -math.pi / 2 + (math.pi * 2 / count) * index,
+          );
+
+    return angles.map((angle) {
+      final raw = center + Offset(math.cos(angle), math.sin(angle)) * orbitRadius;
+      final left = (raw.dx - nodeSize / 2).clamp(0.0, size - nodeSize);
+      final top = (raw.dy - nodeSize / 2).clamp(0.0, size - nodeSize);
+      return Offset(left, top);
+    }).toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
@@ -387,17 +405,14 @@ class TraceRadialConsole extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final size = math.min(constraints.maxWidth, constraints.maxHeight);
-          final nodeSize = math.min(size * 0.255, 92.0);
-          final coreSize = math.min(size * 0.4, 148.0);
-          final edge = size * 0.035;
-          final middle = (size - nodeSize) / 2;
-
-          final positions = <Offset>[
-            Offset(middle, edge),
-            Offset(size - nodeSize - edge, middle),
-            Offset(edge, middle),
-            Offset(middle, size - nodeSize - edge),
-          ];
+          final nodeSize = actions.length > 4
+              ? math.min(size * 0.215, 82.0)
+              : math.min(size * 0.255, 92.0);
+          final coreSize = math.min(
+            size * (actions.length > 4 ? 0.36 : 0.4),
+            148.0,
+          );
+          final positions = _orbitPositions(actions.length, size, nodeSize);
 
           return Stack(
             clipBehavior: Clip.none,
@@ -765,6 +780,182 @@ class _TraceConsoleReadout extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+class TraceDialogAction {
+  const TraceDialogAction({
+    required this.label,
+    required this.onPressed,
+    this.isPrimary = false,
+    this.color = TraceColors.cyan,
+  });
+
+  final String label;
+  final ValueChanged<BuildContext> onPressed;
+  final bool isPrimary;
+  final Color color;
+}
+
+class TraceDialog extends StatelessWidget {
+  const TraceDialog({
+    super.key,
+    required this.title,
+    this.message,
+    this.content,
+    this.icon,
+    this.color = TraceColors.cyan,
+    this.actions = const [],
+  }) : assert(message != null || content != null);
+
+  final String title;
+  final String? message;
+  final Widget? content;
+  final IconData? icon;
+  final Color color;
+  final List<TraceDialogAction> actions;
+
+  static void close(BuildContext context) {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final body = content ?? Text(message!);
+
+    return Dialog(
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      backgroundColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF061821).withOpacity(0.96),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: color.withOpacity(0.24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.58),
+                blurRadius: 34,
+                offset: const Offset(0, 20),
+              ),
+              BoxShadow(
+                color: color.withOpacity(0.2),
+                blurRadius: 34,
+                spreadRadius: -12,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color.withOpacity(0.14),
+                      border: Border.all(color: color.withOpacity(0.34)),
+                    ),
+                    child: Icon(icon ?? Icons.info_outline, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: TraceColors.text,
+                        fontSize: 22,
+                        height: 1.15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              DefaultTextStyle(
+                style: const TextStyle(
+                  color: TraceColors.muted,
+                  fontSize: 14,
+                  height: 1.5,
+                  fontWeight: FontWeight.w600,
+                ),
+                child: SingleChildScrollView(child: body),
+              ),
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: actions
+                        .map((action) => _TraceDialogButton(action: action))
+                        .toList(growable: false),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TraceDialogButton extends StatelessWidget {
+  const _TraceDialogButton({required this.action});
+
+  final TraceDialogAction action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () => action.onPressed(context),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+          decoration: BoxDecoration(
+            color: action.isPrimary ? action.color.withOpacity(0.88) : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: action.isPrimary
+                  ? action.color.withOpacity(0.7)
+                  : action.color.withOpacity(0.24),
+            ),
+            boxShadow: action.isPrimary
+                ? [
+                    BoxShadow(
+                      color: action.color.withOpacity(0.24),
+                      blurRadius: 22,
+                      spreadRadius: -8,
+                    ),
+                  ]
+                : const [],
+          ),
+          child: Text(
+            action.label,
+            style: TextStyle(
+              color: action.isPrimary ? TraceColors.ink : action.color,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -33,7 +33,10 @@ class DeviceTabPage extends StatelessWidget {
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: math.max(0, constraints.maxHeight - TraceTheme.bottomNavHeight - 28),
+                  minHeight: math.max(
+                    0,
+                    constraints.maxHeight - TraceTheme.bottomNavHeight - 28,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,11 +67,6 @@ class DeviceTabPage extends StatelessWidget {
                         .animate(delay: 110.ms)
                         .fadeIn(duration: 520.ms)
                         .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-                    SizedBox(height: compact ? 14 : 20),
-                    _DeviceModuleGrid(actions: actions)
-                        .animate(delay: 240.ms)
-                        .fadeIn(duration: 420.ms)
-                        .slideY(begin: 0.12, end: 0),
                   ],
                 ),
               ),
@@ -125,132 +123,5 @@ class DeviceTabPage extends StatelessWidget {
         ),
       ),
     ];
-  }
-}
-
-class _DeviceModuleGrid extends StatelessWidget {
-  const _DeviceModuleGrid({required this.actions});
-
-  final List<TraceOrbitAction> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return TraceGlassPanel(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-      borderRadius: 28,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                '模块入口',
-                style: TextStyle(
-                  color: TraceColors.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'REAL BUTTONS',
-                style: TextStyle(
-                  color: TraceColors.cyan.withOpacity(0.62),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: actions.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 2.35,
-            ),
-            itemBuilder: (context, index) {
-              return _DeviceModuleTile(action: actions[index]);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DeviceModuleTile extends StatelessWidget {
-  const _DeviceModuleTile({required this.action});
-
-  final TraceOrbitAction action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: action.onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: action.color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: action.color.withOpacity(0.2)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: action.color.withOpacity(0.14),
-                    border: Border.all(color: action.color.withOpacity(0.28)),
-                  ),
-                  child: Icon(action.icon, color: action.color, size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        action.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: TraceColors.text,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        action.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: TraceColors.muted,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

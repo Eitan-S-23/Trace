@@ -30,7 +30,10 @@ class DiscoverTabPage extends StatelessWidget {
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: math.max(0, constraints.maxHeight - TraceTheme.bottomNavHeight - 28),
+                  minHeight: math.max(
+                    0,
+                    constraints.maxHeight - TraceTheme.bottomNavHeight - 28,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,11 +65,6 @@ class DiscoverTabPage extends StatelessWidget {
                         .animate(delay: 110.ms)
                         .fadeIn(duration: 520.ms)
                         .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-                    SizedBox(height: compact ? 14 : 20),
-                    _DiscoverGuidePanel(actions: actions)
-                        .animate(delay: 240.ms)
-                        .fadeIn(duration: 420.ms)
-                        .slideY(begin: 0.12, end: 0),
                   ],
                 ),
               ),
@@ -135,7 +133,7 @@ class DiscoverTabPage extends StatelessWidget {
           const [
             '检查更新入口位于“我的”页面。',
             '更新服务只负责应用版本维护。',
-            '发现页只展示本地指南和现有功能说明。',
+            '发现页只展示现有功能说明。',
           ],
         ),
       ),
@@ -143,9 +141,11 @@ class DiscoverTabPage extends StatelessWidget {
   }
 
   static void _showGuideDialog(String title, List<String> lines) {
-    Get.dialog(
-      AlertDialog(
-        title: Text(title),
+    Get.dialog<void>(
+      TraceDialog(
+        title: title,
+        icon: Icons.travel_explore,
+        color: TraceColors.mint,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,122 +157,15 @@ class DiscoverTabPage extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('确定'),
+          TraceDialogAction(
+            label: '确定',
+            isPrimary: true,
+            color: TraceColors.mint,
+            onPressed: TraceDialog.close,
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DiscoverGuidePanel extends StatelessWidget {
-  const _DiscoverGuidePanel({required this.actions});
-
-  final List<TraceOrbitAction> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return TraceGlassPanel(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-      borderRadius: 28,
-      glowColor: TraceColors.mint,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                '本地指南',
-                style: TextStyle(
-                  color: TraceColors.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                'FRONTEND ONLY',
-                style: TextStyle(
-                  color: TraceColors.mint.withOpacity(0.62),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          for (var i = 0; i < actions.length; i++) ...[
-            _DiscoverGuideRow(action: actions[i]),
-            if (i != actions.length - 1)
-              Divider(color: TraceColors.cyan.withOpacity(0.08), height: 8),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _DiscoverGuideRow extends StatelessWidget {
-  const _DiscoverGuideRow({required this.action});
-
-  final TraceOrbitAction action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: action.onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: action.color.withOpacity(0.13),
-                  border: Border.all(color: action.color.withOpacity(0.28)),
-                ),
-                child: Icon(action.icon, color: action.color, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${action.code}  ${action.title}',
-                      style: const TextStyle(
-                        color: TraceColors.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      action.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: TraceColors.muted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(Icons.arrow_forward_ios, color: action.color.withOpacity(0.72), size: 14),
-            ],
-          ),
-        ),
-      ),
+      barrierColor: Colors.black.withOpacity(0.62),
     );
   }
 }

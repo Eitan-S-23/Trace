@@ -53,7 +53,10 @@ class ProfileTabPage extends StatelessWidget {
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: math.max(0, constraints.maxHeight - TraceTheme.bottomNavHeight - 28),
+                  minHeight: math.max(
+                    0,
+                    constraints.maxHeight - TraceTheme.bottomNavHeight - 28,
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -61,7 +64,7 @@ class ProfileTabPage extends StatelessWidget {
                     const TracePageTitle(
                       eyebrow: 'PROFILE CONSOLE',
                       title: '我的',
-                      subtitle: '数据统计、应用维护和帮助入口',
+                      subtitle: '数据、更新、设置、帮助和关于集中在圆形控制台内',
                       trailing: TracePill(
                         icon: Icons.person,
                         label: 'USER',
@@ -85,12 +88,7 @@ class ProfileTabPage extends StatelessWidget {
                         .animate(delay: 110.ms)
                         .fadeIn(duration: 520.ms)
                         .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-                    SizedBox(height: compact ? 14 : 20),
-                    _buildControlConsole()
-                        .animate(delay: 240.ms)
-                        .fadeIn(duration: 420.ms)
-                        .slideY(begin: 0.12, end: 0),
-                    const SizedBox(height: 20),
+                    SizedBox(height: compact ? 18 : 26),
                     Center(
                       child: _buildVersionText(
                         style: TextStyle(
@@ -135,7 +133,7 @@ class ProfileTabPage extends StatelessWidget {
         code: '03',
         icon: Icons.settings,
         color: TraceColors.mint,
-        onTap: () => Get.snackbar('提示', '设置功能开发中'),
+        onTap: _showSettingsDialog,
       ),
       TraceOrbitAction(
         title: '帮助',
@@ -145,70 +143,15 @@ class ProfileTabPage extends StatelessWidget {
         color: TraceColors.amber,
         onTap: _showHelpDialog,
       ),
-    ];
-  }
-
-  Widget _buildControlConsole() {
-    return TraceGlassPanel(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-      borderRadius: 28,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Text(
-                '维护控制台',
-                style: TextStyle(
-                  color: TraceColors.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '05 ACTIONS',
-                style: TextStyle(
-                  color: TraceColors.cyan.withOpacity(0.62),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.4,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildMenuItem(
-            icon: Icons.storage,
-            title: '数据统计',
-            subtitle: '查看设备数据统计',
-            color: TraceColors.cyan,
-            onTap: _showDataStatistics,
-          ),
-          _buildMenuItem(
-            icon: Icons.settings,
-            title: '应用设置',
-            subtitle: '个性化设置选项',
-            color: TraceColors.mint,
-            onTap: () => Get.snackbar('提示', '设置功能开发中'),
-          ),
-          _buildUpdateMenuItem(),
-          _buildMenuItem(
-            icon: Icons.help_outline,
-            title: '帮助与反馈',
-            subtitle: '使用帮助和问题反馈',
-            color: TraceColors.amber,
-            onTap: _showHelpDialog,
-          ),
-          _buildMenuItem(
-            icon: Icons.info_outline,
-            title: '关于应用',
-            subtitle: '版本信息和开发团队',
-            color: TraceColors.cyanSoft,
-            onTap: _showAboutDialog,
-          ),
-        ],
+      TraceOrbitAction(
+        title: '关于',
+        subtitle: '版本与应用信息',
+        code: '05',
+        icon: Icons.info_outline,
+        color: TraceColors.rose,
+        onTap: _showAboutDialog,
       ),
-    );
+    ];
   }
 
   Widget _buildVersionText({TextStyle? style}) {
@@ -225,117 +168,6 @@ class ProfileTabPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-    required Color color,
-    Widget? trailing,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 9),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(22),
-          onTap: onTap,
-          child: Ink(
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.075),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: color.withOpacity(0.18)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.16),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: color.withOpacity(0.26)),
-                    ),
-                    child: Icon(icon, color: color, size: 21),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: TraceColors.text,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: TraceColors.muted,
-                            fontSize: 12,
-                            height: 1.35,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  trailing ?? Icon(Icons.arrow_forward_ios, color: color.withOpacity(0.72), size: 14),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUpdateMenuItem() {
-    if (!Get.isRegistered<AppUpdateService>()) {
-      return _buildMenuItem(
-        icon: Icons.system_update_alt,
-        title: '检查更新',
-        subtitle: '检查 Cloudflare 增量更新',
-        color: TraceColors.cyanSoft,
-        onTap: _checkForUpdates,
-      );
-    }
-
-    final service = AppUpdateService.to;
-    return Obx(() {
-      final busy = service.isChecking.value || service.isUpdating.value;
-      return _buildMenuItem(
-        icon: busy ? Icons.sync : Icons.system_update_alt,
-        title: busy ? '正在检查更新' : '检查更新',
-        subtitle: busy
-            ? (service.updateStatus.value.isEmpty
-                ? '正在连接更新服务器'
-                : service.updateStatus.value)
-            : '检查 Cloudflare 增量更新',
-        color: TraceColors.cyanSoft,
-        trailing: busy
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  color: TraceColors.cyanSoft,
-                ),
-              )
-            : null,
-        onTap: _checkForUpdates,
-      );
-    });
-  }
-
   void _checkForUpdates() {
     final service = Get.isRegistered<AppUpdateService>()
         ? AppUpdateService.to
@@ -343,27 +175,48 @@ class ProfileTabPage extends StatelessWidget {
     unawaited(service.checkForUpdates());
   }
 
+  void _showSettingsDialog() {
+    _showTraceDialog(
+      TraceDialog(
+        title: '应用设置',
+        icon: Icons.settings,
+        color: TraceColors.mint,
+        message: '设置功能开发中。当前版本先保留入口，后续会接入个性化配置。',
+        actions: [
+          TraceDialogAction(
+            label: '知道了',
+            isPrimary: true,
+            color: TraceColors.mint,
+            onPressed: TraceDialog.close,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showDataStatistics() async {
     try {
       final dbService = DatabaseService();
       final dbInfo = await dbService.getDatabaseInfo();
 
-      Get.dialog(
-        AlertDialog(
-          title: const Text('数据统计'),
+      _showTraceDialog(
+        TraceDialog(
+          title: '数据统计',
+          icon: Icons.storage,
+          color: TraceColors.cyan,
           content: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildStatItem('保存的设备', '${dbInfo['deviceCount']} 个'),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               _buildStatItem('数据记录', '${dbInfo['dataCount']} 条'),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Get.back(),
-              child: const Text('确定'),
+            TraceDialogAction(
+              label: '确定',
+              isPrimary: true,
+              onPressed: TraceDialog.close,
             ),
           ],
         ),
@@ -381,7 +234,7 @@ class ProfileTabPage extends StatelessWidget {
         Text(
           value,
           style: const TextStyle(
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w900,
             color: TraceColors.cyan,
           ),
         ),
@@ -390,35 +243,37 @@ class ProfileTabPage extends StatelessWidget {
   }
 
   void _showHelpDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('使用帮助'),
-        content: const SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('功率计功能：'),
-              Text('1. 扫描并选择BLE设备'),
-              Text('2. 点击监控查看实时数据'),
-              Text('3. 保存设备以便长期监控'),
-              SizedBox(height: 16),
-              Text('码表功能：'),
-              Text('1. 连接码表设备'),
-              Text('2. 查看骑行数据'),
-              Text('3. OTA升级固件'),
-              SizedBox(height: 16),
-              Text('遥控功能：'),
-              Text('1. 连接蓝牙设备'),
-              Text('2. 自定义控制按钮'),
-              Text('3. 发送控制指令'),
-            ],
-          ),
+    _showTraceDialog(
+      TraceDialog(
+        title: '使用帮助',
+        icon: Icons.help_outline,
+        color: TraceColors.amber,
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('功率计功能：'),
+            Text('1. 扫描并选择 BLE 设备'),
+            Text('2. 点击监控查看实时数据'),
+            Text('3. 保存设备以便长期监控'),
+            SizedBox(height: 16),
+            Text('码表功能：'),
+            Text('1. 连接码表设备'),
+            Text('2. 查看骑行数据'),
+            Text('3. OTA 升级固件'),
+            SizedBox(height: 16),
+            Text('遥控功能：'),
+            Text('1. 连接蓝牙设备'),
+            Text('2. 自定义控制按钮'),
+            Text('3. 发送控制指令'),
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('确定'),
+          TraceDialogAction(
+            label: '确定',
+            isPrimary: true,
+            color: TraceColors.amber,
+            onPressed: TraceDialog.close,
           ),
         ],
       ),
@@ -426,9 +281,11 @@ class ProfileTabPage extends StatelessWidget {
   }
 
   void _showAboutDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('关于应用'),
+    _showTraceDialog(
+      TraceDialog(
+        title: '关于应用',
+        icon: Icons.info_outline,
+        color: TraceColors.rose,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,16 +299,25 @@ class ProfileTabPage extends StatelessWidget {
             const Text('• 码表数据管理'),
             const Text('• 遥控设备控制'),
             const Text('• 数据可视化'),
-            const Text('• OTA固件升级'),
+            const Text('• OTA 固件升级'),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('确定'),
+          TraceDialogAction(
+            label: '确定',
+            isPrimary: true,
+            color: TraceColors.rose,
+            onPressed: TraceDialog.close,
           ),
         ],
       ),
+    );
+  }
+
+  void _showTraceDialog(TraceDialog dialog) {
+    Get.dialog<void>(
+      dialog,
+      barrierColor: Colors.black.withOpacity(0.62),
     );
   }
 }

@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vcdiff_decoder/vcdiff_decoder.dart' as vcdiff;
 
 import '../config/share_links.dart';
+import '../pages/trace_ui.dart';
 
 class AppUpdateService extends GetxService with WidgetsBindingObserver {
   static AppUpdateService get to => Get.find<AppUpdateService>();
@@ -109,6 +110,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
     isChecking.value = true;
     var checkingDialogOpen = false;
+    var cancelledByUser = false;
     final manifestCancelToken = CancelToken();
 
     void closeCheckingDialog() {
@@ -119,6 +121,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     }
 
     void cancelChecking() {
+      cancelledByUser = true;
       manifestCancelToken.cancel('用户取消检查更新');
       closeCheckingDialog();
     }
@@ -179,6 +182,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       _showUpdateDialog(localInfo, updateInfo, patch);
     } on DioException catch (e) {
       closeCheckingDialog();
+      if (cancelledByUser || e.type == DioExceptionType.cancel) {
+        return;
+      }
       if (manual) {
         _showCheckFailedDialog(_formatDioException(e));
       }
@@ -421,14 +427,27 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     return uri.replace(queryParameters: queryParameters).toString();
   }
 
+  void _showTraceUpdateDialog(
+    Widget dialog, {
+    bool barrierDismissible = true,
+  }) {
+    Get.dialog<void>(
+      dialog,
+      barrierDismissible: barrierDismissible,
+      barrierColor: Colors.black.withOpacity(0.62),
+    );
+  }
+
   void _showUpdateDialog(
     _LocalAppInfo localInfo,
     _RemoteUpdateInfo updateInfo,
     _RemoteUpdatePatch patch,
   ) {
-    Get.dialog<void>(
-      AlertDialog(
-        title: const Text('发现新版本'),
+    _showTraceUpdateDialog(
+      TraceDialog(
+        title: '发现新版本',
+        icon: Icons.system_update_alt,
+        color: TraceColors.cyan,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,104 +472,101 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Get.back<void>(),
-            child: const Text('稍后'),
+          TraceDialogAction(
+            label: '稍后',
+            onPressed: TraceDialog.close,
           ),
           if (updateInfo.hasFullDownload)
-            TextButton(
-              onPressed: () {
-                Get.back<void>();
+            TraceDialogAction(
+              label: '全量安装',
+              color: TraceColors.cyanSoft,
+              onPressed: (context) {
+                TraceDialog.close(context);
                 _showFullFallbackDialog(
                   localInfo,
                   updateInfo,
                   reason: '你选择直接安装全量 APK。',
                 );
               },
-              child: const Text('全量安装'),
             ),
-          FilledButton(
-            onPressed: () {
-              Get.back<void>();
+          TraceDialogAction(
+            label: '增量更新',
+            isPrimary: true,
+            onPressed: (context) {
+              TraceDialog.close(context);
               unawaited(_applyIncrementalUpdate(localInfo, updateInfo, patch));
             },
-            child: const Text('增量更新'),
           ),
         ],
       ),
     );
   }
-
   void _showNoIncrementalPatchDialog(
     _LocalAppInfo localInfo,
     _RemoteUpdateInfo updateInfo,
   ) {
-    Get.dialog<void>(
-      AlertDialog(
-        title: const Text('发现新版本'),
-        content: Text(
-          updateInfo.hasFullDownload
-              ? '最新版本 ${updateInfo.versionName} 已发布，但当前版本 '
-                  '${localInfo.versionName} 没有匹配当前安装包的增量更新包。'
-                  '可以改用全量 APK，大小约 ${_formatBytes(updateInfo.apkSize)}，'
-                  '建议在 Wi-Fi 下下载。'
-              : '最新版本 ${updateInfo.versionName} 已发布，但当前版本 '
-                  '${localInfo.versionName} 没有匹配当前安装包的增量更新包，'
-                  '且更新清单未提供可用的全量 APK 下载地址。',
-        ),
+    _showTraceUpdateDialog(
+      TraceDialog(
+        title: '发现新版本',
+        icon: Icons.system_update_alt,
+        color: TraceColors.amber,
+        message: updateInfo.hasFullDownload
+            ? '最新版本 ${updateInfo.versionName} 已发布，但当前版本 ${localInfo.versionName} 没有匹配当前安装包的增量更新包。可以改用全量 APK，大小约 ${_formatBytes(updateInfo.apkSize)}，建议在 Wi-Fi 下下载。'
+            : '最新版本 ${updateInfo.versionName} 已发布，但当前版本 ${localInfo.versionName} 没有匹配当前安装包的增量更新包，且更新清单未提供可用的全量 APK 下载地址。',
         actions: [
-          TextButton(
-            onPressed: () => Get.back<void>(),
-            child: const Text('稍后'),
+          TraceDialogAction(
+            label: '稍后',
+            color: TraceColors.amber,
+            onPressed: TraceDialog.close,
           ),
           if (updateInfo.hasFullDownload)
-            FilledButton(
-              onPressed: () {
-                Get.back<void>();
+            TraceDialogAction(
+              label: '下载全量包',
+              isPrimary: true,
+              color: TraceColors.amber,
+              onPressed: (context) {
+                TraceDialog.close(context);
                 _showFullFallbackDialog(
                   localInfo,
                   updateInfo,
                   reason: '当前安装包没有可用增量补丁。',
                 );
               },
-              child: const Text('下载全量包'),
             ),
         ],
       ),
     );
   }
-
   void _showFullFallbackDialog(
     _LocalAppInfo localInfo,
     _RemoteUpdateInfo updateInfo, {
     required String reason,
   }) {
-    Get.dialog<void>(
-      AlertDialog(
-        title: const Text('改用全量包'),
-        content: Text(
-          '$reason\n\n'
-          '将下载完整 APK，大小约 ${_formatBytes(updateInfo.apkSize)}。'
-          '下载完成后会校验 SHA-256，再打开系统安装器。'
-          '建议在 Wi-Fi 下继续。',
-        ),
+    _showTraceUpdateDialog(
+      TraceDialog(
+        title: '改用全量包',
+        icon: Icons.download_for_offline,
+        color: TraceColors.cyanSoft,
+        message: '$reason\n\n将下载完整 APK，大小约 ${_formatBytes(updateInfo.apkSize)}。下载完成后会校验 SHA-256，再打开系统安装器。建议在 Wi-Fi 下继续。',
         actions: [
-          TextButton(
-            onPressed: () => Get.back<void>(),
-            child: const Text('稍后'),
+          TraceDialogAction(
+            label: '稍后',
+            color: TraceColors.cyanSoft,
+            onPressed: TraceDialog.close,
           ),
-          FilledButton(
-            onPressed: () {
-              Get.back<void>();
+          TraceDialogAction(
+            label: '继续下载',
+            isPrimary: true,
+            color: TraceColors.cyanSoft,
+            onPressed: (context) {
+              TraceDialog.close(context);
               unawaited(_downloadAndInstallFullApk(localInfo, updateInfo));
             },
-            child: const Text('继续下载'),
           ),
         ],
       ),
     );
   }
-
   Future<void> _applyIncrementalUpdate(
     _LocalAppInfo localInfo,
     _RemoteUpdateInfo updateInfo,
@@ -801,120 +817,139 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     _RemoteUpdatePatch patch, {
     required Object error,
   }) {
-    Get.dialog<void>(
-      AlertDialog(
-        title: const Text('增量更新失败'),
-        content: Text(
-          '错误：${_formatUpdateFailure(error)}\n\n'
-          '${updateInfo.hasFullDownload ? '你可以重试增量更新，或改用全量 APK。全量包大小约 ${_formatBytes(updateInfo.apkSize)}，建议在 Wi-Fi 下下载。' : '你可以稍后重试增量更新。当前更新清单未提供全量 APK 下载地址。'}',
-        ),
+    _showTraceUpdateDialog(
+      TraceDialog(
+        title: '增量更新失败',
+        icon: Icons.error_outline,
+        color: TraceColors.amber,
+        message: '错误：${_formatUpdateFailure(error)}\n\n${updateInfo.hasFullDownload ? '你可以重试增量更新，或改用全量 APK。全量包大小约 ${_formatBytes(updateInfo.apkSize)}，建议在 Wi-Fi 下下载。' : '你可以稍后重试增量更新。当前更新清单未提供全量 APK 下载地址。'}',
         actions: [
-          TextButton(
-            onPressed: () => Get.back<void>(),
-            child: const Text('稍后'),
+          TraceDialogAction(
+            label: '稍后',
+            color: TraceColors.amber,
+            onPressed: TraceDialog.close,
           ),
-          TextButton(
-            onPressed: () {
-              Get.back<void>();
+          TraceDialogAction(
+            label: '重试',
+            color: TraceColors.amber,
+            onPressed: (context) {
+              TraceDialog.close(context);
               unawaited(_applyIncrementalUpdate(localInfo, updateInfo, patch));
             },
-            child: const Text('重试'),
           ),
           if (updateInfo.hasFullDownload)
-            FilledButton(
-              onPressed: () {
-                Get.back<void>();
+            TraceDialogAction(
+              label: '改用全量包',
+              isPrimary: true,
+              color: TraceColors.amber,
+              onPressed: (context) {
+                TraceDialog.close(context);
                 _showFullFallbackDialog(
                   localInfo,
                   updateInfo,
                   reason: '增量更新失败：${_formatUpdateFailure(error)}',
                 );
               },
-              child: const Text('改用全量包'),
             ),
         ],
       ),
     );
   }
-
   void _showFullUpdateFailedDialog(
     _LocalAppInfo localInfo,
     _RemoteUpdateInfo updateInfo, {
     required Object error,
   }) {
-    Get.dialog<void>(
-      AlertDialog(
-        title: const Text('全量更新失败'),
-        content: Text('错误：${_formatUpdateFailure(error)}'),
+    _showTraceUpdateDialog(
+      TraceDialog(
+        title: '全量更新失败',
+        icon: Icons.error_outline,
+        color: TraceColors.amber,
+        message: '错误：${_formatUpdateFailure(error)}',
         actions: [
-          TextButton(
-            onPressed: () => Get.back<void>(),
-            child: const Text('稍后'),
+          TraceDialogAction(
+            label: '稍后',
+            color: TraceColors.amber,
+            onPressed: TraceDialog.close,
           ),
-          FilledButton(
-            onPressed: () {
-              Get.back<void>();
+          TraceDialogAction(
+            label: '重试',
+            isPrimary: true,
+            color: TraceColors.amber,
+            onPressed: (context) {
+              TraceDialog.close(context);
               unawaited(_downloadAndInstallFullApk(localInfo, updateInfo));
             },
-            child: const Text('重试'),
           ),
         ],
       ),
     );
   }
-
   void _showCheckResultDialog({
     required String title,
     required String message,
   }) {
-    Get.dialog<void>(
-      AlertDialog(
-        title: Text(title),
-        content: Text(message),
+    _showTraceUpdateDialog(
+      TraceDialog(
+        title: title,
+        icon: Icons.check_circle_outline,
+        color: TraceColors.mint,
+        message: message,
         actions: [
-          FilledButton(
-            onPressed: () => Get.back<void>(),
-            child: const Text('知道了'),
+          TraceDialogAction(
+            label: '知道了',
+            isPrimary: true,
+            color: TraceColors.mint,
+            onPressed: TraceDialog.close,
           ),
         ],
       ),
     );
   }
-
   void _showCheckFailedDialog(String message) {
-    Get.dialog<void>(
-      AlertDialog(
-        title: const Text('检查更新失败'),
-        content: Text(message),
+    _showTraceUpdateDialog(
+      TraceDialog(
+        title: '检查更新失败',
+        icon: Icons.error_outline,
+        color: TraceColors.amber,
+        message: message,
         actions: [
-          TextButton(
-            onPressed: () => Get.back<void>(),
-            child: const Text('稍后'),
+          TraceDialogAction(
+            label: '稍后',
+            color: TraceColors.amber,
+            onPressed: TraceDialog.close,
           ),
-          FilledButton(
-            onPressed: () {
-              Get.back<void>();
+          TraceDialogAction(
+            label: '重试',
+            isPrimary: true,
+            color: TraceColors.amber,
+            onPressed: (context) {
+              TraceDialog.close(context);
               unawaited(checkForUpdates());
             },
-            child: const Text('重试'),
           ),
         ],
       ),
     );
   }
-
   void _showProgressDialog() {
-    Get.dialog<void>(
+    _showTraceUpdateDialog(
       Obx(
-        () => AlertDialog(
-          title: const Text('应用更新中'),
+        () => TraceDialog(
+          title: '应用更新中',
+          icon: Icons.downloading,
+          color: TraceColors.cyan,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(updateStatus.value),
               const SizedBox(height: 16),
-              LinearProgressIndicator(value: updateProgress.value),
+              LinearProgressIndicator(
+                value: updateProgress.value,
+                color: TraceColors.cyan,
+                backgroundColor: TraceColors.cyan.withOpacity(0.14),
+              ),
               const SizedBox(height: 8),
               Text('${(updateProgress.value * 100).toStringAsFixed(0)}%'),
             ],
@@ -924,12 +959,13 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       barrierDismissible: false,
     );
   }
-
   void _showCheckingDialog({required VoidCallback onCancel}) {
-    Get.dialog<void>(
+    _showTraceUpdateDialog(
       Obx(
-        () => AlertDialog(
-          title: const Text('检查更新'),
+        () => TraceDialog(
+          title: '检查更新',
+          icon: Icons.radar,
+          color: TraceColors.cyan,
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -940,7 +976,10 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
                   const SizedBox(
                     width: 24,
                     height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2.6),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.6,
+                      color: TraceColors.cyan,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(child: Text(updateStatus.value)),
@@ -948,16 +987,16 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
               ),
               const SizedBox(height: 12),
               const Text(
-                '优先连接配置的 Cloudflare 更新服务；'
-                '如不可用，会按内置备用清单规则重试，最多等待 30 秒。',
+                '优先连接配置的 Cloudflare 更新服务；如不可用，会按内置备用清单规则重试，最多等待 30 秒。',
                 style: TextStyle(fontSize: 12),
               ),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: onCancel,
-              child: const Text('取消'),
+            TraceDialogAction(
+              label: '取消',
+              color: TraceColors.cyan,
+              onPressed: (_) => onCancel(),
             ),
           ],
         ),
@@ -965,7 +1004,6 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       barrierDismissible: false,
     );
   }
-
   String _dateKey(DateTime value) {
     return '${value.year.toString().padLeft(4, '0')}-'
         '${value.month.toString().padLeft(2, '0')}-'
