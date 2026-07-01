@@ -54,14 +54,17 @@ class _MainAppPageState extends State<MainAppPage> {
             bottom: 10,
             child: SafeArea(
               top: false,
-              child: _TraceBottomNavigation(
-                currentIndex: _selectedIndex,
-                items: _navItems,
-                onChanged: (index) {
-                  setState(() {
-                    _selectedIndex = index;
-                  });
-                },
+              child: Opacity(
+                opacity: 0,
+                child: _TraceBottomNavigation(
+                  currentIndex: _selectedIndex,
+                  items: _navItems,
+                  onChanged: (index) {
+                    setState(() {
+                      _selectedIndex = index;
+                    });
+                  },
+                ),
               ),
             ),
           ),
