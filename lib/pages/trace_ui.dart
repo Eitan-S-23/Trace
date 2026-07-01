@@ -382,7 +382,7 @@ class TraceRadialConsole extends StatelessWidget {
 
   static List<Offset> _orbitPositions(int count, double size, double nodeSize) {
     final center = Offset(size / 2, size / 2);
-    final orbitRadius = size * (count > 4 ? 0.36 : 0.347);
+    final orbitRadius = size * (count > 4 ? 0.365 : 0.35);
     final angles = count == 4
         ? <double>[-math.pi / 2, 0, math.pi, math.pi / 2]
         : List<double>.generate(
@@ -406,11 +406,11 @@ class TraceRadialConsole extends StatelessWidget {
         builder: (context, constraints) {
           final size = math.min(constraints.maxWidth, constraints.maxHeight);
           final nodeSize = actions.length > 4
-              ? math.min(size * 0.215, 82.0)
-              : math.min(size * 0.255, 92.0);
+              ? math.min(size * 0.225, 88.0)
+              : math.min(size * 0.275, 104.0);
           final coreSize = math.min(
-            size * (actions.length > 4 ? 0.36 : 0.4),
-            148.0,
+            size * (actions.length > 4 ? 0.37 : 0.43),
+            164.0,
           );
           final positions = _orbitPositions(actions.length, size, nodeSize);
 
@@ -479,50 +479,80 @@ class TraceRadialConsolePainter extends CustomPainter {
   final Color primaryColor;
   final int actionCount;
 
+  static List<double> _spokeAngles(int count) {
+    if (count == 4) {
+      return <double>[-math.pi / 2, 0, math.pi, math.pi / 2];
+    }
+    return List<double>.generate(
+      count,
+      (index) => -math.pi / 2 + (math.pi * 2 / count) * index,
+    );
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final shortest = math.min(size.width, size.height);
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = shortest * 0.45;
+    final radius = shortest * 0.455;
 
-    final glowPaint = Paint()
+    final platePaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          primaryColor.withOpacity(0.22),
-          TraceColors.ocean.withOpacity(0.12),
+          primaryColor.withOpacity(0.26),
+          TraceColors.ocean.withOpacity(0.2),
+          const Color(0xFF021018).withOpacity(0.92),
           Colors.transparent,
         ],
-      ).createShader(Rect.fromCircle(center: center, radius: radius * 1.12));
-    canvas.drawCircle(center, radius * 1.12, glowPaint);
+        stops: const [0, 0.42, 0.78, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: radius * 1.16));
+    canvas.drawCircle(center, radius * 1.16, platePaint);
+
+    final shadowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 24
+      ..color = Colors.black.withOpacity(0.18);
+    canvas.drawCircle(center, radius * 0.88, shadowPaint);
+
+    final outerHalo = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..color = primaryColor.withOpacity(0.28);
+    canvas.drawCircle(center, radius * 1.02, outerHalo);
 
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.15
-      ..color = primaryColor.withOpacity(0.22);
-
-    for (final factor in [0.34, 0.5, 0.66, 0.82, 1.0]) {
+      ..strokeWidth = 1.35
+      ..color = primaryColor.withOpacity(0.2);
+    for (final factor in [0.3, 0.42, 0.55, 0.68, 0.81, 0.94]) {
       canvas.drawCircle(center, radius * factor, ringPaint);
     }
 
+    final softRingPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 16
+      ..color = primaryColor.withOpacity(0.055);
+    canvas.drawCircle(center, radius * 0.72, softRingPaint);
+
     final connectorPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1
-      ..color = primaryColor.withOpacity(0.22);
-    for (final angle in [-math.pi / 2, 0.0, math.pi, math.pi / 2]) {
-      final start = center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.25;
-      final end = center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.72;
+      ..strokeWidth = 1.25
+      ..color = primaryColor.withOpacity(0.25);
+    for (final angle in _spokeAngles(actionCount)) {
+      final start = center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.26;
+      final end = center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.76;
       canvas.drawLine(start, end, connectorPaint);
     }
 
     final tickPaint = Paint()
-      ..color = primaryColor.withOpacity(0.56)
-      ..strokeWidth = 1.5
+      ..color = primaryColor.withOpacity(0.58)
+      ..strokeWidth = 1.65
       ..strokeCap = StrokeCap.round;
-    for (int i = 0; i < 72; i++) {
-      final angle = (math.pi * 2 / 72) * i;
-      final isMajor = i % 6 == 0;
-      final start = radius * (isMajor ? 0.93 : 0.975);
-      final end = radius * 1.035;
+    for (int i = 0; i < 96; i++) {
+      final angle = (math.pi * 2 / 96) * i;
+      final isMajor = i % 8 == 0;
+      final isMedium = i % 4 == 0;
+      final start = radius * (isMajor ? 0.91 : (isMedium ? 0.945 : 0.97));
+      final end = radius * 1.045;
       canvas.drawLine(
         center + Offset(math.cos(angle) * start, math.sin(angle) * start),
         center + Offset(math.cos(angle) * end, math.sin(angle) * end),
@@ -530,50 +560,77 @@ class TraceRadialConsolePainter extends CustomPainter {
       );
     }
 
-    final arcPaint = Paint()
+    final heavyArc = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 7
+      ..strokeWidth = 10
       ..strokeCap = StrokeCap.round
       ..shader = SweepGradient(
         colors: [
           Colors.transparent,
-          primaryColor.withOpacity(0.05),
-          primaryColor,
+          primaryColor.withOpacity(0.18),
           TraceColors.cyanSoft,
+          primaryColor,
           Colors.transparent,
         ],
-        stops: const [0, 0.28, 0.48, 0.58, 1],
+        stops: const [0, 0.22, 0.36, 0.48, 1],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.86),
+      -math.pi * 0.86,
+      math.pi * 0.66,
+      false,
+      heavyArc,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.98),
+      math.pi * 0.62,
+      math.pi * 0.48,
+      false,
+      heavyArc,
+    );
 
+    final innerSweep = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5.5
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        colors: [
+          Colors.transparent,
+          primaryColor.withOpacity(0.08),
+          primaryColor.withOpacity(0.62),
+          Colors.transparent,
+        ],
+        stops: const [0, 0.36, 0.5, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius * 0.77),
-      -math.pi * 0.84,
-      math.pi * 1.18,
+      Rect.fromCircle(center: center, radius: radius * 0.62),
+      -math.pi * 0.2,
+      math.pi * 0.88,
       false,
-      arcPaint,
+      innerSweep,
     );
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius * 0.96),
-      math.pi * 0.18,
-      math.pi * 0.72,
-      false,
-      arcPaint,
-    );
+
+    final crossPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.9
+      ..color = primaryColor.withOpacity(0.13);
+    canvas.drawLine(Offset(center.dx, center.dy - radius * 0.98), Offset(center.dx, center.dy + radius * 0.98), crossPaint);
+    canvas.drawLine(Offset(center.dx - radius * 0.98, center.dy), Offset(center.dx + radius * 0.98, center.dy), crossPaint);
 
     final cornerPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = primaryColor.withOpacity(0.28);
-    const corner = 24.0;
+      ..strokeWidth = 1.4
+      ..color = primaryColor.withOpacity(0.32);
+    const corner = 28.0;
     final rect = Offset.zero & size;
-    canvas.drawLine(rect.topLeft + const Offset(4, corner), rect.topLeft + const Offset(4, 4), cornerPaint);
-    canvas.drawLine(rect.topLeft + const Offset(4, 4), rect.topLeft + const Offset(corner, 4), cornerPaint);
-    canvas.drawLine(rect.topRight + const Offset(-corner, 4), rect.topRight + const Offset(-4, 4), cornerPaint);
-    canvas.drawLine(rect.topRight + const Offset(-4, 4), rect.topRight + const Offset(-4, corner), cornerPaint);
-    canvas.drawLine(rect.bottomLeft + const Offset(4, -corner), rect.bottomLeft + const Offset(4, -4), cornerPaint);
-    canvas.drawLine(rect.bottomLeft + const Offset(4, -4), rect.bottomLeft + const Offset(corner, -4), cornerPaint);
-    canvas.drawLine(rect.bottomRight + const Offset(-corner, -4), rect.bottomRight + const Offset(-4, -4), cornerPaint);
-    canvas.drawLine(rect.bottomRight + const Offset(-4, -corner), rect.bottomRight + const Offset(-4, -4), cornerPaint);
+    canvas.drawLine(rect.topLeft + const Offset(6, corner), rect.topLeft + const Offset(6, 6), cornerPaint);
+    canvas.drawLine(rect.topLeft + const Offset(6, 6), rect.topLeft + const Offset(corner, 6), cornerPaint);
+    canvas.drawLine(rect.topRight + const Offset(-corner, 6), rect.topRight + const Offset(-6, 6), cornerPaint);
+    canvas.drawLine(rect.topRight + const Offset(-6, 6), rect.topRight + const Offset(-6, corner), cornerPaint);
+    canvas.drawLine(rect.bottomLeft + const Offset(6, -corner), rect.bottomLeft + const Offset(6, -6), cornerPaint);
+    canvas.drawLine(rect.bottomLeft + const Offset(6, -6), rect.bottomLeft + const Offset(corner, -6), cornerPaint);
+    canvas.drawLine(rect.bottomRight + const Offset(-corner, -6), rect.bottomRight + const Offset(-6, -6), cornerPaint);
+    canvas.drawLine(rect.bottomRight + const Offset(-6, -corner), rect.bottomRight + const Offset(-6, -6), cornerPaint);
   }
 
   @override
@@ -582,7 +639,6 @@ class TraceRadialConsolePainter extends CustomPainter {
         oldDelegate.actionCount != actionCount;
   }
 }
-
 class TraceOrbitButton extends StatelessWidget {
   const TraceOrbitButton({
     super.key,
@@ -609,13 +665,19 @@ class TraceOrbitButton extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF061923).withOpacity(0.94),
-              border: Border.all(color: action.color.withOpacity(0.55)),
+              gradient: RadialGradient(
+                colors: [
+                  action.color.withOpacity(0.25),
+                  const Color(0xFF06202A).withOpacity(0.96),
+                  TraceColors.ink.withOpacity(0.98),
+                ],
+              ),
+              border: Border.all(color: action.color.withOpacity(0.62), width: 1.35),
               boxShadow: [
                 BoxShadow(
                   color: action.color.withOpacity(0.26),
-                  blurRadius: 26,
-                  spreadRadius: -5,
+                  blurRadius: 32,
+                  spreadRadius: -4,
                 ),
                 BoxShadow(
                   color: Colors.black.withOpacity(0.38),
@@ -629,7 +691,7 @@ class TraceOrbitButton extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(action.icon, color: action.color, size: size * 0.25),
+                  Icon(action.icon, color: action.color, size: size * 0.28),
                   SizedBox(height: size * 0.08),
                   FittedBox(
                     fit: BoxFit.scaleDown,
@@ -638,7 +700,7 @@ class TraceOrbitButton extends StatelessWidget {
                       maxLines: 1,
                       style: const TextStyle(
                         color: TraceColors.text,
-                        fontSize: 14,
+                        fontSize: 15,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -648,7 +710,7 @@ class TraceOrbitButton extends StatelessWidget {
                     action.code,
                     style: TextStyle(
                       color: action.color,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 1.1,
                     ),
@@ -718,22 +780,27 @@ class _TraceConsoleCore extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   color: TraceColors.text,
-                  fontSize: 18,
+                  fontSize: 21,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.3,
                 ),
               ),
             ),
             SizedBox(height: size * 0.035),
-            Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: TraceColors.muted.withOpacity(0.92),
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.1,
+            SizedBox(
+              width: size * 0.72,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  subtitle,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: TraceColors.muted.withOpacity(0.92),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.1,
+                  ),
+                ),
               ),
             ),
           ],
