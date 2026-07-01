@@ -86,7 +86,7 @@ class DeviceTabPage extends StatelessWidget {
                   .animate(delay: 140.ms)
                   .fadeIn(duration: 620.ms)
                   .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-              const SizedBox(height: 16),
+              const TraceFirstViewportSpacer(consumedHeight: 614),
               _DeviceCommandDeck(features: features)
                   .animate(delay: 360.ms)
                   .fadeIn(duration: 520.ms)
@@ -276,15 +276,19 @@ class _RadialDeviceNode extends StatelessWidget {
           children: [
             Icon(feature.icon, color: feature.color, size: 22),
             const SizedBox(height: 8),
-            Text(
-              feature.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: TraceColors.text,
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
+            SizedBox(
+              width: size - 20,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  feature.title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: TraceColors.text,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 3),

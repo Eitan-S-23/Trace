@@ -37,7 +37,7 @@ class DiscoverTabPage extends StatelessWidget {
                   .animate(delay: 120.ms)
                   .fadeIn(duration: 620.ms)
                   .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-              const SizedBox(height: 18),
+              const TraceFirstViewportSpacer(consumedHeight: 544),
               const _SectionHeader(title: '功能指南', code: '01-03'),
               const SizedBox(height: 12),
               const _GuideTimeline()

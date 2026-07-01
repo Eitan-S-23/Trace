@@ -61,7 +61,7 @@ class ProfileTabPage extends StatelessWidget {
                   .animate(delay: 120.ms)
                   .fadeIn(duration: 620.ms)
                   .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-              const SizedBox(height: 16),
+              const TraceFirstViewportSpacer(consumedHeight: 538),
               _buildControlConsole()
                   .animate(delay: 220.ms)
                   .fadeIn(duration: 560.ms)

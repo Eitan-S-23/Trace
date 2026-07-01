@@ -216,6 +216,26 @@ class TracePageTitle extends StatelessWidget {
   }
 }
 
+
+class TraceFirstViewportSpacer extends StatelessWidget {
+  const TraceFirstViewportSpacer({
+    super.key,
+    required this.consumedHeight,
+    this.minHeight = 84,
+  });
+
+  final double consumedHeight;
+  final double minHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final safeHeight = media.size.height - media.padding.top - media.padding.bottom;
+    final navReserve = TraceTheme.bottomNavHeight + 24;
+    final height = safeHeight - consumedHeight - navReserve;
+    return SizedBox(height: math.max(minHeight, height));
+  }
+}
 class TracePill extends StatelessWidget {
   const TracePill({
     super.key,
