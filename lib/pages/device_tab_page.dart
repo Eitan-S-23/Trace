@@ -65,7 +65,7 @@ class DeviceTabPage extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
             20,
-            20,
+            18,
             20,
             TraceTheme.bottomNavHeight + 26,
           ),
@@ -81,64 +81,16 @@ class DeviceTabPage extends StatelessWidget {
                   label: 'TRACE',
                 ),
               ).animate().fadeIn(duration: 520.ms).slideY(begin: 0.16, end: 0),
-              const SizedBox(height: 18),
-              _DeviceOrbit(features: features)
+              const SizedBox(height: 16),
+              _DeviceRadarStage(features: features)
                   .animate(delay: 140.ms)
                   .fadeIn(duration: 620.ms)
                   .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-              const SizedBox(height: 18),
-              TraceGlassPanel(
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: TraceColors.cyan,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          '功能模块',
-                          style: TextStyle(
-                            color: TraceColors.text,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${features.length} 个入口',
-                          style: const TextStyle(
-                            color: TraceColors.muted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: features
-                          .map(
-                            (feature) => TracePill(
-                              icon: feature.icon,
-                              label: feature.title,
-                              color: feature.color,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                ),
-              ).animate(delay: 360.ms).fadeIn(duration: 520.ms).slideY(begin: 0.18, end: 0),
+              const SizedBox(height: 16),
+              _DeviceCommandDeck(features: features)
+                  .animate(delay: 360.ms)
+                  .fadeIn(duration: 520.ms)
+                  .slideY(begin: 0.18, end: 0),
             ],
           ),
         ),
@@ -147,8 +99,8 @@ class DeviceTabPage extends StatelessWidget {
   }
 }
 
-class _DeviceOrbit extends StatelessWidget {
-  const _DeviceOrbit({required this.features});
+class _DeviceRadarStage extends StatelessWidget {
+  const _DeviceRadarStage({required this.features});
 
   final List<_DeviceFeature> features;
 
@@ -156,93 +108,129 @@ class _DeviceOrbit extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = math.min(constraints.maxWidth, 390.0);
-        final height = width + 72;
-        final nodeWidth = math.min(width * 0.38, 148.0);
+        final outerWidth = math.min(constraints.maxWidth, 390.0);
+        final stageHeight = math.max(outerWidth * 1.08, 408.0);
 
         return Center(
           child: SizedBox(
-            width: width,
-            height: height,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(painter: const TraceOrbitPainter()),
-                ),
-                _OrbitNode(
-                  alignment: const Alignment(0, -0.98),
-                  width: nodeWidth,
-                  feature: features[0],
-                  delay: 260,
-                ),
-                _OrbitNode(
-                  alignment: const Alignment(0.98, -0.05),
-                  width: nodeWidth,
-                  feature: features[1],
-                  delay: 340,
-                ),
-                _OrbitNode(
-                  alignment: const Alignment(-0.98, -0.05),
-                  width: nodeWidth,
-                  feature: features[2],
-                  delay: 420,
-                ),
-                _OrbitNode(
-                  alignment: const Alignment(0, 0.96),
-                  width: nodeWidth,
-                  feature: features[3],
-                  delay: 500,
-                ),
-                Container(
-                  width: width * 0.42,
-                  height: width * 0.42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        TraceColors.cyan.withOpacity(0.3),
-                        TraceColors.ocean.withOpacity(0.22),
-                        TraceColors.ink.withOpacity(0.94),
+            width: outerWidth,
+            child: TraceGlassPanel(
+              padding: const EdgeInsets.all(12),
+              borderRadius: 34,
+              child: SizedBox(
+                height: stageHeight,
+                child: LayoutBuilder(
+                  builder: (context, innerConstraints) {
+                    final width = innerConstraints.maxWidth;
+                    final height = stageHeight;
+                    final nodeSize = math.min(width * 0.25, 88.0);
+                    final hubSize = math.min(width * 0.42, 148.0);
+
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(painter: const TraceOrbitPainter()),
+                        ),
+                        const Positioned(
+                          top: 14,
+                          left: 18,
+                          child: _OrbitCoordinate(label: 'BLE', value: '04 NODES'),
+                        ),
+                        const Positioned(
+                          right: 18,
+                          bottom: 14,
+                          child: _OrbitCoordinate(label: 'SYNC', value: 'READY'),
+                        ),
+                        Positioned(
+                          top: 22,
+                          left: (width - nodeSize) / 2,
+                          child: _RadialDeviceNode(
+                            size: nodeSize,
+                            feature: features[0],
+                            delay: 260,
+                          ),
+                        ),
+                        Positioned(
+                          top: (height - nodeSize) / 2,
+                          right: 8,
+                          child: _RadialDeviceNode(
+                            size: nodeSize,
+                            feature: features[1],
+                            delay: 340,
+                          ),
+                        ),
+                        Positioned(
+                          top: (height - nodeSize) / 2,
+                          left: 8,
+                          child: _RadialDeviceNode(
+                            size: nodeSize,
+                            feature: features[2],
+                            delay: 420,
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 24,
+                          left: (width - nodeSize) / 2,
+                          child: _RadialDeviceNode(
+                            size: nodeSize,
+                            feature: features[3],
+                            delay: 500,
+                          ),
+                        ),
+                        Container(
+                          width: hubSize,
+                          height: hubSize,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                TraceColors.cyan.withOpacity(0.34),
+                                TraceColors.ocean.withOpacity(0.22),
+                                TraceColors.ink.withOpacity(0.96),
+                              ],
+                            ),
+                            border: Border.all(color: TraceColors.cyan.withOpacity(0.42)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: TraceColors.cyan.withOpacity(0.3),
+                                blurRadius: 46,
+                                spreadRadius: -2,
+                              ),
+                            ],
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.bluetooth_audio, color: TraceColors.cyan, size: 36),
+                              SizedBox(height: 8),
+                              Text(
+                                'TRACE',
+                                style: TextStyle(
+                                  color: TraceColors.text,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.6,
+                                ),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'CONTROL CORE',
+                                style: TextStyle(
+                                  color: TraceColors.muted,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
-                    ),
-                    border: Border.all(color: TraceColors.cyan.withOpacity(0.38)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: TraceColors.cyan.withOpacity(0.28),
-                        blurRadius: 42,
-                        spreadRadius: -4,
-                      ),
-                    ],
-                  ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.bluetooth_audio, color: TraceColors.cyan, size: 34),
-                      SizedBox(height: 8),
-                      Text(
-                        'TRACE',
-                        style: TextStyle(
-                          color: TraceColors.text,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'CONTROL CORE',
-                        style: TextStyle(
-                          color: TraceColors.muted,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              ],
+              ),
             ),
           ),
         );
@@ -251,84 +239,230 @@ class _DeviceOrbit extends StatelessWidget {
   }
 }
 
-class _OrbitNode extends StatelessWidget {
-  const _OrbitNode({
-    required this.alignment,
-    required this.width,
+class _RadialDeviceNode extends StatelessWidget {
+  const _RadialDeviceNode({
+    required this.size,
     required this.feature,
     required this.delay,
   });
 
-  final Alignment alignment;
-  final double width;
+  final double size;
   final _DeviceFeature feature;
   final int delay;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: alignment,
-      child: GestureDetector(
-        onTap: feature.onTap,
-        child: Container(
-          width: width,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF071B25).withOpacity(0.86),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: feature.color.withOpacity(0.42)),
-            boxShadow: [
-              BoxShadow(
-                color: feature.color.withOpacity(0.2),
-                blurRadius: 22,
-                offset: const Offset(0, 12),
+    return GestureDetector(
+      onTap: feature.onTap,
+      child: Container(
+        width: size,
+        height: size,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: const Color(0xFF071B25).withOpacity(0.9),
+          border: Border.all(color: feature.color.withOpacity(0.48)),
+          boxShadow: [
+            BoxShadow(
+              color: feature.color.withOpacity(0.24),
+              blurRadius: 24,
+              spreadRadius: -6,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(feature.icon, color: feature.color, size: 22),
+            const SizedBox(height: 8),
+            Text(
+              feature.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: TraceColors.text,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              feature.code,
+              style: TextStyle(
+                color: feature.color,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate(delay: delay.ms).fadeIn(duration: 420.ms).scale(
+          begin: const Offset(0.84, 0.84),
+          end: const Offset(1, 1),
+        );
+  }
+}
+
+class _DeviceCommandDeck extends StatelessWidget {
+  const _DeviceCommandDeck({required this.features});
+
+  final List<_DeviceFeature> features;
+
+  @override
+  Widget build(BuildContext context) {
+    return TraceGlassPanel(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      borderRadius: 30,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Text(
-                    feature.code,
-                    style: TextStyle(
-                      color: feature.color,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(feature.icon, color: feature.color, size: 20),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                feature.title,
-                style: const TextStyle(
+              const Text(
+                '设备入口',
+                style: TextStyle(
                   color: TraceColors.text,
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 3),
+              const Spacer(),
               Text(
-                feature.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: TraceColors.muted,
+                '${features.length} MODULES',
+                style: TextStyle(
+                  color: TraceColors.cyan.withOpacity(0.62),
                   fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Column(
+            children: [
+              for (var i = 0; i < features.length; i++) ...[
+                _DeviceDeckRow(feature: features[i]),
+                if (i != features.length - 1) const SizedBox(height: 8),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceDeckRow extends StatelessWidget {
+  const _DeviceDeckRow({required this.feature});
+
+  final _DeviceFeature feature;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: feature.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            color: feature.color.withOpacity(0.075),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: feature.color.withOpacity(0.18)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: feature.color.withOpacity(0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(feature.icon, color: feature.color, size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      feature.title,
+                      style: const TextStyle(
+                        color: TraceColors.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      feature.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: TraceColors.muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                feature.code,
+                style: TextStyle(
+                  color: feature.color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.4,
                 ),
               ),
             ],
           ),
         ),
       ),
-    ).animate(delay: delay.ms).fadeIn(duration: 420.ms).scale(begin: const Offset(0.88, 0.88), end: const Offset(1, 1));
+    );
+  }
+}
+
+class _OrbitCoordinate extends StatelessWidget {
+  const _OrbitCoordinate({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: TraceColors.cyan.withOpacity(0.52),
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.6,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: const TextStyle(
+            color: TraceColors.muted,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
   }
 }
 

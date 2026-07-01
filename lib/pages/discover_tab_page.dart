@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'trace_ui.dart';
@@ -13,7 +15,7 @@ class DiscoverTabPage extends StatelessWidget {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
             20,
-            20,
+            18,
             20,
             TraceTheme.bottomNavHeight + 26,
           ),
@@ -30,19 +32,19 @@ class DiscoverTabPage extends StatelessWidget {
                   color: TraceColors.cyan,
                 ),
               ).animate().fadeIn(duration: 520.ms).slideY(begin: 0.16, end: 0),
-              const SizedBox(height: 20),
-              const _DiscoverHero()
+              const SizedBox(height: 16),
+              const _DiscoverRadarStage()
                   .animate(delay: 120.ms)
                   .fadeIn(duration: 620.ms)
-                  .scale(begin: Offset(0.96, 0.96)),
-              const SizedBox(height: 20),
+                  .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
+              const SizedBox(height: 18),
               const _SectionHeader(title: '功能指南', code: '01-03'),
               const SizedBox(height: 12),
               const _GuideTimeline()
                   .animate(delay: 220.ms)
                   .fadeIn(duration: 560.ms)
                   .slideY(begin: 0.14, end: 0),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
               const _SectionHeader(title: '静态内容', code: 'INFO'),
               const SizedBox(height: 12),
               const _InfoBento()
@@ -57,63 +59,232 @@ class DiscoverTabPage extends StatelessWidget {
   }
 }
 
-class _DiscoverHero extends StatelessWidget {
-  const _DiscoverHero();
+class _DiscoverRadarStage extends StatelessWidget {
+  const _DiscoverRadarStage();
 
   @override
   Widget build(BuildContext context) {
-    return TraceGlassPanel(
-      padding: const EdgeInsets.all(18),
-      glowColor: TraceColors.mint,
-      child: SizedBox(
-        height: 236,
-        child: Stack(
-          children: [
-            const Positioned.fill(
-              child: CustomPaint(painter: TraceOrbitPainter(progress: 0.72)),
-            ),
-            Positioned(
-              right: -6,
-              top: 10,
-              child: Icon(
-                Icons.bluetooth_searching,
-                color: TraceColors.cyan.withOpacity(0.34),
-                size: 112,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final outerWidth = math.min(constraints.maxWidth, 390.0);
+        final stageHeight = math.max(outerWidth * 0.94, 338.0);
+
+        return Center(
+          child: SizedBox(
+            width: outerWidth,
+            child: TraceGlassPanel(
+              padding: const EdgeInsets.all(12),
+              borderRadius: 34,
+              glowColor: TraceColors.mint,
+              child: SizedBox(
+                height: stageHeight,
+                child: LayoutBuilder(
+                  builder: (context, innerConstraints) {
+                    final width = innerConstraints.maxWidth;
+                    final hubSize = math.min(width * 0.4, 142.0);
+                    final beaconWidth = math.min(width * 0.25, 86.0);
+
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const Positioned.fill(
+                          child: CustomPaint(painter: TraceOrbitPainter(progress: 0.76)),
+                        ),
+                        Positioned(
+                          top: 16,
+                          left: 18,
+                          right: 18,
+                          child: Row(
+                            children: [
+                              const TracePill(
+                                icon: Icons.auto_awesome,
+                                label: 'BLE Monitor',
+                                color: TraceColors.mint,
+                              ),
+                              const Spacer(),
+                              Text(
+                                'LOCAL ONLY',
+                                style: TextStyle(
+                                  color: TraceColors.cyan.withOpacity(0.54),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Positioned(
+                          left: 10,
+                          top: stageHeight * 0.42,
+                          child: _DiscoverBeacon(
+                            width: beaconWidth,
+                            title: '扫描',
+                            code: '01',
+                            icon: Icons.radar,
+                            color: TraceColors.cyan,
+                          ),
+                        ),
+                        Positioned(
+                          right: 10,
+                          top: stageHeight * 0.42,
+                          child: _DiscoverBeacon(
+                            width: beaconWidth,
+                            title: '控制',
+                            code: '02',
+                            icon: Icons.settings_remote,
+                            color: TraceColors.amber,
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 24,
+                          left: (width - beaconWidth) / 2,
+                          child: _DiscoverBeacon(
+                            width: beaconWidth,
+                            title: '更新',
+                            code: '03',
+                            icon: Icons.system_update_alt,
+                            color: TraceColors.mint,
+                          ),
+                        ),
+                        Container(
+                          width: hubSize,
+                          height: hubSize,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                TraceColors.mint.withOpacity(0.32),
+                                TraceColors.ocean.withOpacity(0.2),
+                                TraceColors.ink.withOpacity(0.96),
+                              ],
+                            ),
+                            border: Border.all(color: TraceColors.cyan.withOpacity(0.4)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: TraceColors.mint.withOpacity(0.28),
+                                blurRadius: 44,
+                                spreadRadius: -4,
+                              ),
+                            ],
+                          ),
+                          child: const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.travel_explore, color: TraceColors.cyan, size: 36),
+                              SizedBox(height: 8),
+                              Text(
+                                '发现',
+                                style: TextStyle(
+                                  color: TraceColors.text,
+                                  fontSize: 23,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: -0.4,
+                                ),
+                              ),
+                              SizedBox(height: 5),
+                              Text(
+                                'GUIDE MAP',
+                                style: TextStyle(
+                                  color: TraceColors.muted,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Positioned(
+                          left: 18,
+                          right: 18,
+                          top: 64,
+                          child: IgnorePointer(
+                            child: Text(
+                              '纯前端发现页，只展示现有能力入口说明，不引入购买、账号或社区后端。',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: TraceColors.muted.withOpacity(0.72),
+                                fontSize: 11,
+                                height: 1.35,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const TracePill(
-                  icon: Icons.auto_awesome,
-                  label: '快速了解 BLE Monitor',
-                  color: TraceColors.mint,
-                ),
-                const Spacer(),
-                const Text(
-                  '从扫描到控制，\n按现有能力开始。',
-                  style: TextStyle(
-                    color: TraceColors.text,
-                    fontSize: 28,
-                    height: 1.12,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.8,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '这里是纯前端发现页，不引入购买、账号、社区或新增后端数据。',
-                  style: TextStyle(
-                    color: TraceColors.muted.withOpacity(0.9),
-                    fontSize: 13,
-                    height: 1.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DiscoverBeacon extends StatelessWidget {
+  const _DiscoverBeacon({
+    required this.width,
+    required this.title,
+    required this.code,
+    required this.icon,
+    required this.color,
+  });
+
+  final double width;
+  final String title;
+  final String code;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: width,
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF071B25).withOpacity(0.9),
+        border: Border.all(color: color.withOpacity(0.38)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.2),
+            blurRadius: 24,
+            spreadRadius: -8,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 21),
+          const SizedBox(height: 7),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: TraceColors.text,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            code,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.1,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -148,41 +319,44 @@ class _GuideTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (var i = 0; i < guides.length; i++) ...[
-          _GuideCard(item: guides[i]),
-          if (i != guides.length - 1) const SizedBox(height: 10),
+    return TraceGlassPanel(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+      borderRadius: 30,
+      child: Column(
+        children: [
+          for (var i = 0; i < guides.length; i++) ...[
+            _GuideRow(item: guides[i]),
+            if (i != guides.length - 1)
+              Divider(color: Colors.white.withOpacity(0.08), height: 14),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
 
-class _GuideCard extends StatelessWidget {
-  const _GuideCard({required this.item});
+class _GuideRow extends StatelessWidget {
+  const _GuideRow({required this.item});
 
   final _GuideItem item;
 
   @override
   Widget build(BuildContext context) {
-    return TraceGlassPanel(
-      padding: const EdgeInsets.all(14),
-      borderRadius: 24,
-      glowColor: item.color,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Container(
-            width: 58,
-            height: 58,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: item.color.withOpacity(0.12),
               border: Border.all(color: item.color.withOpacity(0.28)),
             ),
-            child: Icon(item.icon, color: item.color, size: 26),
+            child: Icon(item.icon, color: item.color, size: 23),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,17 +365,17 @@ class _GuideCard extends StatelessWidget {
                   '${item.number}  ${item.title}',
                   style: const TextStyle(
                     color: TraceColors.text,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 5),
                 Text(
                   item.body,
                   style: TextStyle(
                     color: TraceColors.muted.withOpacity(0.86),
                     fontSize: 12,
-                    height: 1.45,
+                    height: 1.42,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
