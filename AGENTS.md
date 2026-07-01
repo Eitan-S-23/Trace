@@ -19,6 +19,8 @@ This project must not be built locally.
 The update pipeline prepares Cloudflare release candidates automatically, but it must not auto-publish them to users.
 
 - A normal `git push` to `main` can prepare a new Cloudflare candidate only when `pubspec.yaml` has a new version/build number, for example `1.0.13+39`.
+- Before pushing app-facing Flutter code that is intended to ship in a rebuilt APK, bump both the version name and build number in `pubspec.yaml`, for example from `1.0.17+43` to `1.0.18+44`.
+- When the user asks to rebuild or release app code, check `pubspec.yaml` first and include the version bump in the same change. Do not rely on rebuilding the same version; an existing tag skips Cloudflare candidate preparation, and same-tag APK hash drift can break incremental updates for installed clients.
 - The workflow derives the GitHub release tag from `pubspec.yaml`, such as `v1.0.13`, builds artifacts in GitHub Actions, creates the GitHub Release, uploads APK/manifest/patch assets to Cloudflare R2, and registers a D1 release in `candidate` state.
 - If the derived tag already exists, automatic candidate preparation is skipped. Do not force-replace or re-upload the same tag unless the user explicitly asks for a staging-only replacement; same-tag APK hash drift breaks incremental updates for installed clients.
 - A registered candidate is not visible to clients until an operator publishes it to `stable` or `beta` through the Access-protected admin UI or the staging publish wrapper.

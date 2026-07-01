@@ -1,9 +1,33 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../services/app_update_service.dart';
 import '../services/database_service.dart';
+
+const String _appName = 'BLE Monitor';
+const MethodChannel _appUpdateChannel = MethodChannel('trace/app_update');
+final Future<String> _appVersionLabelFuture = _loadAppVersionLabel();
+
+Future<String> _loadAppVersionLabel() async {
+  try {
+    final result =
+        await _appUpdateChannel.invokeMapMethod<String, dynamic>('getAppInfo');
+    final versionName = result?['versionName']?.toString().trim() ?? '';
+    final versionCode = result?['versionCode']?.toString().trim() ?? '';
+    if (versionName.isNotEmpty && versionCode.isNotEmpty) {
+      return '$_appName v$versionName+$versionCode';
+    }
+    if (versionName.isNotEmpty) {
+      return '$_appName v$versionName';
+    }
+  } catch (_) {
+    // Keep the profile usable on platforms without the Android update channel.
+  }
+
+  return _appName;
+}
 
 class ProfileTabPage extends StatelessWidget {
   const ProfileTabPage({Key? key}) : super(key: key);
@@ -78,8 +102,7 @@ class ProfileTabPage extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'BLE Monitor v1.0.4',
+                        _buildVersionText(
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.white.withOpacity(0.8),
@@ -160,6 +183,18 @@ class ProfileTabPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildVersionText({TextStyle? style}) {
+    return FutureBuilder<String>(
+      future: _appVersionLabelFuture,
+      builder: (context, snapshot) {
+        return Text(
+          snapshot.data ?? _appName,
+          style: style,
+        );
+      },
     );
   }
 
@@ -343,20 +378,20 @@ class ProfileTabPage extends StatelessWidget {
     Get.dialog(
       AlertDialog(
         title: const Text('关于应用'),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('BLE Monitor v1.0.4'),
-            SizedBox(height: 8),
-            Text('智能蓝牙设备管理助手'),
-            SizedBox(height: 16),
-            Text('功能特性：'),
-            Text('• 功率计监控'),
-            Text('• 码表数据管理'),
-            Text('• 遥控设备控制'),
-            Text('• 数据可视化'),
-            Text('• OTA固件升级'),
+            _buildVersionText(),
+            const SizedBox(height: 8),
+            const Text('智能蓝牙设备管理助手'),
+            const SizedBox(height: 16),
+            const Text('功能特性：'),
+            const Text('• 功率计监控'),
+            const Text('• 码表数据管理'),
+            const Text('• 遥控设备控制'),
+            const Text('• 数据可视化'),
+            const Text('• OTA固件升级'),
           ],
         ),
         actions: [
