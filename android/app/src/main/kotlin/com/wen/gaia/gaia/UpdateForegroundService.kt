@@ -67,7 +67,7 @@ class UpdateForegroundService : Service() {
 
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val channel = NotificationChannel(
+        val updateChannel = NotificationChannel(
             CHANNEL_ID,
             "Trace 更新",
             NotificationManager.IMPORTANCE_LOW,
@@ -75,8 +75,17 @@ class UpdateForegroundService : Service() {
             description = "Trace 应用更新下载与安装包合成"
             setShowBadge(false)
         }
+        val installChannel = NotificationChannel(
+            INSTALL_CHANNEL_ID,
+            "Trace 安装",
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = "Trace 更新完成后的安装入口"
+            setShowBadge(false)
+        }
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(channel)
+        manager.createNotificationChannel(updateChannel)
+        manager.createNotificationChannel(installChannel)
     }
 
     private fun buildNotification(status: String, progress: Int): Notification {
@@ -106,17 +115,7 @@ class UpdateForegroundService : Service() {
         val apkFile = File(apkPath)
         if (!apkFile.exists()) return
 
-        val uri = FileProvider.getUriForFile(
-            this,
-            "$authorityPackage.fileprovider",
-            apkFile,
-        )
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
+        val installIntent = installIntentFor(this, apkFile.path, authorityPackage)
         try {
             startActivity(installIntent)
             stopForegroundCompat()
@@ -142,15 +141,17 @@ class UpdateForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or immutablePendingIntentFlag(),
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, INSTALL_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Trace 更新已就绪")
             .setContentText(status)
             .setStyle(NotificationCompat.BigTextStyle().bigText(status))
             .setContentIntent(installPendingIntent)
+            .setFullScreenIntent(installPendingIntent, true)
             .setOngoing(false)
             .setOnlyAlertOnce(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setProgress(0, 0, false)
             .build()
     }
@@ -186,6 +187,7 @@ class UpdateForegroundService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "trace_update"
+        private const val INSTALL_CHANNEL_ID = "trace_update_install"
         private const val NOTIFICATION_ID = 2401
         private const val ACTION_START = "com.wen.gaia.gaia.UPDATE_START"
         private const val ACTION_INSTALL = "com.wen.gaia.gaia.UPDATE_INSTALL"
@@ -196,16 +198,40 @@ class UpdateForegroundService : Service() {
         private const val EXTRA_AUTHORITY_PACKAGE = "authorityPackage"
         private const val WAKE_LOCK_TIMEOUT_MS = 60L * 60L * 1000L
 
-        fun start(context: Context, status: String, progress: Int) {
+        fun installIntentFor(
+            context: Context,
+            apkPath: String,
+            authorityPackage: String,
+        ): Intent {
+            val apkFile = File(apkPath)
+            val uri = FileProvider.getUriForFile(
+                context,
+                "$authorityPackage.fileprovider",
+                apkFile,
+            )
+            return Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+        }
+
+        fun start(context: Context, status: String, progress: Int): Boolean {
             val intent = Intent(context, UpdateForegroundService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_STATUS, status)
                 putExtra(EXTRA_PROGRESS, progress)
             }
-            ContextCompat.startForegroundService(context, intent)
+            return try {
+                ContextCompat.startForegroundService(context, intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
         }
 
-        fun openInstaller(context: Context, apkPath: String, authorityPackage: String) {
+        fun openInstaller(context: Context, apkPath: String, authorityPackage: String): Boolean {
             val intent = Intent(context, UpdateForegroundService::class.java).apply {
                 action = ACTION_INSTALL
                 putExtra(EXTRA_STATUS, "安装包已就绪，正在打开系统安装器...")
@@ -213,14 +239,24 @@ class UpdateForegroundService : Service() {
                 putExtra(EXTRA_APK_PATH, apkPath)
                 putExtra(EXTRA_AUTHORITY_PACKAGE, authorityPackage)
             }
-            ContextCompat.startForegroundService(context, intent)
+            return try {
+                ContextCompat.startForegroundService(context, intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
         }
 
-        fun stop(context: Context) {
+        fun stop(context: Context): Boolean {
             val intent = Intent(context, UpdateForegroundService::class.java).apply {
                 action = ACTION_STOP
             }
-            ContextCompat.startForegroundService(context, intent)
+            return try {
+                ContextCompat.startForegroundService(context, intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 }

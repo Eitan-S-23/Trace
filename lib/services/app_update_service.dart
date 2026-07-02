@@ -23,6 +23,8 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   static const String _lastDailyCheckKey = 'app_update_last_daily_check';
   static const String _pendingInstallApkPathKey =
       'app_update_pending_install_apk_path';
+  static const String _pendingInstallVersionCodeKey =
+      'app_update_pending_install_version_code';
   static const String _unknownAppSourcesCode = 'UNKNOWN_APP_SOURCES';
   static const String _patchAlgorithmTracePatch = 'tracepatch';
   static const String _patchAlgorithmVcdiff = 'vcdiff';
@@ -226,13 +228,30 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     return _LocalAppInfo.fromMap(result);
   }
 
-  Future<void> _openInstaller(String apkPath) async {
-    await _savePendingInstallApkPath(apkPath);
+  Future<bool> _openInstaller(
+    String apkPath, {
+    int? expectedVersionCode,
+  }) async {
+    await _savePendingInstallApkPath(
+      apkPath,
+      expectedVersionCode: expectedVersionCode,
+    );
     try {
-      await _platform.invokeMethod<bool>('installApk', {
+      final result = await _platform.invokeMethod<Object?>('installApk', {
         'apkPath': apkPath,
-      });
-      await _clearPendingInstallApkPath();
+      }).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => <String, Object?>{
+          'requested': true,
+          'launched': false,
+        },
+      );
+
+      final launched = _installerLaunchConfirmed(result);
+      if (launched) {
+        await _clearPendingInstallApkPath();
+      }
+      return launched;
     } on PlatformException catch (e) {
       if (e.code != _unknownAppSourcesCode) {
         await _clearPendingInstallApkPath();
@@ -242,6 +261,14 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       await _clearPendingInstallApkPath();
       rethrow;
     }
+  }
+
+  bool _installerLaunchConfirmed(Object? result) {
+    if (result is bool) return result;
+    if (result is Map) {
+      return result['launched'] == true;
+    }
+    return false;
   }
 
   Future<bool> _canRequestPackageInstalls() async {
@@ -317,9 +344,15 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _savePendingInstallApkPath(String apkPath) async {
+  Future<void> _savePendingInstallApkPath(
+    String apkPath, {
+    int? expectedVersionCode,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_pendingInstallApkPathKey, apkPath);
+    if (expectedVersionCode != null) {
+      await prefs.setInt(_pendingInstallVersionCodeKey, expectedVersionCode);
+    }
   }
 
   Future<String?> _pendingInstallApkPath() async {
@@ -329,9 +362,31 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     return apkPath;
   }
 
+  Future<int?> _pendingInstallVersionCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_pendingInstallVersionCodeKey);
+  }
+
   Future<void> _clearPendingInstallApkPath() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pendingInstallApkPathKey);
+    await prefs.remove(_pendingInstallVersionCodeKey);
+  }
+
+  Future<bool> _clearPendingInstallIfAlreadyApplied() async {
+    final expectedVersionCode = await _pendingInstallVersionCode();
+    if (expectedVersionCode == null) return false;
+
+    try {
+      final localInfo = await _getLocalAppInfo();
+      if (localInfo.versionCode >= expectedVersionCode) {
+        await _clearPendingInstallApkPath();
+        return true;
+      }
+    } catch (_) {
+      // 读取版本失败时保持 pending 记录，避免丢失安装入口。
+    }
+    return false;
   }
 
   Future<void> _resumePendingInstallIfPermitted({
@@ -341,6 +396,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
     final apkPath = await _pendingInstallApkPath();
     if (apkPath == null) return;
+    if (await _clearPendingInstallIfAlreadyApplied()) return;
 
     final apkFile = File(apkPath);
     if (!await apkFile.exists()) {
@@ -363,7 +419,10 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     isUpdating.value = true;
     updateStatus.value = '继续打开系统安装器...';
     try {
-      await _openInstaller(apkPath);
+      final launched = await _openInstaller(apkPath);
+      if (!launched && showMessage) {
+        Get.snackbar('安装包已就绪', '如系统未自动打开安装器，请点按通知或重新回到 Trace');
+      }
     } on PlatformException catch (e) {
       if (e.code == _unknownAppSourcesCode) {
         if (showMessage) {
@@ -389,6 +448,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   }) async {
     final apkPath = await _pendingInstallApkPath();
     if (apkPath == null) return false;
+    if (await _clearPendingInstallIfAlreadyApplied()) return false;
 
     if (!await File(apkPath).exists()) {
       await _clearPendingInstallApkPath();
@@ -656,7 +716,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     _showProgressDialog();
 
     Object? failure;
-    var installerRequested = false;
+    var keepForegroundService = false;
     try {
       await _startUpdateForegroundService();
       if (patch.size <= 0 ||
@@ -729,14 +789,17 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       updateStatus.value = '打开系统安装器...';
       updateProgress.value = 1;
       _queueUpdateForegroundService(force: true);
-      await _openInstaller(outputApk.path);
-      installerRequested = true;
+      final launched = await _openInstaller(
+        outputApk.path,
+        expectedVersionCode: updateInfo.versionCode,
+      );
+      keepForegroundService = !launched;
     } on PlatformException catch (e) {
       failure = e;
     } catch (e) {
       failure = e;
     } finally {
-      if (!installerRequested) {
+      if (!keepForegroundService) {
         await _stopUpdateForegroundService();
       }
       if (Get.isDialogOpen == true) {
@@ -775,7 +838,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     _showProgressDialog();
 
     Object? failure;
-    var installerRequested = false;
+    var keepForegroundService = false;
     try {
       await _startUpdateForegroundService();
       final tempDir = await getTemporaryDirectory();
@@ -820,8 +883,11 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
         updateStatus.value = '打开系统安装器...';
         updateProgress.value = 1;
         _queueUpdateForegroundService(force: true);
-        await _openInstaller(outputApk.path);
-        installerRequested = true;
+        final launched = await _openInstaller(
+          outputApk.path,
+          expectedVersionCode: updateInfo.versionCode,
+        );
+        keepForegroundService = !launched;
       } catch (_) {
         if (await partialApk.exists()) {
           await partialApk.delete();
@@ -833,7 +899,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     } catch (e) {
       failure = e;
     } finally {
-      if (!installerRequested) {
+      if (!keepForegroundService) {
         await _stopUpdateForegroundService();
       }
       if (Get.isDialogOpen == true) {

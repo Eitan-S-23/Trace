@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     private var deepLinkChannel: MethodChannel? = null
     private var appUpdateChannel: MethodChannel? = null
+    private var isActivityResumed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -40,18 +41,15 @@ class MainActivity: FlutterActivity() {
                 "startUpdateForegroundService" -> {
                     val status = call.argument<String>("status") ?: "正在准备更新..."
                     val progress = call.argument<Int>("progress") ?: -1
-                    UpdateForegroundService.start(applicationContext, status, progress)
-                    result.success(true)
+                    result.success(UpdateForegroundService.start(applicationContext, status, progress))
                 }
                 "updateUpdateForegroundService" -> {
                     val status = call.argument<String>("status") ?: "正在更新..."
                     val progress = call.argument<Int>("progress") ?: -1
-                    UpdateForegroundService.start(applicationContext, status, progress)
-                    result.success(true)
+                    result.success(UpdateForegroundService.start(applicationContext, status, progress))
                 }
                 "stopUpdateForegroundService" -> {
-                    UpdateForegroundService.stop(applicationContext)
-                    result.success(true)
+                    result.success(UpdateForegroundService.stop(applicationContext))
                 }
                 else -> result.notImplemented()
             }
@@ -64,6 +62,16 @@ class MainActivity: FlutterActivity() {
         intent.dataString?.let { link ->
             deepLinkChannel?.invokeMethod("onDeepLink", link)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        isActivityResumed = true
+    }
+
+    override fun onPause() {
+        isActivityResumed = false
+        super.onPause()
     }
 
     companion object {
@@ -102,13 +110,42 @@ class MainActivity: FlutterActivity() {
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:$packageName")
             )
-            startActivity(settingsIntent)
+            settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                startActivity(settingsIntent)
+            } catch (_: Exception) {
+                // Flutter still needs the explicit permission error instead of a hung method call.
+            }
             result.error("UNKNOWN_APP_SOURCES", "Unknown app source permission required", null)
             return
         }
 
-        UpdateForegroundService.openInstaller(applicationContext, apkFile.path, packageName)
-        result.success(true)
+        if (isActivityResumed) {
+            val installIntent = UpdateForegroundService.installIntentFor(
+                this,
+                apkFile.path,
+                packageName,
+            )
+            try {
+                startActivity(installIntent)
+                result.success(mapOf("requested" to true, "launched" to true))
+            } catch (_: Exception) {
+                val requested = UpdateForegroundService.openInstaller(
+                    applicationContext,
+                    apkFile.path,
+                    packageName,
+                )
+                result.success(mapOf("requested" to requested, "launched" to false))
+            }
+            return
+        }
+
+        val requested = UpdateForegroundService.openInstaller(
+            applicationContext,
+            apkFile.path,
+            packageName,
+        )
+        result.success(mapOf("requested" to requested, "launched" to false))
     }
 
     private fun canRequestPackageInstalls(): Boolean {
