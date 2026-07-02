@@ -136,14 +136,45 @@ class _DeviceTitle extends StatelessWidget {
   }
 }
 
-class _DeviceStage extends StatelessWidget {
+class _DeviceStage extends StatefulWidget {
   const _DeviceStage({required this.width});
 
   final double width;
 
   @override
+  State<_DeviceStage> createState() => _DeviceStageState();
+}
+
+class _DeviceStageState extends State<_DeviceStage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _settleController;
+  Animation<double>? _settleAnimation;
+  double _rotation = 0;
+  double _dragStartAngle = 0;
+  double _dragStartRotation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _settleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 360),
+    )..addListener(() {
+        final animation = _settleAnimation;
+        if (animation == null) return;
+        setState(() => _rotation = animation.value);
+      });
+  }
+
+  @override
+  void dispose() {
+    _settleController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final geometry = _DeviceStageGeometry(width);
+    final geometry = _DeviceStageGeometry(widget.width, rotation: _rotation);
     final actions = _buildActions();
 
     return SizedBox(
@@ -162,7 +193,7 @@ class _DeviceStage extends StatelessWidget {
               child: TraceGlowNode(
                 size: geometry.nodeSize,
                 icon: actions[i].icon,
-                semanticLabel: '${actions[i].title} ${actions[i].subtitle}',
+                semanticLabel: actions[i].title,
                 onTap: actions[i].onTap,
               ),
             ),
@@ -173,7 +204,6 @@ class _DeviceStage extends StatelessWidget {
               width: geometry.labels[i].width,
               child: _DeviceNodeLabel(
                 title: actions[i].title,
-                subtitle: actions[i].subtitle,
                 alignment: geometry.labels[i].alignment,
                 onTap: actions[i].onTap,
               ),
@@ -181,24 +211,72 @@ class _DeviceStage extends StatelessWidget {
           Positioned(
             left: geometry.core.dx - geometry.coreSize / 2,
             top: geometry.core.dy - geometry.coreSize / 2,
-            child: _DeviceCore(size: geometry.coreSize),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanStart: (details) => _startRotation(
+                details.localPosition,
+                geometry.coreSize,
+              ),
+              onPanUpdate: (details) => _updateRotation(
+                details.localPosition,
+                geometry.coreSize,
+              ),
+              onPanEnd: (_) => _settleRotation(),
+              onPanCancel: _settleRotation,
+              child: _DeviceCore(size: geometry.coreSize),
+            ),
           ),
         ],
       ),
     );
   }
 
+  void _startRotation(Offset localPosition, double size) {
+    _settleController.stop();
+    _dragStartAngle = _angleFromCorePosition(localPosition, size);
+    _dragStartRotation = _rotation;
+  }
+
+  void _updateRotation(Offset localPosition, double size) {
+    final currentAngle = _angleFromCorePosition(localPosition, size);
+    final delta = _normalizeAngle(currentAngle - _dragStartAngle);
+    setState(() => _rotation = _dragStartRotation + delta);
+  }
+
+  void _settleRotation() {
+    final step = math.pi / 2;
+    final target = (_rotation / step).roundToDouble() * step;
+    _settleAnimation = Tween<double>(begin: _rotation, end: target).animate(
+      CurvedAnimation(parent: _settleController, curve: Curves.easeOutCubic),
+    );
+    _settleController.forward(from: 0);
+  }
+
+  double _angleFromCorePosition(Offset localPosition, double size) {
+    final center = Offset(size / 2, size / 2);
+    final vector = localPosition - center;
+    return math.atan2(vector.dy, vector.dx);
+  }
+
+  double _normalizeAngle(double angle) {
+    while (angle > math.pi) {
+      angle -= math.pi * 2;
+    }
+    while (angle < -math.pi) {
+      angle += math.pi * 2;
+    }
+    return angle;
+  }
+
   List<_DeviceAction> _buildActions() {
     return [
       _DeviceAction(
         title: '功率计',
-        subtitle: '设备功率监控',
         icon: Icons.bolt,
         onTap: () => Get.to(() => const PowerMeterPage()),
       ),
       _DeviceAction(
         title: '码表',
-        subtitle: '骑行数据与导航',
         icon: Icons.directions_bike,
         onTap: () => Get.to(
           () => const SpeedometerPage(),
@@ -208,13 +286,11 @@ class _DeviceStage extends StatelessWidget {
       ),
       _DeviceAction(
         title: '遥控',
-        subtitle: '蓝牙设备控制',
         icon: Icons.settings_remote,
         onTap: () => Get.to(() => const RemoteControlPage()),
       ),
       _DeviceAction(
         title: '即将推出',
-        subtitle: '敬请期待',
         icon: Icons.hourglass_bottom,
         onTap: () => Get.snackbar(
           '提示',
@@ -232,13 +308,11 @@ class _DeviceStage extends StatelessWidget {
 class _DeviceAction {
   const _DeviceAction({
     required this.title,
-    required this.subtitle,
     required this.icon,
     required this.onTap,
   });
 
   final String title;
-  final String subtitle;
   final IconData icon;
   final VoidCallback onTap;
 }
@@ -260,13 +334,11 @@ class _DeviceLabelGeometry {
 class _DeviceNodeLabel extends StatelessWidget {
   const _DeviceNodeLabel({
     required this.title,
-    required this.subtitle,
     required this.alignment,
     required this.onTap,
   });
 
   final String title;
-  final String subtitle;
   final TextAlign alignment;
   final VoidCallback onTap;
 
@@ -295,26 +367,12 @@ class _DeviceNodeLabel extends StatelessWidget {
               maxLines: 1,
               style: const TextStyle(
                 color: TraceColors.text,
-                fontSize: 15.5,
+                fontSize: 18,
                 fontWeight: FontWeight.w900,
                 shadows: [
                   Shadow(color: Color(0x9924F6DE), blurRadius: 14),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            textAlign: alignment,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: TraceColors.muted.withOpacity(0.9),
-              fontSize: 10.5,
-              height: 1.1,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
             ),
           ),
         ],
@@ -325,55 +383,38 @@ class _DeviceNodeLabel extends StatelessWidget {
 
 /// 舞台几何：核心、四个对角卫星和外侧标签共用的一套坐标
 class _DeviceStageGeometry {
-  _DeviceStageGeometry(this.width)
+  _DeviceStageGeometry(this.width, {required this.rotation})
       : height = width * 1.34,
         coreSize = width * 0.48,
         nodeSize = width * 0.19,
         orbitRadius = width * 0.445,
         core = Offset(width / 2, width * 1.34 * 0.51) {
-    const diagonal = math.pi / 4;
-    final offsets = [
-      Offset(-math.cos(diagonal), -math.sin(diagonal)), // 左上
-      Offset(math.cos(diagonal), -math.sin(diagonal)), // 右上
-      Offset(-math.cos(diagonal), math.sin(diagonal)), // 左下
-      Offset(math.cos(diagonal), math.sin(diagonal)), // 右下
+    final angles = [
+      -math.pi * 3 / 4 + rotation, // 左上
+      -math.pi / 4 + rotation, // 右上
+      math.pi * 3 / 4 + rotation, // 左下
+      math.pi / 4 + rotation, // 右下
     ];
-    satellites = offsets
-        .map((direction) => core + direction * orbitRadius)
+    satellites = angles
+        .map(
+          (angle) =>
+              core + Offset(math.cos(angle), math.sin(angle)) * orbitRadius,
+        )
         .toList(growable: false);
 
     final gutter = width * 0.02;
-    final sideWidth = width * 0.27;
+    final sideWidth = width * 0.31;
     final rightLabelLeft = width - sideWidth - gutter;
-    final topY = satellites[0].dy + nodeSize * 0.28;
-    final bottomY = satellites[2].dy + nodeSize * 0.9;
-
-    labels = [
-      _DeviceLabelGeometry(
-        left: gutter,
-        top: topY,
+    labels = satellites.map((satellite) {
+      final isLeft = satellite.dx < core.dx;
+      final isTop = satellite.dy < core.dy;
+      return _DeviceLabelGeometry(
+        left: isLeft ? gutter : rightLabelLeft,
+        top: satellite.dy + nodeSize * (isTop ? 0.44 : 0.74),
         width: sideWidth,
-        alignment: TextAlign.left,
-      ),
-      _DeviceLabelGeometry(
-        left: rightLabelLeft,
-        top: topY,
-        width: sideWidth,
-        alignment: TextAlign.right,
-      ),
-      _DeviceLabelGeometry(
-        left: gutter,
-        top: bottomY,
-        width: sideWidth,
-        alignment: TextAlign.left,
-      ),
-      _DeviceLabelGeometry(
-        left: rightLabelLeft,
-        top: bottomY,
-        width: sideWidth,
-        alignment: TextAlign.right,
-      ),
-    ];
+        alignment: isLeft ? TextAlign.left : TextAlign.right,
+      );
+    }).toList(growable: false);
   }
 
   final double width;
@@ -381,6 +422,7 @@ class _DeviceStageGeometry {
   final double coreSize;
   final double nodeSize;
   final double orbitRadius;
+  final double rotation;
   final Offset core;
   late final List<Offset> satellites;
   late final List<_DeviceLabelGeometry> labels;
@@ -561,7 +603,8 @@ class _DeviceStagePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DeviceStagePainter oldDelegate) {
-    return oldDelegate.geometry.width != geometry.width;
+    return oldDelegate.geometry.width != geometry.width ||
+        oldDelegate.geometry.rotation != geometry.rotation;
   }
 }
 
