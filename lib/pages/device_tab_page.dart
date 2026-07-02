@@ -19,7 +19,7 @@ class DeviceTabPage extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxHeight < 720;
-            final stageWidth = math.min(constraints.maxWidth * 1.08, 420.0);
+            final stageWidth = math.min(constraints.maxWidth * 1.16, 456.0);
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -48,7 +48,7 @@ class DeviceTabPage extends StatelessWidget {
                       .animate(delay: 60.ms)
                       .fadeIn(duration: 420.ms)
                       .slideY(begin: 0.2, end: 0),
-                  SizedBox(height: compact ? 4 : 8),
+                  SizedBox(height: compact ? 18 : 26),
                   UnconstrainedBox(
                     constrainedAxis: Axis.vertical,
                     child: _DeviceStage(width: stageWidth),
@@ -154,15 +154,24 @@ class _DeviceStage extends StatelessWidget {
           ),
           for (var i = 0; i < actions.length; i++)
             Positioned(
-              left: geometry.satellites[i].dx - geometry.nodeSize * 0.95,
-              top: geometry.satellites[i].dy - geometry.nodeSize / 2,
-              width: geometry.nodeSize * 1.9,
+              left: geometry.satellites[i].dx - geometry.nodeSize * 0.68,
+              top: geometry.satellites[i].dy - geometry.nodeSize * 0.68,
               child: TraceGlowNode(
                 size: geometry.nodeSize,
                 icon: actions[i].icon,
-                label: actions[i].title,
-                sublabel: actions[i].subtitle,
-                labelWidth: geometry.nodeSize * 1.9,
+                semanticLabel: '${actions[i].title} ${actions[i].subtitle}',
+                onTap: actions[i].onTap,
+              ),
+            ),
+          for (var i = 0; i < actions.length; i++)
+            Positioned(
+              left: geometry.labels[i].left,
+              top: geometry.labels[i].top,
+              width: geometry.labels[i].width,
+              child: _DeviceNodeLabel(
+                title: actions[i].title,
+                subtitle: actions[i].subtitle,
+                alignment: geometry.labels[i].alignment,
                 onTap: actions[i].onTap,
               ),
             ),
@@ -231,14 +240,94 @@ class _DeviceAction {
   final VoidCallback onTap;
 }
 
-/// 舞台几何：核心与四个对角卫星共用的一套坐标，painter 与布局保持一致
+class _DeviceLabelGeometry {
+  const _DeviceLabelGeometry({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.alignment,
+  });
+
+  final double left;
+  final double top;
+  final double width;
+  final TextAlign alignment;
+}
+
+class _DeviceNodeLabel extends StatelessWidget {
+  const _DeviceNodeLabel({
+    required this.title,
+    required this.subtitle,
+    required this.alignment,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final TextAlign alignment;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: alignment == TextAlign.left
+            ? CrossAxisAlignment.start
+            : alignment == TextAlign.right
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.center,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: alignment == TextAlign.left
+                ? Alignment.centerLeft
+                : alignment == TextAlign.right
+                    ? Alignment.centerRight
+                    : Alignment.center,
+            child: Text(
+              title,
+              textAlign: alignment,
+              maxLines: 1,
+              style: const TextStyle(
+                color: TraceColors.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                shadows: [
+                  Shadow(color: Color(0x9924F6DE), blurRadius: 14),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            textAlign: alignment,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: TraceColors.muted.withOpacity(0.9),
+              fontSize: 12,
+              height: 1.1,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 舞台几何：核心、四个对角卫星和外侧标签共用的一套坐标
 class _DeviceStageGeometry {
   _DeviceStageGeometry(this.width)
-      : height = width * 1.1,
-        coreSize = width * 0.45,
-        nodeSize = width * 0.17,
-        orbitRadius = width * 0.37,
-        core = Offset(width / 2, width * 1.1 * 0.42) {
+      : height = width * 1.2,
+        coreSize = width * 0.48,
+        nodeSize = width * 0.19,
+        orbitRadius = width * 0.445,
+        core = Offset(width / 2, width * 1.2 * 0.51) {
     const diagonal = math.pi / 4;
     final offsets = [
       Offset(-math.cos(diagonal), -math.sin(diagonal)), // 左上
@@ -249,6 +338,40 @@ class _DeviceStageGeometry {
     satellites = offsets
         .map((direction) => core + direction * orbitRadius)
         .toList(growable: false);
+
+    final gutter = width * 0.02;
+    final coreLeft = core.dx - coreSize / 2;
+    final coreRight = core.dx + coreSize / 2;
+    final sideWidth = math.max(width * 0.22, coreLeft - gutter * 2);
+    final topY = satellites[0].dy + nodeSize * 0.58;
+    final bottomY = satellites[2].dy + nodeSize * 0.74;
+
+    labels = [
+      _DeviceLabelGeometry(
+        left: gutter,
+        top: topY,
+        width: sideWidth,
+        alignment: TextAlign.left,
+      ),
+      _DeviceLabelGeometry(
+        left: coreRight + gutter,
+        top: topY,
+        width: width - coreRight - gutter * 2,
+        alignment: TextAlign.right,
+      ),
+      _DeviceLabelGeometry(
+        left: gutter,
+        top: bottomY,
+        width: sideWidth,
+        alignment: TextAlign.left,
+      ),
+      _DeviceLabelGeometry(
+        left: coreRight + gutter,
+        top: bottomY,
+        width: width - coreRight - gutter * 2,
+        alignment: TextAlign.right,
+      ),
+    ];
   }
 
   final double width;
@@ -258,6 +381,7 @@ class _DeviceStageGeometry {
   final double orbitRadius;
   final Offset core;
   late final List<Offset> satellites;
+  late final List<_DeviceLabelGeometry> labels;
 }
 
 class _DeviceStagePainter extends CustomPainter {
@@ -320,26 +444,68 @@ class _DeviceStagePainter extends CustomPainter {
       );
     }
 
-    // 核心 → 卫星 对角连接线（青色渐隐）
+    // 核心 → 卫星 机械连接臂
     for (final satellite in geometry.satellites) {
       final direction = (satellite - center) / (satellite - center).distance;
-      final start = center + direction * (geometry.coreSize * 0.52);
-      final end = satellite - direction * (geometry.nodeSize * 0.56);
+      final perpendicular = Offset(-direction.dy, direction.dx);
+      final start = center + direction * (geometry.coreSize * 0.5);
+      final end = satellite - direction * (geometry.nodeSize * 0.58);
+
+      final armBodyPaint = Paint()
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = geometry.width * 0.032
+        ..color = TraceColors.ocean.withOpacity(0.54);
+      canvas.drawLine(start, end, armBodyPaint);
+
+      final armEdgePaint = Paint()
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 1.4
+        ..color = TraceColors.cyan.withOpacity(0.34);
+      canvas.drawLine(
+        start + perpendicular * geometry.width * 0.014,
+        end + perpendicular * geometry.width * 0.014,
+        armEdgePaint,
+      );
+      canvas.drawLine(
+        start - perpendicular * geometry.width * 0.014,
+        end - perpendicular * geometry.width * 0.014,
+        armEdgePaint..color = TraceColors.cyan.withOpacity(0.22),
+      );
+
       final linkPaint = Paint()
         ..strokeWidth = 1.5
         ..shader = LinearGradient(
           colors: [
-            TraceColors.cyan.withOpacity(0.55),
-            TraceColors.cyan.withOpacity(0.1),
+            TraceColors.cyan.withOpacity(0.68),
+            TraceColors.cyan.withOpacity(0.16),
           ],
         ).createShader(Rect.fromPoints(start, end));
       canvas.drawLine(start, end, linkPaint);
 
-      // 连接线中点光珠
+      for (final anchor in [0.16, 0.84]) {
+        final joint = Offset.lerp(start, end, anchor)!;
+        canvas.drawLine(
+          joint - perpendicular * geometry.width * 0.028,
+          joint + perpendicular * geometry.width * 0.028,
+          Paint()
+            ..strokeCap = StrokeCap.round
+            ..strokeWidth = 2
+            ..color = TraceColors.cyanSoft.withOpacity(0.42),
+        );
+        canvas.drawCircle(
+          joint,
+          geometry.width * 0.012,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..color = TraceColors.cyan.withOpacity(0.6),
+        );
+      }
+
       final midpoint = Offset.lerp(start, end, 0.5)!;
       canvas.drawCircle(
         midpoint,
-        1.8,
+        2.2,
         Paint()..color = TraceColors.cyanSoft.withOpacity(0.55),
       );
     }

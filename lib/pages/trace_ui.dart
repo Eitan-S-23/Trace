@@ -222,6 +222,7 @@ class TraceGlowNode extends StatelessWidget {
     this.sublabel,
     this.color = TraceColors.cyan,
     this.labelWidth,
+    this.semanticLabel,
   });
 
   final double size;
@@ -231,6 +232,7 @@ class TraceGlowNode extends StatelessWidget {
   final String? sublabel;
   final Color color;
   final double? labelWidth;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -238,7 +240,7 @@ class TraceGlowNode extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: [label, sublabel].whereType<String>().join(' '),
+      label: semanticLabel ?? [label, sublabel].whereType<String>().join(' '),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
