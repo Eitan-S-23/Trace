@@ -295,7 +295,7 @@ class _DeviceNodeLabel extends StatelessWidget {
               maxLines: 1,
               style: const TextStyle(
                 color: TraceColors.text,
-                fontSize: 18,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w900,
                 shadows: [
                   Shadow(color: Color(0x9924F6DE), blurRadius: 14),
@@ -311,7 +311,7 @@ class _DeviceNodeLabel extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: TraceColors.muted.withOpacity(0.9),
-              fontSize: 12,
+              fontSize: 10.5,
               height: 1.1,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,
@@ -330,7 +330,7 @@ class _DeviceStageGeometry {
         coreSize = width * 0.48,
         nodeSize = width * 0.19,
         orbitRadius = width * 0.445,
-        core = Offset(width / 2, width * 1.34 * 0.49) {
+        core = Offset(width / 2, width * 1.34 * 0.51) {
     const diagonal = math.pi / 4;
     final offsets = [
       Offset(-math.cos(diagonal), -math.sin(diagonal)), // 左上
@@ -343,10 +343,10 @@ class _DeviceStageGeometry {
         .toList(growable: false);
 
     final gutter = width * 0.02;
-    final sideWidth = width * 0.31;
+    final sideWidth = width * 0.27;
     final rightLabelLeft = width - sideWidth - gutter;
-    final topY = satellites[0].dy + nodeSize * 0.7;
-    final bottomY = satellites[2].dy + nodeSize * 0.74;
+    final topY = satellites[0].dy + nodeSize * 0.28;
+    final bottomY = satellites[2].dy + nodeSize * 0.9;
 
     labels = [
       _DeviceLabelGeometry(

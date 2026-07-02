@@ -52,7 +52,7 @@ class TracePageScaffold extends StatelessWidget {
       child: Stack(
         children: [
           const Positioned.fill(
-            child: CustomPaint(painter: TraceAtmospherePainter()),
+            child: TraceAnimatedAtmosphere(),
           ),
           child,
         ],
@@ -61,8 +61,51 @@ class TracePageScaffold extends StatelessWidget {
   }
 }
 
+class TraceAnimatedAtmosphere extends StatefulWidget {
+  const TraceAnimatedAtmosphere({super.key});
+
+  @override
+  State<TraceAnimatedAtmosphere> createState() => _TraceAnimatedAtmosphereState();
+}
+
+class _TraceAnimatedAtmosphereState extends State<TraceAnimatedAtmosphere>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: TraceAtmospherePainter(phase: _controller.value),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class TraceAtmospherePainter extends CustomPainter {
-  const TraceAtmospherePainter();
+  const TraceAtmospherePainter({this.phase = 0});
+
+  final double phase;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -172,10 +215,85 @@ class TraceAtmospherePainter extends CustomPainter {
       Offset(size.width * 0.92, size.height * 0.12),
       topLinePaint,
     );
+
+    final sweepCenter = Offset(size.width * 0.5, size.height * 0.44);
+    final sweepRadius = size.shortestSide * 0.72;
+    final sweepAngle = phase * math.pi * 2 - math.pi / 2;
+    final sweepPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        startAngle: sweepAngle - math.pi * 0.22,
+        endAngle: sweepAngle + math.pi * 0.22,
+        colors: [
+          Colors.transparent,
+          TraceColors.cyan.withOpacity(0.02),
+          TraceColors.cyanSoft.withOpacity(0.18),
+          Colors.transparent,
+        ],
+        stops: const [0, 0.45, 0.75, 1],
+        transform: GradientRotation(sweepAngle),
+      ).createShader(Rect.fromCircle(center: sweepCenter, radius: sweepRadius));
+    canvas.drawArc(
+      Rect.fromCircle(center: sweepCenter, radius: sweepRadius),
+      sweepAngle - math.pi * 0.2,
+      math.pi * 0.42,
+      false,
+      sweepPaint,
+    );
+
+    final scanPaint = Paint()
+      ..strokeWidth = 1
+      ..shader = LinearGradient(
+        colors: [
+          Colors.transparent,
+          TraceColors.cyanSoft.withOpacity(0.13),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, 1));
+    for (var i = 0; i < 4; i++) {
+      final y = ((phase + i * 0.25) % 1.0) * size.height;
+      canvas.drawLine(
+        Offset(size.width * 0.06, y),
+        Offset(size.width * 0.94, y),
+        scanPaint,
+      );
+    }
+
+    final particlePaint = Paint()..strokeCap = StrokeCap.round;
+    final linePaint = Paint()
+      ..strokeWidth = 0.7
+      ..color = TraceColors.cyan.withOpacity(0.08);
+    final particles = <Offset>[];
+    for (var i = 0; i < 18; i++) {
+      final seed = i * 37.0;
+      final x = ((math.sin(seed + phase * math.pi * 2) * 0.5 + 0.5) *
+              size.width *
+              0.86) +
+          size.width * 0.07;
+      final y = ((math.cos(seed * 0.7 + phase * math.pi * 1.4) * 0.5 + 0.5) *
+              size.height *
+              0.72) +
+          size.height * 0.12;
+      particles.add(Offset(x, y));
+    }
+    for (var i = 0; i < particles.length - 1; i++) {
+      if (i % 3 == 0) {
+        canvas.drawLine(particles[i], particles[i + 1], linePaint);
+      }
+    }
+    for (var i = 0; i < particles.length; i++) {
+      final pulse = 0.55 + math.sin(phase * math.pi * 2 + i) * 0.25;
+      particlePaint.color = TraceColors.cyanSoft.withOpacity(0.18 + pulse * 0.16);
+      canvas.drawCircle(particles[i], 1.1 + pulse * 1.4, particlePaint);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant TraceAtmospherePainter oldDelegate) => false;
+  bool shouldRepaint(covariant TraceAtmospherePainter oldDelegate) {
+    return oldDelegate.phase != phase;
+  }
 }
 
 /// 分区标题：左侧发光竖条 + 标题文字（对应设计图“功能指南 / 更多内容”样式）

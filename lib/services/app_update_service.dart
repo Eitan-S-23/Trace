@@ -44,6 +44,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   final updateStatus = ''.obs;
 
   bool _isRetryingPendingInstall = false;
+  DateTime? _lastForegroundUpdateAt;
+  double _lastForegroundProgress = -1;
+  String? _lastForegroundStatus;
 
   @override
   void onInit() {
@@ -249,6 +252,68 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
           false;
     } catch (_) {
       return false;
+    }
+  }
+
+  Future<void> _startUpdateForegroundService() async {
+    if (!Platform.isAndroid) return;
+    _lastForegroundUpdateAt = null;
+    _lastForegroundProgress = -1;
+    _lastForegroundStatus = null;
+    await _invokeUpdateForegroundService(
+      'startUpdateForegroundService',
+      force: true,
+    );
+  }
+
+  void _queueUpdateForegroundService({bool force = false}) {
+    if (!Platform.isAndroid) return;
+    unawaited(_invokeUpdateForegroundService(
+      'updateUpdateForegroundService',
+      force: force,
+    ));
+  }
+
+  Future<void> _stopUpdateForegroundService() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _platform.invokeMethod<bool>('stopUpdateForegroundService');
+    } catch (_) {
+      // 更新 UI 失败不应掩盖真实下载或安装错误。
+    }
+  }
+
+  Future<void> _invokeUpdateForegroundService(
+    String method, {
+    required bool force,
+  }) async {
+    final status = updateStatus.value;
+    final progress = updateProgress.value.clamp(0.0, 1.0).toDouble();
+    final progressPercent = (progress * 100).round().clamp(0, 100).toInt();
+    final now = DateTime.now();
+
+    if (!force) {
+      final lastAt = _lastForegroundUpdateAt;
+      final progressMoved = (progress - _lastForegroundProgress).abs() >= 0.02;
+      final statusChanged = status != _lastForegroundStatus;
+      final enoughTimePassed =
+          lastAt == null || now.difference(lastAt).inMilliseconds >= 900;
+      if (!progressMoved && !statusChanged && !enoughTimePassed) {
+        return;
+      }
+    }
+
+    _lastForegroundUpdateAt = now;
+    _lastForegroundProgress = progress;
+    _lastForegroundStatus = status;
+
+    try {
+      await _platform.invokeMethod<bool>(method, {
+        'status': status,
+        'progress': progressPercent,
+      });
+    } catch (_) {
+      // 前台通知是后台保活增强，失败时继续走原更新流程。
     }
   }
 
@@ -591,7 +656,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     _showProgressDialog();
 
     Object? failure;
+    var installerRequested = false;
     try {
+      await _startUpdateForegroundService();
       if (patch.size <= 0 ||
           patch.size > _TracePatchApplier.maxPatchSizeBytes) {
         throw Exception('增量包大小超出安全限制');
@@ -609,6 +676,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       );
 
       updateStatus.value = '下载增量包...';
+      _queueUpdateForegroundService(force: true);
       await _downloadWithFallback(
         urls: patch.downloadUrls,
         savePath: patchFile.path,
@@ -618,19 +686,23 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
         onReceiveProgress: (received, total) {
           if (total > 0) {
             updateProgress.value = (received / total * 0.45).clamp(0.0, 0.45);
+            _queueUpdateForegroundService();
           }
         },
       );
 
       updateStatus.value = '校验增量包...';
+      _queueUpdateForegroundService(force: true);
       final patchSha = await _sha256File(patchFile);
       if (patchSha != patch.sha256) {
         throw Exception('增量包校验失败');
       }
 
       updateStatus.value = '合成新版安装包...';
+      _queueUpdateForegroundService(force: true);
       void onPatchProgress(double progress) {
         updateProgress.value = (0.45 + progress * 0.45).clamp(0.45, 0.90);
+        _queueUpdateForegroundService();
       }
 
       if (patch.algorithm == _patchAlgorithmVcdiff) {
@@ -656,12 +728,17 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
       updateStatus.value = '打开系统安装器...';
       updateProgress.value = 1;
+      _queueUpdateForegroundService(force: true);
       await _openInstaller(outputApk.path);
+      installerRequested = true;
     } on PlatformException catch (e) {
       failure = e;
     } catch (e) {
       failure = e;
     } finally {
+      if (!installerRequested) {
+        await _stopUpdateForegroundService();
+      }
       if (Get.isDialogOpen == true) {
         Get.back<void>();
       }
@@ -698,7 +775,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     _showProgressDialog();
 
     Object? failure;
+    var installerRequested = false;
     try {
+      await _startUpdateForegroundService();
       final tempDir = await getTemporaryDirectory();
       final fileToken = DateTime.now().microsecondsSinceEpoch;
       final partialApk = File(
@@ -710,6 +789,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
       try {
         updateStatus.value = '下载全量包...';
+        _queueUpdateForegroundService(force: true);
         await _downloadWithFallback(
           urls: updateInfo.fullDownloadUrls,
           savePath: partialApk.path,
@@ -719,12 +799,14 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
           onReceiveProgress: (received, total) {
             if (total > 0) {
               updateProgress.value = (received / total * 0.70).clamp(0.0, 0.70);
+              _queueUpdateForegroundService();
             }
           },
         );
 
         updateStatus.value = '校验安装包...';
         updateProgress.value = 0.80;
+        _queueUpdateForegroundService(force: true);
         final apkSha = await _sha256File(partialApk);
         if (apkSha != updateInfo.apkSha256) {
           throw Exception('全量安装包校验失败');
@@ -737,7 +819,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
         updateStatus.value = '打开系统安装器...';
         updateProgress.value = 1;
+        _queueUpdateForegroundService(force: true);
         await _openInstaller(outputApk.path);
+        installerRequested = true;
       } catch (_) {
         if (await partialApk.exists()) {
           await partialApk.delete();
@@ -749,6 +833,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     } catch (e) {
       failure = e;
     } finally {
+      if (!installerRequested) {
+        await _stopUpdateForegroundService();
+      }
       if (Get.isDialogOpen == true) {
         Get.back<void>();
       }
@@ -784,6 +871,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       final sourceLabel = _downloadEndpointLabel(url, index);
       try {
         updateStatus.value = '$phaseName（$sourceLabel）...';
+        _queueUpdateForegroundService(force: true);
         await _dio.download(
           url,
           savePath,
@@ -799,6 +887,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
               final downloaded = _formatBytes(received);
               updateStatus.value = '$phaseName（$sourceLabel）... 已下载 $downloaded';
             }
+            _queueUpdateForegroundService();
             onReceiveProgress(received, total);
           },
         );
@@ -812,6 +901,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
         }
         if (index < urls.length - 1) {
           updateStatus.value = '$phaseName（$sourceLabel）失败，尝试备用下载...';
+          _queueUpdateForegroundService(force: true);
         }
       }
     }

@@ -4,7 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.core.content.FileProvider
 import java.io.File
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -37,6 +36,22 @@ class MainActivity: FlutterActivity() {
                 "installApk" -> {
                     val apkPath = call.argument<String>("apkPath")
                     installApk(apkPath, result)
+                }
+                "startUpdateForegroundService" -> {
+                    val status = call.argument<String>("status") ?: "正在准备更新..."
+                    val progress = call.argument<Int>("progress") ?: -1
+                    UpdateForegroundService.start(applicationContext, status, progress)
+                    result.success(true)
+                }
+                "updateUpdateForegroundService" -> {
+                    val status = call.argument<String>("status") ?: "正在更新..."
+                    val progress = call.argument<Int>("progress") ?: -1
+                    UpdateForegroundService.start(applicationContext, status, progress)
+                    result.success(true)
+                }
+                "stopUpdateForegroundService" -> {
+                    UpdateForegroundService.stop(applicationContext)
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }
@@ -92,17 +107,7 @@ class MainActivity: FlutterActivity() {
             return
         }
 
-        val uri = FileProvider.getUriForFile(
-            this,
-            "$packageName.fileprovider",
-            apkFile
-        )
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(installIntent)
+        UpdateForegroundService.openInstaller(applicationContext, apkFile.path, packageName)
         result.success(true)
     }
 
