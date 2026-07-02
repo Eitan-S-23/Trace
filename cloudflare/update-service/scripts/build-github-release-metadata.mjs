@@ -36,6 +36,7 @@ if (!output) {
 const manifestPath = path.join(assetsDir, "ble-monitor-update.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const apkAssetName = stringField(manifest, "apkAssetName", "ble-monitor-android.apk");
+assertSafeFileName(apkAssetName);
 const apkPath = path.join(assetsDir, apkAssetName);
 const apkInfo = await fileInfo(apkPath);
 
@@ -59,6 +60,7 @@ const patches = [];
 const manifestPatches = Array.isArray(manifest.patches) ? manifest.patches : [];
 for (const patch of manifestPatches) {
   const patchAssetName = stringField(patch, "assetName");
+  assertSafeFileName(patchAssetName);
   const patchPath = path.join(assetsDir, patchAssetName);
   const patchInfo = await fileInfo(patchPath);
   const patchSha256 = stringField(patch, "sha256").toLowerCase();
@@ -255,6 +257,20 @@ function parseCapabilities(value) {
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function assertSafeFileName(fileName) {
+  if (
+    typeof fileName !== "string" ||
+    fileName.includes("/") ||
+    fileName.includes("\\") ||
+    /[\x00-\x1F\x7F]/u.test(fileName) ||
+    fileName === "." ||
+    fileName === ".." ||
+    fileName.trim() === ""
+  ) {
+    fail(`Invalid asset fileName: ${fileName}`);
+  }
 }
 
 function stringField(object, fieldName, defaultValue) {

@@ -151,6 +151,41 @@ describe("Phase 1 update-service invariants", () => {
     expect(body.errorCode).toBe("INVALID_PARAMETER");
   });
 
+  it("rejects CI metadata asset names with control characters", async () => {
+    const appId = appIdFor("controlchars");
+    const releaseTag = "v8.0.1";
+    const versionCode = 801;
+    const fileName = "ble-monitor-android-from-800-to-801\r.vcdiff";
+    const response = await SELF.fetch("http://example.com/api/ci/releases", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer test-deploy-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(
+        registerPayload(appId, versionCode, releaseTag, [
+          {
+            assetType: "apk",
+            fileName: "ble-monitor-android.apk",
+            sha256: APK_SHA,
+            sizeBytes: 123456,
+            githubUrl: `https://github.com/Eitan-S-23/Trace/releases/download/${releaseTag}/ble-monitor-android.apk`
+          },
+          {
+            assetType: "patch",
+            fileName,
+            sha256: PATCH_SHA,
+            sizeBytes: 1000,
+            githubUrl: `https://github.com/Eitan-S-23/Trace/releases/download/${releaseTag}/${fileName}`
+          }
+        ])
+      )
+    });
+    const body = await response.json<{ errorCode: string }>();
+    expect(response.status).toBe(400);
+    expect(body.errorCode).toBe("INVALID_PARAMETER");
+  });
+
   it("registers and renders tracepatch and vcdiff patches for the same source APK", async () => {
     const appId = appIdFor("patchformats");
     const releaseTag = "v8.0.5";

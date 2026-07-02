@@ -321,6 +321,7 @@ async function validateAssets(input: RegisterReleaseRequest, env: WorkerEnv): Pr
     throw invalidParameter("android candidate requires an APK asset");
   }
   for (const asset of input.assets) {
+    assertSafeFileName(asset.fileName);
     assertImmutableGitHubAssetUrl(asset.githubUrl, env, input.releaseTag);
     if (asset.r2Key) {
       assertExpectedR2Key(input, asset);
@@ -498,6 +499,7 @@ function assertSafeFileName(fileName: string): void {
   if (
     fileName.includes("/") ||
     fileName.includes("\\") ||
+    /[\u0000-\u001F\u007F]/u.test(fileName) ||
     fileName === "." ||
     fileName === ".." ||
     fileName.trim() === ""
@@ -511,6 +513,7 @@ function assertSafePathPart(value: string, fieldName: string): void {
     value.includes("/") ||
     value.includes("\\") ||
     value.includes("..") ||
+    /[\u0000-\u001F\u007F]/u.test(value) ||
     value.trim() === ""
   ) {
     throw invalidParameter(`${fieldName} contains invalid R2 path characters`);

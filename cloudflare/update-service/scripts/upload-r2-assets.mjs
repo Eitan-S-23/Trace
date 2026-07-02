@@ -26,6 +26,7 @@ const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
 validateMetadata(metadata);
 
 for (const asset of metadata.assets) {
+  assertSafeFileName(asset.fileName);
   const assetPath = path.join(assetsDir, asset.fileName);
   if (path.basename(assetPath) !== asset.fileName) {
     fail(`Asset fileName must be a plain file name: ${asset.fileName}`);
@@ -240,6 +241,7 @@ function assertSafeFileName(fileName) {
     typeof fileName !== "string" ||
     fileName.includes("/") ||
     fileName.includes("\\") ||
+    /[\x00-\x1F\x7F]/u.test(fileName) ||
     fileName === "." ||
     fileName === ".." ||
     fileName.trim() === ""
@@ -254,6 +256,7 @@ function assertSafePathPart(value, fieldName) {
     value.includes("/") ||
     value.includes("\\") ||
     value.includes("..") ||
+    /[\x00-\x1F\x7F]/u.test(value) ||
     value.trim() === ""
   ) {
     fail(`${fieldName} contains invalid R2 path characters`);

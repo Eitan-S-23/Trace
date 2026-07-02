@@ -311,7 +311,7 @@ jobs:
           MANUAL_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
           PUBLISH_RELEASE: ${{ github.event.inputs.publish_release }}
         run: |
-          version_line="$(grep -E '^version:' pubspec.yaml | awk '{print $2}')"
+          version_line="$(grep -E '^version:' pubspec.yaml | awk '{print $2}' | tr -d '\r')"
           version_name="${version_line%%+*}"
           if [[ -z "${version_name}" || "${version_name}" == "${version_line}" ]]; then
             echo "::error title=Release tag resolution::pubspec.yaml version must include a semantic version and +versionCode."
@@ -385,11 +385,15 @@ jobs:
             exit 0
           fi
 
-          version_line="$(grep -E '^version:' pubspec.yaml | awk '{print $2}')"
+          version_line="$(grep -E '^version:' pubspec.yaml | awk '{print $2}' | tr -d '\r')"
           version_name="${version_line%%+*}"
           version_code="${version_line##*+}"
           if [[ -z "${version_name}" || -z "${version_code}" || "${version_name}" == "${version_code}" ]]; then
             echo "::error title=Android update metadata::pubspec.yaml version must include +versionCode."
+            exit 1
+          fi
+          if ! [[ "${version_code}" =~ ^[0-9]+$ ]]; then
+            echo "::error title=Android update metadata::versionCode must be numeric after CR/LF normalization."
             exit 1
           fi
 
@@ -426,6 +430,11 @@ jobs:
             previous_version_code="$(
               python -c "import json,sys; print(int(json.load(open(sys.argv[1], encoding='utf-8'))['versionCode']))" "${previous_manifest}"
             )"
+            previous_version_code="${previous_version_code//$'\r'/}"
+            if ! [[ "${previous_version_code}" =~ ^[0-9]+$ ]]; then
+              echo "::error title=Android update metadata::Previous release versionCode is invalid after CR/LF normalization."
+              exit 1
+            fi
             if (( previous_version_code >= version_code )); then
               echo "Release ${previous_tag} versionCode ${previous_version_code} is not older than current ${version_code}; skipping."
               continue
