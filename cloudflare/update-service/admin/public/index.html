@@ -4914,7 +4914,16 @@
           throw new Error(t("status.expectedJson", { path, status: response.status }));
         }
         if (!response.ok || payload.ok === false) {
-          throw new Error(`${payload.errorCode ?? response.status}: ${payload.message ?? t("status.requestFailed")}`);
+          const messageParts = [
+            `${payload.errorCode ?? response.status}: ${payload.message ?? t("status.requestFailed")}`
+          ];
+          if (payload.detail && payload.detail !== payload.message) {
+            messageParts.push(`Detail: ${payload.detail}`);
+          }
+          if (payload.requestId) {
+            messageParts.push(`Request ID: ${payload.requestId}`);
+          }
+          throw new Error(messageParts.join(" | "));
         }
         return payload;
       }
