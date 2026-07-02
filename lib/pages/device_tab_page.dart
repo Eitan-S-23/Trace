@@ -161,7 +161,12 @@ class _DeviceStageState extends State<_DeviceStage>
   double _rotation = 0;
   double _dragStartAngle = 0;
   double _dragStartRotation = 0;
-  int? _activePointer;
+  double _lastDragAngle = 0;
+  double _dragAngularVelocity = 0;
+  double _dragTravel = 0;
+  bool _rotationGestureActive = false;
+  DateTime? _lastDragAt;
+  Offset? _lastDragPosition;
   bool _gearSoundActive = false;
 
   @override
@@ -208,15 +213,36 @@ class _DeviceStageState extends State<_DeviceStage>
             child: CustomPaint(painter: _DeviceStagePainter(geometry)),
           ),
           for (var i = 0; i < actions.length; i++)
-            Positioned(
-              left: geometry.satellites[i].dx - geometry.nodeSize * 0.68,
-              top: geometry.satellites[i].dy - geometry.nodeSize * 0.68,
-              child: TraceGlowNode(
-                size: geometry.nodeSize,
-                icon: actions[i].icon,
-                semanticLabel: actions[i].title,
-                onTap: actions[i].onTap,
-              ),
+            Builder(
+              builder: (context) {
+                final nodeOrigin = Offset(
+                  geometry.satellites[i].dx - geometry.nodeSize * 0.68,
+                  geometry.satellites[i].dy - geometry.nodeSize * 0.68,
+                );
+                return Positioned(
+                  left: nodeOrigin.dx,
+                  top: nodeOrigin.dy,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onPanDown: (details) => _startRotation(
+                      nodeOrigin + details.localPosition,
+                      geometry.core,
+                    ),
+                    onPanUpdate: (details) => _updateRotation(
+                      nodeOrigin + details.localPosition,
+                      geometry.core,
+                    ),
+                    onPanEnd: (_) => _finishRotation(),
+                    onPanCancel: _finishRotation,
+                    child: TraceGlowNode(
+                      size: geometry.nodeSize,
+                      icon: actions[i].icon,
+                      semanticLabel: actions[i].title,
+                      onTap: actions[i].onTap,
+                    ),
+                  ),
+                );
+              },
             ),
           for (var i = 0; i < actions.length; i++)
             Positioned(
@@ -232,20 +258,22 @@ class _DeviceStageState extends State<_DeviceStage>
           Positioned(
             left: geometry.core.dx - coreTouchSize / 2,
             top: geometry.core.dy - coreTouchSize / 2,
-            child: Listener(
+            child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onPointerDown: (event) => _startRotation(
-                event.pointer,
-                event.localPosition,
-                coreTouchSize,
+              onPanDown: (details) => _startRotation(
+                geometry.core -
+                    Offset(coreTouchSize / 2, coreTouchSize / 2) +
+                    details.localPosition,
+                geometry.core,
               ),
-              onPointerMove: (event) => _updateRotation(
-                event.pointer,
-                event.localPosition,
-                coreTouchSize,
+              onPanUpdate: (details) => _updateRotation(
+                geometry.core -
+                    Offset(coreTouchSize / 2, coreTouchSize / 2) +
+                    details.localPosition,
+                geometry.core,
               ),
-              onPointerUp: (event) => _finishRotation(event.pointer),
-              onPointerCancel: (event) => _finishRotation(event.pointer),
+              onPanEnd: (_) => _finishRotation(),
+              onPanCancel: _finishRotation,
               child: SizedBox.square(
                 dimension: coreTouchSize,
                 child: Center(child: _DeviceCore(size: geometry.coreSize)),
@@ -257,35 +285,92 @@ class _DeviceStageState extends State<_DeviceStage>
     );
   }
 
-  void _startRotation(int pointer, Offset localPosition, double size) {
-    if (_activePointer != null) return;
-    _activePointer = pointer;
+  void _startRotation(Offset stagePosition, Offset core) {
+    if (_rotationGestureActive) return;
+    _rotationGestureActive = true;
     _settleController.stop();
-    _dragStartAngle = _angleFromCorePosition(localPosition, size);
+    _dragStartAngle = _angleFromStagePosition(stagePosition, core);
     _dragStartRotation = _rotation;
+    _lastDragAngle = _dragStartAngle;
+    _dragAngularVelocity = 0;
+    _dragTravel = 0;
+    _lastDragAt = DateTime.now();
+    _lastDragPosition = stagePosition;
     _notifyOrbitInteraction(active: true);
-    _startGearSound();
   }
 
-  void _updateRotation(int pointer, Offset localPosition, double size) {
-    if (_activePointer != pointer) return;
-    final currentAngle = _angleFromCorePosition(localPosition, size);
-    final delta = _normalizeAngle(currentAngle - _dragStartAngle);
-    setState(() => _rotation = _dragStartRotation + delta);
+  void _updateRotation(Offset stagePosition, Offset core) {
+    if (!_rotationGestureActive) return;
+    final now = DateTime.now();
+    final currentAngle = _angleFromStagePosition(stagePosition, core);
+    final delta = _normalizeAngle(currentAngle - _lastDragAngle);
+    final lastAt = _lastDragAt;
+    if (lastAt != null) {
+      final seconds = now.difference(lastAt).inMicroseconds / 1000000;
+      if (seconds > 0) {
+        final velocity = delta / seconds;
+        _dragAngularVelocity = _dragAngularVelocity == 0
+            ? velocity
+            : _dragAngularVelocity * 0.72 + velocity * 0.28;
+      }
+    }
+    final lastPosition = _lastDragPosition;
+    if (lastPosition != null) {
+      _dragTravel += (stagePosition - lastPosition).distance;
+    }
+    _lastDragAngle = currentAngle;
+    _lastDragAt = now;
+    _lastDragPosition = stagePosition;
+    if (delta.abs() > 0.002) {
+      _startGearSound();
+    }
+    setState(() => _rotation += delta);
   }
 
-  void _finishRotation(int pointer) {
-    if (_activePointer != pointer) return;
-    _activePointer = null;
+  void _finishRotation() {
+    if (!_rotationGestureActive) return;
+    _rotationGestureActive = false;
     _notifyOrbitInteraction(active: false);
-    _settleRotation();
+    _settleRotation(
+      throwVelocity: _dragAngularVelocity,
+      throwDistance: _dragTravel,
+    );
+    _lastDragAt = null;
+    _lastDragPosition = null;
   }
 
-  void _settleRotation() {
+  void _settleRotation({
+    double throwVelocity = 0,
+    double throwDistance = 0,
+  }) {
     final step = math.pi / 2;
-    final target = (_rotation / step).roundToDouble() * step;
+    final dragDelta = _normalizeAngle(_rotation - _dragStartRotation);
+    final direction = throwVelocity.abs() > 0.08
+        ? throwVelocity.sign
+        : dragDelta == 0
+            ? 0.0
+            : dragDelta.sign;
+    final distanceFactor =
+        (throwDistance / widget.width).clamp(0.0, 1.45).toDouble();
+    final projected = _rotation +
+        throwVelocity.clamp(-12.0, 12.0).toDouble() * 0.22 +
+        direction * distanceFactor * math.pi;
+    var target = (projected / step).roundToDouble() * step;
+    if (direction != 0 && throwDistance > widget.width * 0.16) {
+      final currentStep = (_rotation / step).roundToDouble() * step;
+      if ((target - currentStep).abs() < step * 0.5) {
+        target = currentStep + direction * step;
+      }
+    }
+    final travelSteps = ((target - _rotation).abs() / step).clamp(1.0, 5.0);
+    _settleController.duration = Duration(
+      milliseconds: (260 + travelSteps * 95).round(),
+    );
+    if ((target - _rotation).abs() > 0.002) {
+      _startGearSound();
+    }
     _settleAnimation = Tween<double>(begin: _rotation, end: target).animate(
-      CurvedAnimation(parent: _settleController, curve: Curves.easeOutCubic),
+      CurvedAnimation(parent: _settleController, curve: Curves.easeOutQuart),
     );
     _settleController.forward(from: 0);
   }
@@ -309,7 +394,7 @@ class _DeviceStageState extends State<_DeviceStage>
   Future<void> _playGearSound() async {
     try {
       await _gearPlayer.play(
-        AssetSource('audio/gear_rotate.wav'),
+        AssetSource('audio/vault_rotate.wav'),
         volume: 0.42,
       );
     } catch (_) {
@@ -325,9 +410,8 @@ class _DeviceStageState extends State<_DeviceStage>
     }
   }
 
-  double _angleFromCorePosition(Offset localPosition, double size) {
-    final center = Offset(size / 2, size / 2);
-    final vector = localPosition - center;
+  double _angleFromStagePosition(Offset stagePosition, Offset core) {
+    final vector = stagePosition - core;
     return math.atan2(vector.dy, vector.dx);
   }
 
