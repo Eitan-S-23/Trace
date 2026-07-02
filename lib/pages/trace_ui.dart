@@ -17,7 +17,7 @@ class TraceColors {
 
 class TraceTheme {
   static const double bottomNavHeight = 104;
-  static const double pageBottomPadding = 42;
+  static const double pageBottomPadding = 138;
 
   static const pageGradient = LinearGradient(
     begin: Alignment.topLeft,

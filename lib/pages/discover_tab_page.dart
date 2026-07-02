@@ -9,6 +9,7 @@ class DiscoverTabPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TracePageScaffold(
+      paintBackground: false,
       child: SafeArea(
         bottom: false,
         child: SingleChildScrollView(

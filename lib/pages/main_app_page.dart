@@ -67,36 +67,37 @@ class _MainAppPageState extends State<MainAppPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TraceColors.ink,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            bottom: TraceTheme.bottomNavHeight + 18,
-            child: PageView(
-              controller: _pageController,
-              physics: const BouncingScrollPhysics(),
-              onPageChanged: (index) {
-                if (index == _selectedIndex) return;
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              children: _pages,
-            ),
-          ),
-          Positioned(
-            left: 22,
-            right: 22,
-            bottom: 12,
-            child: SafeArea(
-              top: false,
-              child: _TraceBottomNavigation(
-                currentIndex: _selectedIndex,
-                items: _navItems,
-                onChanged: _selectPage,
+      body: TracePageScaffold(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: PageView(
+                controller: _pageController,
+                physics: const BouncingScrollPhysics(),
+                onPageChanged: (index) {
+                  if (index == _selectedIndex) return;
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
+                children: _pages,
               ),
             ),
-          ),
-        ],
+            Positioned(
+              left: 22,
+              right: 22,
+              bottom: 10,
+              child: SafeArea(
+                top: false,
+                child: _TraceBottomNavigation(
+                  currentIndex: _selectedIndex,
+                  items: _navItems,
+                  onChanged: _selectPage,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -131,7 +132,14 @@ class _TraceBottomNavigation extends StatelessWidget {
       height: 86,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF020B12).withOpacity(0.9),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF03121A).withOpacity(0.66),
+            const Color(0xFF02090F).withOpacity(0.58),
+          ],
+        ),
         borderRadius: BorderRadius.circular(44),
         border: Border.all(color: TraceColors.cyan.withOpacity(0.28)),
         boxShadow: [
@@ -169,7 +177,7 @@ class _TraceBottomNavigation extends StatelessWidget {
                         height: 68,
                         decoration: BoxDecoration(
                           color: selected
-                              ? TraceColors.cyan.withOpacity(0.07)
+                              ? TraceColors.cyan.withOpacity(0.12)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: selected

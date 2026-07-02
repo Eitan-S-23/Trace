@@ -14,12 +14,16 @@ class DeviceTabPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TracePageScaffold(
+      paintBackground: false,
       child: SafeArea(
         bottom: false,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxHeight < 720;
-            final stageWidth = math.min(constraints.maxWidth * 1.16, 456.0);
+            final stageWidth = math.min(
+              math.max(0.0, constraints.maxWidth - 8),
+              420.0,
+            );
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -49,8 +53,7 @@ class DeviceTabPage extends StatelessWidget {
                       .fadeIn(duration: 420.ms)
                       .slideY(begin: 0.2, end: 0),
                   SizedBox(height: compact ? 18 : 26),
-                  UnconstrainedBox(
-                    constrainedAxis: Axis.vertical,
+                  Center(
                     child: _DeviceStage(width: stageWidth),
                   )
                       .animate(delay: 120.ms)
