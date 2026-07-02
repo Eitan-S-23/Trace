@@ -19,15 +19,15 @@ class DeviceTabPage extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxHeight < 720;
-            final stageWidth = math.min(constraints.maxWidth * 1.12, 440.0);
+            final stageWidth = math.min(constraints.maxWidth * 1.08, 420.0);
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: EdgeInsets.fromLTRB(
                 0,
-                compact ? 22 : 46,
+                compact ? 16 : 30,
                 0,
-                TraceTheme.bottomNavHeight + 18,
+                TraceTheme.pageBottomPadding,
               ),
               child: Column(
                 children: [
@@ -48,7 +48,7 @@ class DeviceTabPage extends StatelessWidget {
                       .animate(delay: 60.ms)
                       .fadeIn(duration: 420.ms)
                       .slideY(begin: 0.2, end: 0),
-                  SizedBox(height: compact ? 10 : 20),
+                  SizedBox(height: compact ? 4 : 8),
                   UnconstrainedBox(
                     constrainedAxis: Axis.vertical,
                     child: _DeviceStage(width: stageWidth),
@@ -234,11 +234,11 @@ class _DeviceAction {
 /// 舞台几何：核心与四个对角卫星共用的一套坐标，painter 与布局保持一致
 class _DeviceStageGeometry {
   _DeviceStageGeometry(this.width)
-      : height = width * 1.28,
-        coreSize = width * 0.47,
-        nodeSize = width * 0.18,
-        orbitRadius = width * 0.39,
-        core = Offset(width / 2, width * 1.28 * 0.48) {
+      : height = width * 1.1,
+        coreSize = width * 0.45,
+        nodeSize = width * 0.17,
+        orbitRadius = width * 0.37,
+        core = Offset(width / 2, width * 1.1 * 0.42) {
     const diagonal = math.pi / 4;
     final offsets = [
       Offset(-math.cos(diagonal), -math.sin(diagonal)), // 左上

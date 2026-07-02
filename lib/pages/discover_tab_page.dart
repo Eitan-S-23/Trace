@@ -17,7 +17,7 @@ class DiscoverTabPage extends StatelessWidget {
             18,
             18,
             18,
-            TraceTheme.bottomNavHeight + 24,
+            TraceTheme.pageBottomPadding,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,7 +35,7 @@ class DiscoverTabPage extends StatelessWidget {
                 ),
               ).animate().fadeIn(duration: 420.ms).slideY(begin: 0.14, end: 0),
               const SizedBox(height: 16),
-              const _HeroCard()
+              const _HeroCarousel()
                   .animate(delay: 60.ms)
                   .fadeIn(duration: 480.ms)
                   .slideY(begin: 0.1, end: 0),
@@ -204,9 +204,97 @@ class DiscoverTabPage extends StatelessWidget {
   }
 }
 
+class _HeroSlideData {
+  const _HeroSlideData({
+    required this.kicker,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+
+  final String kicker;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+}
+
+class _HeroCarousel extends StatefulWidget {
+  const _HeroCarousel();
+
+  @override
+  State<_HeroCarousel> createState() => _HeroCarouselState();
+}
+
+class _HeroCarouselState extends State<_HeroCarousel> {
+  static const _slides = [
+    _HeroSlideData(
+      kicker: '快速了解',
+      title: 'BLE\nMonitor',
+      subtitle: '连接、监控、记录',
+      icon: Icons.bluetooth_connected,
+    ),
+    _HeroSlideData(
+      kicker: '实时监控',
+      title: '功率\n数据',
+      subtitle: '广播解析、功耗统计',
+      icon: Icons.bolt,
+    ),
+    _HeroSlideData(
+      kicker: '设备管理',
+      title: '码表\n遥控',
+      subtitle: '骑行数据、蓝牙控制',
+      icon: Icons.directions_bike,
+    ),
+  ];
+
+  final PageController _controller = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 190,
+      child: PageView.builder(
+        controller: _controller,
+        physics: const BouncingScrollPhysics(),
+        onPageChanged: (index) {
+          setState(() {
+            _index = index;
+          });
+        },
+        itemCount: _slides.length,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: EdgeInsets.only(right: index == _slides.length - 1 ? 0 : 10),
+            child: _HeroCard(
+              data: _slides[index],
+              activeIndex: _index,
+              slideCount: _slides.length,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// “快速了解 BLE Monitor” 英雄卡，右侧为纯代码绘制的手机插画
 class _HeroCard extends StatelessWidget {
-  const _HeroCard();
+  const _HeroCard({
+    required this.data,
+    required this.activeIndex,
+    required this.slideCount,
+  });
+
+  final _HeroSlideData data;
+  final int activeIndex;
+  final int slideCount;
 
   @override
   Widget build(BuildContext context) {
@@ -263,8 +351,8 @@ class _HeroCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text(
-                          '快速了解',
+                        Text(
+                          data.kicker,
                           style: TextStyle(
                             color: TraceColors.cyan,
                             fontSize: 13,
@@ -275,11 +363,12 @@ class _HeroCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'BLE Monitor',
+                    Text(
+                      data.title,
                       style: TextStyle(
                         color: TraceColors.text,
-                        fontSize: 24,
+                        fontSize: 28,
+                        height: 1.08,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0.4,
                         shadows: [
@@ -291,13 +380,13 @@ class _HeroCard extends StatelessWidget {
                     Row(
                       children: [
                         Icon(
-                          Icons.bluetooth_connected,
+                          data.icon,
                           size: 14,
                           color: TraceColors.muted.withOpacity(0.9),
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '连接、监控、记录',
+                          data.subtitle,
                           style: TextStyle(
                             color: TraceColors.muted.withOpacity(0.95),
                             fontSize: 12,
@@ -322,28 +411,17 @@ class _HeroCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                width: 16,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: TraceColors.cyan,
-                  borderRadius: BorderRadius.circular(2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: TraceColors.cyan.withOpacity(0.7),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-              ),
-              for (var i = 0; i < 3; i++) ...[
-                const SizedBox(width: 6),
-                Container(
-                  width: 4,
+              for (var i = 0; i < slideCount; i++) ...[
+                if (i != 0) const SizedBox(width: 6),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  width: i == activeIndex ? 16 : 4,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: TraceColors.muted.withOpacity(0.35),
-                    shape: BoxShape.circle,
+                    color: i == activeIndex
+                        ? TraceColors.cyan
+                        : TraceColors.muted.withOpacity(0.35),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ],

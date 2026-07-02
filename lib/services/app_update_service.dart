@@ -113,17 +113,28 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     var cancelledByUser = false;
     final manifestCancelToken = CancelToken();
 
-    void closeCheckingDialog() {
-      if (checkingDialogOpen && Get.isDialogOpen == true) {
-        Get.back<void>();
+    void closeCheckingDialog([BuildContext? context]) {
+      if (checkingDialogOpen) {
+        if (context != null) {
+          TraceDialog.close(context);
+        } else if (Get.isDialogOpen == true) {
+          final overlayContext = Get.overlayContext;
+          if (overlayContext != null) {
+            unawaited(
+              Navigator.of(overlayContext, rootNavigator: true).maybePop(),
+            );
+          } else {
+            Get.back<void>();
+          }
+        }
       }
       checkingDialogOpen = false;
     }
 
-    void cancelChecking() {
+    void cancelChecking(BuildContext context) {
       cancelledByUser = true;
       manifestCancelToken.cancel('用户取消检查更新');
-      closeCheckingDialog();
+      closeCheckingDialog(context);
     }
 
     updateProgress.value = 0;
@@ -959,7 +970,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       barrierDismissible: false,
     );
   }
-  void _showCheckingDialog({required VoidCallback onCancel}) {
+  void _showCheckingDialog({required ValueChanged<BuildContext> onCancel}) {
     _showTraceUpdateDialog(
       Obx(
         () => TraceDialog(
@@ -996,7 +1007,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
             TraceDialogAction(
               label: '取消',
               color: TraceColors.cyan,
-              onPressed: (_) => onCancel(),
+              onPressed: onCancel,
             ),
           ],
         ),

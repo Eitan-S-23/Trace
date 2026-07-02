@@ -17,6 +17,7 @@ class TraceColors {
 
 class TraceTheme {
   static const double bottomNavHeight = 104;
+  static const double pageBottomPadding = 42;
 
   static const pageGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -275,23 +276,6 @@ class TraceGlowNode extends StatelessWidget {
                           color: color.withOpacity(0.74),
                           width: 1.3,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withOpacity(0.38),
-                            blurRadius: 24,
-                            spreadRadius: -2,
-                          ),
-                          BoxShadow(
-                            color: color.withOpacity(0.14),
-                            blurRadius: 44,
-                            spreadRadius: -8,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.48),
-                            blurRadius: 18,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
                       ),
                       child: Container(
                         margin: EdgeInsets.all(size * 0.08),
@@ -321,15 +305,17 @@ class TraceGlowNode extends StatelessWidget {
             SizedBox(height: size * 0.03),
             SizedBox(
               width: textWidth,
-              child: Text(
-                label!,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: TraceColors.text,
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w900,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label!,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    color: TraceColors.text,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ),
@@ -367,6 +353,16 @@ class _TraceNodeRingsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
     final radius = size.shortestSide / 2;
+    final glowPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          color.withOpacity(0.18),
+          color.withOpacity(0.06),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: radius * 0.72));
+    canvas.drawCircle(center, radius * 0.72, glowPaint);
+
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1

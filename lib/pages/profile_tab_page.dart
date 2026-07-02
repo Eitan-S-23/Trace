@@ -42,7 +42,7 @@ class ProfileTabPage extends StatelessWidget {
             14,
             36,
             14,
-            TraceTheme.bottomNavHeight + 18,
+            TraceTheme.pageBottomPadding,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

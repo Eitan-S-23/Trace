@@ -13,6 +13,7 @@ class MainAppPage extends StatefulWidget {
 
 class _MainAppPageState extends State<MainAppPage> {
   int _selectedIndex = 0;
+  late final PageController _pageController;
 
   final List<Widget> _pages = const [
     DeviceTabPage(),
@@ -39,14 +40,48 @@ class _MainAppPageState extends State<MainAppPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _selectPage(int index) {
+    if (index == _selectedIndex) return;
+    setState(() {
+      _selectedIndex = index;
+    });
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TraceColors.ink,
       body: Stack(
         children: [
-          IndexedStack(
-            index: _selectedIndex,
-            children: _pages,
+          Positioned.fill(
+            bottom: TraceTheme.bottomNavHeight + 18,
+            child: PageView(
+              controller: _pageController,
+              physics: const BouncingScrollPhysics(),
+              onPageChanged: (index) {
+                if (index == _selectedIndex) return;
+                setState(() {
+                  _selectedIndex = index;
+                });
+              },
+              children: _pages,
+            ),
           ),
           Positioned(
             left: 22,
@@ -57,11 +92,7 @@ class _MainAppPageState extends State<MainAppPage> {
               child: _TraceBottomNavigation(
                 currentIndex: _selectedIndex,
                 items: _navItems,
-                onChanged: (index) {
-                  setState(() {
-                    _selectedIndex = index;
-                  });
-                },
+                onChanged: _selectPage,
               ),
             ),
           ),
