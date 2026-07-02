@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -147,6 +148,7 @@ class UpdateForegroundService : Service() {
             .setContentText(status)
             .setStyle(NotificationCompat.BigTextStyle().bigText(status))
             .setContentIntent(installPendingIntent)
+            .addAction(R.mipmap.ic_launcher, "继续安装", installPendingIntent)
             .setFullScreenIntent(installPendingIntent, true)
             .setOngoing(false)
             .setOnlyAlertOnce(false)
@@ -211,6 +213,11 @@ class UpdateForegroundService : Service() {
             )
             return Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
+                clipData = ClipData.newUri(
+                    context.contentResolver,
+                    "Trace update APK",
+                    uri,
+                )
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)

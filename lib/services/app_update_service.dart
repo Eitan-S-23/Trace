@@ -73,7 +73,10 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !Platform.isAndroid) return;
 
-    unawaited(_resumePendingInstallIfPermitted(showMessage: true));
+    unawaited(_resumePendingInstallIfPermitted(
+      showMessage: true,
+      force: true,
+    ));
   }
 
   Future<void> checkDailyOnStartup() async {
@@ -391,11 +394,14 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
   Future<void> _resumePendingInstallIfPermitted({
     required bool showMessage,
+    bool force = false,
   }) async {
-    if (_isRetryingPendingInstall || isUpdating.value) return;
+    if (_isRetryingPendingInstall) return;
 
     final apkPath = await _pendingInstallApkPath();
     if (apkPath == null) return;
+    final canResumeWhileUpdating = force && _isWaitingForInstaller;
+    if (isUpdating.value && !canResumeWhileUpdating) return;
     if (await _clearPendingInstallIfAlreadyApplied()) return;
 
     final apkFile = File(apkPath);
@@ -417,11 +423,19 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
 
     _isRetryingPendingInstall = true;
     isUpdating.value = true;
-    updateStatus.value = '继续打开系统安装器...';
+    updateProgress.value = 1;
+    updateStatus.value = '打开系统安装器...';
+    _closeUpdateDialogIfOpen();
+    _queueUpdateForegroundService(force: true);
     try {
       final launched = await _openInstaller(apkPath);
+      if (launched) {
+        await _stopUpdateForegroundService();
+      } else {
+        _markInstallerReadyForForegroundRetry();
+      }
       if (!launched && showMessage) {
-        Get.snackbar('安装包已就绪', '如系统未自动打开安装器，请点按通知或重新回到 Trace');
+        Get.snackbar('安装包已就绪', '请点按通知里的“继续安装”，或再次回到 Trace 自动打开系统安装器');
       }
     } on PlatformException catch (e) {
       if (e.code == _unknownAppSourcesCode) {
@@ -438,8 +452,28 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
         Get.snackbar('安装失败', _formatUpdateFailure(e));
       }
     } finally {
+      _closeUpdateDialogIfOpen();
       isUpdating.value = false;
       _isRetryingPendingInstall = false;
+    }
+  }
+
+  bool get _isWaitingForInstaller {
+    return updateProgress.value >= 0.99 && updateStatus.value.contains('安装');
+  }
+
+  void _markInstallerReadyForForegroundRetry() {
+    updateProgress.value = 1;
+    updateStatus.value = '安装包已就绪，请点按通知或回到 Trace 继续安装';
+    _queueUpdateForegroundService(force: true);
+  }
+
+  void _closeUpdateDialogIfOpen() {
+    if (Get.isDialogOpen != true) return;
+    try {
+      Get.back<void>();
+    } catch (_) {
+      // Dialog state can be stale after Android background/foreground switches.
     }
   }
 
@@ -794,6 +828,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
         expectedVersionCode: updateInfo.versionCode,
       );
       keepForegroundService = !launched;
+      if (!launched) {
+        _markInstallerReadyForForegroundRetry();
+      }
     } on PlatformException catch (e) {
       failure = e;
     } catch (e) {
@@ -888,6 +925,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
           expectedVersionCode: updateInfo.versionCode,
         );
         keepForegroundService = !launched;
+        if (!launched) {
+          _markInstallerReadyForForegroundRetry();
+        }
       } catch (_) {
         if (await partialApk.exists()) {
           await partialApk.delete();
