@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.ActivityOptions
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -117,18 +118,18 @@ class UpdateForegroundService : Service() {
         if (!apkFile.exists()) return
 
         val installIntent = installIntentFor(this, apkFile.path, authorityPackage)
-        try {
-            startActivity(installIntent)
+        if (sendInstallPendingIntent(this, installIntent)) {
             stopForegroundCompat()
             stopSelf()
-        } catch (_: Exception) {
-            startForegroundCompat(
-                buildInstallReadyNotification(
-                    "安装包已就绪。如系统未自动打开安装器，请点按继续安装。",
-                    installIntent,
-                ),
-            )
+            return
         }
+
+        startForegroundCompat(
+            buildInstallReadyNotification(
+                "安装包已就绪。如系统未自动打开安装器，请点按继续安装。",
+                installIntent,
+            ),
+        )
     }
 
     private fun buildInstallReadyNotification(
@@ -224,6 +225,17 @@ class UpdateForegroundService : Service() {
             }
         }
 
+        fun requestInstallerActivity(
+            context: Context,
+            apkPath: String,
+            authorityPackage: String,
+        ): Boolean {
+            val apkFile = File(apkPath)
+            if (!apkFile.exists()) return false
+            val installIntent = installIntentFor(context, apkFile.path, authorityPackage)
+            return sendInstallPendingIntent(context, installIntent)
+        }
+
         fun start(context: Context, status: String, progress: Int): Boolean {
             val intent = Intent(context, UpdateForegroundService::class.java).apply {
                 action = ACTION_START
@@ -260,6 +272,38 @@ class UpdateForegroundService : Service() {
             }
             return try {
                 ContextCompat.startForegroundService(context, intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        private fun sendInstallPendingIntent(context: Context, installIntent: Intent): Boolean {
+            val installPendingIntent = PendingIntent.getActivity(
+                context,
+                2,
+                installIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or immutablePendingIntentFlag(),
+            )
+            return try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    val options = ActivityOptions.makeBasic().apply {
+                        setPendingIntentBackgroundActivityStartMode(
+                            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+                        )
+                    }
+                    installPendingIntent.send(
+                        context,
+                        0,
+                        null,
+                        null,
+                        null,
+                        null,
+                        options.toBundle(),
+                    )
+                } else {
+                    installPendingIntent.send()
+                }
                 true
             } catch (_: Exception) {
                 false

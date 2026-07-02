@@ -130,22 +130,32 @@ class MainActivity: FlutterActivity() {
                 startActivity(installIntent)
                 result.success(mapOf("requested" to true, "launched" to true))
             } catch (_: Exception) {
-                val requested = UpdateForegroundService.openInstaller(
+                val launched = UpdateForegroundService.requestInstallerActivity(
                     applicationContext,
                     apkFile.path,
                     packageName,
                 )
-                result.success(mapOf("requested" to requested, "launched" to false))
+                val requested = launched || UpdateForegroundService.openInstaller(
+                    applicationContext,
+                    apkFile.path,
+                    packageName,
+                )
+                result.success(mapOf("requested" to requested, "launched" to launched))
             }
             return
         }
 
-        val requested = UpdateForegroundService.openInstaller(
+        val launched = UpdateForegroundService.requestInstallerActivity(
             applicationContext,
             apkFile.path,
             packageName,
         )
-        result.success(mapOf("requested" to requested, "launched" to false))
+        val requested = launched || UpdateForegroundService.openInstaller(
+            applicationContext,
+            apkFile.path,
+            packageName,
+        )
+        result.success(mapOf("requested" to requested, "launched" to launched))
     }
 
     private fun canRequestPackageInstalls(): Boolean {
