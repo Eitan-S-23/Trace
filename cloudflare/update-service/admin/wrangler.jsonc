@@ -17,5 +17,11 @@
       "database_id": "0133ad9e-d4a2-4fef-a659-4f2bf3d3a645",
       "migrations_dir": "../migrations"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "RELEASES_BUCKET",
+      "bucket_name": "trace-update-staging-releases"
+    }
   ]
 }

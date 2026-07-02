@@ -3454,6 +3454,7 @@
         firmwareChannels: [],
         firmwareReleases: [],
         storage: null,
+        storageError: null,
         selectedReleaseId: null,
         selectedFirmwareId: null,
         detailsOpen: false,
@@ -4560,13 +4561,14 @@
           const [channels, releases, storage, firmwareReleases, firmwareChannels] = await Promise.all([
             api("/api/admin/channels?appId=trace&platform=android"),
             api("/api/admin/releases?appId=trace&platform=android"),
-            api("/api/admin/storage?appId=trace&platform=android"),
+            api("/api/admin/storage?appId=trace&platform=android").catch((error) => ({ error })),
             api("/api/admin/firmware/releases?appId=trace"),
             api("/api/admin/firmware/channels?appId=trace")
           ]);
           state.channels = channels.channels ?? [];
           state.releases = releases.releases ?? [];
-          state.storage = storage.storage ?? null;
+          state.storage = storage.error ? null : storage.storage ?? null;
+          state.storageError = storage.error ?? null;
           state.firmwareReleases = firmwareReleases.firmwareReleases ?? [];
           state.firmwareChannels = firmwareChannels.firmwareChannels ?? [];
           if (!state.selectedReleaseId || !state.releases.some((release) => release.id === state.selectedReleaseId)) {
@@ -5376,6 +5378,14 @@
 
       function renderStorage() {
         const storage = state.storage;
+        if (state.storageError) {
+          const message = escapeHtml(state.storageError.message);
+          syncResourceWaterLevel(0);
+          els.resourceOrbSize.textContent = t("status.fault");
+          els.resourceOrbMeta.textContent = t("storage.miniMeta");
+          els.storageSummary.innerHTML = `<div class="error">${message}</div>`;
+          return;
+        }
         if (!storage) {
           syncResourceWaterLevel(0);
           els.resourceOrbSize.textContent = "--";
