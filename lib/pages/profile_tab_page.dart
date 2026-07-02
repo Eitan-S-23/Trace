@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,10 +39,10 @@ class ProfileTabPage extends StatelessWidget {
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(
-            18,
-            18,
-            18,
-            TraceTheme.bottomNavHeight + 24,
+            14,
+            36,
+            14,
+            TraceTheme.bottomNavHeight + 18,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,28 +50,17 @@ class ProfileTabPage extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '我的',
-                    style: TextStyle(
-                      color: TraceColors.text,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                      shadows: [
-                        Shadow(color: Color(0x6624F6DE), blurRadius: 18),
-                      ],
-                    ),
-                  ),
+                  const _ProfileTitle(),
                   const Spacer(),
                   const _ProfileAvatar(),
                 ],
               ).animate().fadeIn(duration: 420.ms).slideY(begin: 0.14, end: 0),
-              const SizedBox(height: 22),
+              const SizedBox(height: 30),
               _ProfilePanel(
                 versionHeader: _buildVersionText(
                   style: const TextStyle(
                     color: TraceColors.text,
-                    fontSize: 15,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.4,
                   ),
@@ -301,6 +291,83 @@ class _ProfileAction {
   final VoidCallback onTap;
 }
 
+class _ProfileTitle extends StatelessWidget {
+  const _ProfileTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 36, left: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '我的',
+            style: TextStyle(
+              color: TraceColors.text,
+              fontSize: 46,
+              height: 1,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 3,
+              shadows: [
+                Shadow(color: Color(0xAA24F6DE), blurRadius: 24),
+                Shadow(color: Color(0x5524F6DE), blurRadius: 44),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: 142,
+            child: Row(
+              children: [
+                Expanded(child: _profileTitleLine()),
+                const SizedBox(width: 6),
+                _profileTitleDot(TraceColors.cyan),
+                const SizedBox(width: 18),
+                _profileTitleDot(TraceColors.cyan.withOpacity(0.7)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileTitleLine() {
+    return Container(
+      height: 1.4,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            TraceColors.cyan.withOpacity(0.9),
+            Colors.transparent,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: TraceColors.cyan.withOpacity(0.55),
+            blurRadius: 9,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileTitleDot(Color color) {
+    return Container(
+      width: 4,
+      height: 4,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        boxShadow: [
+          BoxShadow(color: color.withOpacity(0.8), blurRadius: 8),
+        ],
+      ),
+    );
+  }
+}
+
 /// 右上角发光头像与身份标签
 class _ProfileAvatar extends StatelessWidget {
   const _ProfileAvatar();
@@ -309,48 +376,100 @@ class _ProfileAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                TraceColors.cyan.withOpacity(0.22),
-                const Color(0xFF06202A).withOpacity(0.95),
-              ],
-            ),
-            border: Border.all(color: TraceColors.cyan.withOpacity(0.85), width: 1.6),
-            boxShadow: [
-              BoxShadow(
-                color: TraceColors.cyan.withOpacity(0.45),
-                blurRadius: 24,
-                spreadRadius: -2,
+        SizedBox(
+          width: 118,
+          height: 118,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              CustomPaint(
+                size: const Size.square(118),
+                painter: _ProfileAvatarDialPainter(),
+              ),
+              Container(
+                width: 82,
+                height: 82,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      TraceColors.cyan.withOpacity(0.2),
+                      const Color(0xFF06202A).withOpacity(0.96),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: TraceColors.cyan.withOpacity(0.9),
+                    width: 1.8,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: TraceColors.cyan.withOpacity(0.45),
+                      blurRadius: 28,
+                      spreadRadius: -2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.person_outline,
+                  color: TraceColors.cyanSoft,
+                  size: 44,
+                  shadows: [
+                    Shadow(color: Color(0xAA24F6DE), blurRadius: 14),
+                  ],
+                ),
               ),
             ],
           ),
-          child: Container(
-            margin: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: TraceColors.cyan.withOpacity(0.25)),
-            ),
-            child: const Icon(Icons.person, color: TraceColors.cyan, size: 30),
-          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         const Text(
           '智能设备用户',
           style: TextStyle(
             color: TraceColors.text,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.6,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1,
+            shadows: [
+              Shadow(color: Color(0x6624F6DE), blurRadius: 12),
+            ],
           ),
         ),
       ],
     );
   }
+}
+
+class _ProfileAvatarDialPainter extends CustomPainter {
+  const _ProfileAvatarDialPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2;
+    final ringPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = TraceColors.cyan.withOpacity(0.15);
+    canvas.drawCircle(center, radius * 0.96, ringPaint);
+    canvas.drawCircle(center, radius * 0.82, ringPaint..color = TraceColors.cyan.withOpacity(0.2));
+    canvas.drawCircle(center, radius * 0.66, ringPaint..color = TraceColors.cyan.withOpacity(0.12));
+
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..color = TraceColors.cyan.withOpacity(0.7);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.9),
+      -math.pi * 0.92,
+      math.pi * 0.55,
+      false,
+      arcPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProfileAvatarDialPainter oldDelegate) => false;
 }
 
 /// 中央功能面板：版本头 + 2+3 圆形功能网格
@@ -365,116 +484,188 @@ class _ProfilePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 26),
-          decoration: BoxDecoration(
-            color: const Color(0xFF071B25).withOpacity(0.78),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: TraceColors.cyan.withOpacity(0.26)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.4),
-                blurRadius: 30,
-                offset: const Offset(0, 16),
-              ),
-              BoxShadow(
-                color: TraceColors.cyan.withOpacity(0.12),
-                blurRadius: 34,
-                spreadRadius: -10,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 3.5,
-                    height: 15,
-                    decoration: BoxDecoration(
-                      color: TraceColors.cyan,
-                      borderRadius: BorderRadius.circular(2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: TraceColors.cyan.withOpacity(0.7),
-                          blurRadius: 8,
-                        ),
-                      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final innerWidth = math.max(0.0, width - 44);
+        final topNode = math.min(innerWidth / 2.72, 104.0);
+        final bottomNode = math.min(innerWidth / 4.08, 84.0);
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(painter: _ProfilePanelPainter()),
+            ),
+            ClipPath(
+              clipper: _ProfilePanelClipper(),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(22, 30, 22, 38),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF071B25).withOpacity(0.76),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.42),
+                      blurRadius: 32,
+                      offset: const Offset(0, 16),
                     ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(child: versionHeader),
-                ],
-              ),
-              const SizedBox(height: 26),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final action in actions.sublist(0, 2))
-                    TraceGlowNode(
-                      size: 88,
-                      icon: action.icon,
-                      label: action.label,
-                      labelWidth: 110,
-                      onTap: action.onTap,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final action in actions.sublist(2))
-                    TraceGlowNode(
-                      size: 72,
-                      icon: action.icon,
-                      label: action.label,
-                      labelWidth: 92,
-                      onTap: action.onTap,
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        // 面板顶部中央发光饰线
-        Positioned(
-          top: -1,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Container(
-              width: 130,
-              height: 2.4,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(2),
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    TraceColors.cyan.withOpacity(0.9),
-                    Colors.transparent,
                   ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: TraceColors.cyan.withOpacity(0.55),
-                    blurRadius: 10,
-                  ),
-                ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 3,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: TraceColors.amber,
+                            boxShadow: [
+                              BoxShadow(
+                                color: TraceColors.amber.withOpacity(0.7),
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: versionHeader),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final action in actions.sublist(0, 2))
+                          TraceGlowNode(
+                            size: topNode,
+                            icon: action.icon,
+                            label: action.label,
+                            labelWidth: 120,
+                            onTap: action.onTap,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final action in actions.sublist(2))
+                          TraceGlowNode(
+                            size: bottomNode,
+                            icon: action.icon,
+                            label: action.label,
+                            labelWidth: 98,
+                            onTap: action.onTap,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+            Positioned(
+              top: 1,
+              left: width * 0.38,
+              right: width * 0.38,
+              child: Container(
+                height: 3,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      TraceColors.cyan.withOpacity(0.95),
+                      Colors.transparent,
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: TraceColors.cyan.withOpacity(0.65),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
+}
+
+class _ProfilePanelClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    const cut = 26.0;
+    const notch = 42.0;
+    return Path()
+      ..moveTo(cut, 0)
+      ..lineTo(size.width * 0.48, 0)
+      ..lineTo(size.width * 0.52, notch * 0.45)
+      ..lineTo(size.width - cut, notch * 0.45)
+      ..lineTo(size.width, cut)
+      ..lineTo(size.width, size.height - cut)
+      ..lineTo(size.width - cut, size.height)
+      ..lineTo(cut, size.height)
+      ..lineTo(0, size.height - cut)
+      ..lineTo(0, cut)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(covariant _ProfilePanelClipper oldClipper) => false;
+}
+
+class _ProfilePanelPainter extends CustomPainter {
+  const _ProfilePanelPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _ProfilePanelClipper().getClip(size);
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          TraceColors.cyan.withOpacity(0.18),
+          Colors.transparent,
+          TraceColors.cyan.withOpacity(0.1),
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawPath(path, fillPaint);
+
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = TraceColors.cyan.withOpacity(0.62);
+    canvas.drawPath(path, borderPaint);
+
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8)
+      ..color = TraceColors.cyan.withOpacity(0.28);
+    canvas.drawPath(path, glowPaint);
+
+    final sidePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = TraceColors.cyan.withOpacity(0.22);
+    canvas.drawLine(Offset(14, size.height * 0.2), Offset(14, size.height * 0.78), sidePaint);
+    canvas.drawLine(
+      Offset(size.width - 14, size.height * 0.2),
+      Offset(size.width - 14, size.height * 0.78),
+      sidePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ProfilePanelPainter oldDelegate) => false;
 }
 
 /// 面板下方标语与装饰

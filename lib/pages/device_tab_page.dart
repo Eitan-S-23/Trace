@@ -19,45 +19,40 @@ class DeviceTabPage extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final compact = constraints.maxHeight < 720;
-            final stageWidth = math.min(constraints.maxWidth - 36, 380.0);
+            final stageWidth = math.min(constraints.maxWidth * 1.12, 440.0);
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: EdgeInsets.fromLTRB(
-                18,
-                compact ? 20 : 30,
-                18,
-                TraceTheme.bottomNavHeight + 24,
+                0,
+                compact ? 22 : 46,
+                0,
+                TraceTheme.bottomNavHeight + 18,
               ),
               child: Column(
                 children: [
-                  const Text(
-                    '设备',
-                    style: TextStyle(
-                      color: TraceColors.text,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 10,
-                      shadows: [
-                        Shadow(color: Color(0x8824F6DE), blurRadius: 22),
-                      ],
-                    ),
-                  ).animate().fadeIn(duration: 420.ms).slideY(begin: 0.14, end: 0),
-                  const SizedBox(height: 10),
+                  const _DeviceTitle()
+                      .animate()
+                      .fadeIn(duration: 420.ms)
+                      .slideY(begin: 0.14, end: 0),
+                  SizedBox(height: compact ? 12 : 18),
                   Text(
                     '连接、监控、控制您的蓝牙设备',
                     style: TextStyle(
-                      color: TraceColors.muted.withOpacity(0.95),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.4,
+                      color: TraceColors.cyanSoft.withOpacity(0.86),
+                      fontSize: compact ? 16 : 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2.2,
                     ),
                   )
                       .animate(delay: 60.ms)
                       .fadeIn(duration: 420.ms)
                       .slideY(begin: 0.2, end: 0),
-                  SizedBox(height: compact ? 10 : 22),
-                  _DeviceStage(width: stageWidth)
+                  SizedBox(height: compact ? 10 : 20),
+                  UnconstrainedBox(
+                    constrainedAxis: Axis.vertical,
+                    child: _DeviceStage(width: stageWidth),
+                  )
                       .animate(delay: 120.ms)
                       .fadeIn(duration: 520.ms)
                       .scale(
@@ -69,6 +64,70 @@ class DeviceTabPage extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _DeviceTitle extends StatelessWidget {
+  const _DeviceTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 78,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 58,
+            right: 58,
+            top: 42,
+            child: Row(
+              children: [
+                Expanded(child: _titleBeam(reverse: false)),
+                const SizedBox(width: 174),
+                Expanded(child: _titleBeam(reverse: true)),
+              ],
+            ),
+          ),
+          const Text(
+            '设备',
+            style: TextStyle(
+              color: TraceColors.text,
+              fontSize: 54,
+              height: 1,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 8,
+              shadows: [
+                Shadow(color: Color(0xAA24F6DE), blurRadius: 24),
+                Shadow(color: Color(0x6624F6DE), blurRadius: 42),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _titleBeam({required bool reverse}) {
+    return Container(
+      height: 2,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: reverse ? Alignment.centerRight : Alignment.centerLeft,
+          end: reverse ? Alignment.centerLeft : Alignment.centerRight,
+          colors: [
+            Colors.transparent,
+            TraceColors.cyan.withOpacity(0.9),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: TraceColors.cyan.withOpacity(0.55),
+            blurRadius: 10,
+          ),
+        ],
       ),
     );
   }
@@ -175,11 +234,11 @@ class _DeviceAction {
 /// 舞台几何：核心与四个对角卫星共用的一套坐标，painter 与布局保持一致
 class _DeviceStageGeometry {
   _DeviceStageGeometry(this.width)
-      : height = width * 1.06,
-        coreSize = width * 0.435,
-        nodeSize = width * 0.185,
-        orbitRadius = width * 0.375,
-        core = Offset(width / 2, width * 1.06 * 0.42) {
+      : height = width * 1.28,
+        coreSize = width * 0.47,
+        nodeSize = width * 0.18,
+        orbitRadius = width * 0.39,
+        core = Offset(width / 2, width * 1.28 * 0.48) {
     const diagonal = math.pi / 4;
     final offsets = [
       Offset(-math.cos(diagonal), -math.sin(diagonal)), // 左上
@@ -223,13 +282,43 @@ class _DeviceStagePainter extends CustomPainter {
       );
     canvas.drawCircle(center, geometry.orbitRadius * 1.3, glowPaint);
 
-    // 穿过卫星圆心的轨道圆
+    // 穿过卫星圆心的机械轨道圆
     final orbitPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.1
       ..color = TraceColors.cyan.withOpacity(0.16);
     canvas.drawCircle(center, geometry.orbitRadius, orbitPaint);
-    canvas.drawCircle(center, geometry.orbitRadius * 1.14, orbitPaint..color = TraceColors.cyan.withOpacity(0.08));
+    canvas.drawCircle(
+      center,
+      geometry.orbitRadius * 1.14,
+      orbitPaint..color = TraceColors.cyan.withOpacity(0.09),
+    );
+    canvas.drawCircle(
+      center,
+      geometry.orbitRadius * 0.78,
+      orbitPaint..color = TraceColors.cyan.withOpacity(0.1),
+    );
+    canvas.drawCircle(
+      center,
+      geometry.orbitRadius * 0.64,
+      orbitPaint..color = TraceColors.cyan.withOpacity(0.08),
+    );
+
+    final tickPaint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..color = TraceColors.cyan.withOpacity(0.36);
+    for (var i = 0; i < 112; i++) {
+      final angle = -math.pi / 2 + i * math.pi * 2 / 112;
+      final major = i % 14 == 0;
+      tickPaint.strokeWidth = major ? 1.2 : 0.75;
+      final outer = geometry.orbitRadius * 0.93;
+      final inner = geometry.orbitRadius * (major ? 0.8 : 0.86);
+      canvas.drawLine(
+        center + Offset(math.cos(angle), math.sin(angle)) * inner,
+        center + Offset(math.cos(angle), math.sin(angle)) * outer,
+        tickPaint,
+      );
+    }
 
     // 核心 → 卫星 对角连接线（青色渐隐）
     for (final satellite in geometry.satellites) {
@@ -237,7 +326,7 @@ class _DeviceStagePainter extends CustomPainter {
       final start = center + direction * (geometry.coreSize * 0.52);
       final end = satellite - direction * (geometry.nodeSize * 0.56);
       final linkPaint = Paint()
-        ..strokeWidth = 1.2
+        ..strokeWidth = 1.5
         ..shader = LinearGradient(
           colors: [
             TraceColors.cyan.withOpacity(0.55),
@@ -253,6 +342,17 @@ class _DeviceStagePainter extends CustomPainter {
         1.8,
         Paint()..color = TraceColors.cyanSoft.withOpacity(0.55),
       );
+    }
+
+    final cardinalPaint = Paint()..color = TraceColors.cyanSoft.withOpacity(0.9);
+    for (final angle in const [
+      -math.pi / 2,
+      0.0,
+      math.pi / 2,
+      math.pi,
+    ]) {
+      final point = center + Offset(math.cos(angle), math.sin(angle)) * geometry.orbitRadius;
+      canvas.drawCircle(point, 3.2, cardinalPaint);
     }
 
     // 固定种子散布光点
@@ -340,6 +440,10 @@ class _DeviceCore extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             // 盘面同心装饰环
+            CustomPaint(
+              size: Size.square(size),
+              painter: _DeviceCoreDialPainter(),
+            ),
             Container(
               margin: EdgeInsets.all(size * 0.075),
               decoration: BoxDecoration(
@@ -367,7 +471,7 @@ class _DeviceCore extends StatelessWidget {
                   '设备中心',
                   style: TextStyle(
                     color: TraceColors.text,
-                    fontSize: size * 0.115,
+                    fontSize: size * 0.15,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 2,
                     shadows: const [
@@ -407,4 +511,54 @@ class _DeviceCore extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DeviceCoreDialPainter extends CustomPainter {
+  const _DeviceCoreDialPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2;
+    final tickPaint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..color = TraceColors.cyanSoft.withOpacity(0.22);
+
+    for (var i = 0; i < 96; i++) {
+      final angle = -math.pi / 2 + i * math.pi * 2 / 96;
+      final major = i % 12 == 0;
+      tickPaint.strokeWidth = major ? 1.2 : 0.65;
+      final outer = radius * 0.96;
+      final inner = radius * (major ? 0.83 : 0.88);
+      canvas.drawLine(
+        center + Offset(math.cos(angle), math.sin(angle)) * inner,
+        center + Offset(math.cos(angle), math.sin(angle)) * outer,
+        tickPaint,
+      );
+    }
+
+    final sweepPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = radius * 0.08
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        colors: [
+          Colors.transparent,
+          TraceColors.cyan.withOpacity(0.18),
+          TraceColors.cyanSoft.withOpacity(0.45),
+          Colors.transparent,
+        ],
+        stops: const [0, 0.18, 0.32, 0.55],
+      ).createShader(Rect.fromCircle(center: center, radius: radius * 0.74));
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.72),
+      -math.pi * 0.98,
+      math.pi * 1.42,
+      false,
+      sweepPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DeviceCoreDialPainter oldDelegate) => false;
 }

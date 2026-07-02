@@ -16,7 +16,7 @@ class TraceColors {
 }
 
 class TraceTheme {
-  static const double bottomNavHeight = 92;
+  static const double bottomNavHeight = 104;
 
   static const pageGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -56,6 +56,19 @@ class TraceAtmospherePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final washPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0x2207A99F),
+          Colors.transparent,
+          Color(0x66000105),
+        ],
+        stops: [0, 0.52, 1],
+      ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, washPaint);
+
     final gridPaint = Paint()
       ..color = TraceColors.cyan.withOpacity(0.022)
       ..strokeWidth = 1;
@@ -132,6 +145,22 @@ class TraceAtmospherePainter extends CustomPainter {
       Offset(size.width * 1.12, size.height * 0.78),
       size.width * 0.58,
       arcPaint,
+    );
+
+    final topLinePaint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.transparent,
+          TraceColors.cyan.withOpacity(0.18),
+          Colors.transparent,
+        ],
+      ).createShader(
+        Rect.fromLTWH(0, size.height * 0.12, size.width, 1),
+      );
+    canvas.drawLine(
+      Offset(size.width * 0.08, size.height * 0.12),
+      Offset(size.width * 0.92, size.height * 0.12),
+      topLinePaint,
     );
   }
 
@@ -212,59 +241,84 @@ class TraceGlowNode extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Material(
-            color: Colors.transparent,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onTap,
-              child: Ink(
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      color.withOpacity(0.16),
-                      const Color(0xFF07202B).withOpacity(0.95),
-                      const Color(0xFF041219).withOpacity(0.98),
-                    ],
-                    stops: const [0, 0.55, 1],
-                  ),
-                  border: Border.all(color: color.withOpacity(0.6), width: 1.1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: color.withOpacity(0.32),
-                      blurRadius: 22,
-                      spreadRadius: -2,
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.4),
-                      blurRadius: 18,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Container(
-                  margin: EdgeInsets.all(size * 0.075),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: color.withOpacity(0.22)),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: color,
-                    size: size * 0.36,
-                    shadows: [
-                      Shadow(color: color.withOpacity(0.9), blurRadius: 14),
-                    ],
+          SizedBox(
+            width: size * 1.36,
+            height: size * 1.36,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _TraceNodeRingsPainter(color: color),
                   ),
                 ),
-              ),
+                Material(
+                  color: Colors.transparent,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onTap,
+                    child: Ink(
+                      width: size,
+                      height: size,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            color.withOpacity(0.2),
+                            const Color(0xFF092934).withOpacity(0.97),
+                            const Color(0xFF030E15).withOpacity(0.99),
+                          ],
+                          stops: const [0, 0.58, 1],
+                        ),
+                        border: Border.all(
+                          color: color.withOpacity(0.74),
+                          width: 1.3,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withOpacity(0.38),
+                            blurRadius: 24,
+                            spreadRadius: -2,
+                          ),
+                          BoxShadow(
+                            color: color.withOpacity(0.14),
+                            blurRadius: 44,
+                            spreadRadius: -8,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.48),
+                            blurRadius: 18,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Container(
+                        margin: EdgeInsets.all(size * 0.08),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: color.withOpacity(0.26)),
+                        ),
+                        child: Icon(
+                          icon,
+                          color: TraceColors.cyanSoft,
+                          size: size * 0.38,
+                          shadows: [
+                            Shadow(
+                              color: color.withOpacity(0.92),
+                              blurRadius: 16,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           if (label != null) ...[
-            SizedBox(height: size * 0.13),
+            SizedBox(height: size * 0.03),
             SizedBox(
               width: textWidth,
               child: Text(
@@ -274,8 +328,8 @@ class TraceGlowNode extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: TraceColors.text,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
@@ -301,6 +355,60 @@ class TraceGlowNode extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _TraceNodeRingsPainter extends CustomPainter {
+  const _TraceNodeRingsPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2;
+    final ringPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = color.withOpacity(0.24);
+
+    canvas.drawCircle(center, radius * 0.47, ringPaint);
+    canvas.drawCircle(
+      center,
+      radius * 0.67,
+      ringPaint..color = color.withOpacity(0.18),
+    );
+    canvas.drawCircle(
+      center,
+      radius * 0.9,
+      ringPaint..color = color.withOpacity(0.12),
+    );
+
+    final tickPaint = Paint()
+      ..strokeWidth = 0.8
+      ..strokeCap = StrokeCap.round
+      ..color = color.withOpacity(0.32);
+
+    for (var i = 0; i < 36; i++) {
+      final angle = -math.pi / 2 + i * math.pi * 2 / 36;
+      final major = i % 6 == 0;
+      final outer = radius * 0.86;
+      final inner = radius * (major ? 0.76 : 0.81);
+      final start = center + Offset(math.cos(angle), math.sin(angle)) * inner;
+      final end = center + Offset(math.cos(angle), math.sin(angle)) * outer;
+      canvas.drawLine(start, end, tickPaint);
+    }
+
+    final dotPaint = Paint()..color = color.withOpacity(0.75);
+    for (final angle in const [0.0, math.pi / 2, math.pi, math.pi * 1.5]) {
+      final position = center + Offset(math.cos(angle), math.sin(angle)) * radius * 0.88;
+      canvas.drawCircle(position, 2, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TraceNodeRingsPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 

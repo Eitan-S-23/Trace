@@ -49,9 +49,9 @@ class _MainAppPageState extends State<MainAppPage> {
             children: _pages,
           ),
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 10,
+            left: 22,
+            right: 22,
+            bottom: 12,
             child: SafeArea(
               top: false,
               child: _TraceBottomNavigation(
@@ -97,22 +97,22 @@ class _TraceBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 74,
-      padding: const EdgeInsets.all(8),
+      height: 86,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF031018).withOpacity(0.92),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: TraceColors.cyan.withOpacity(0.18)),
+        color: const Color(0xFF020B12).withOpacity(0.9),
+        borderRadius: BorderRadius.circular(44),
+        border: Border.all(color: TraceColors.cyan.withOpacity(0.28)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.42),
-            blurRadius: 30,
-            offset: const Offset(0, 16),
+            color: Colors.black.withOpacity(0.56),
+            blurRadius: 34,
+            offset: const Offset(0, 18),
           ),
           BoxShadow(
-            color: TraceColors.cyan.withOpacity(0.16),
-            blurRadius: 30,
-            spreadRadius: -8,
+            color: TraceColors.cyan.withOpacity(0.22),
+            blurRadius: 34,
+            spreadRadius: -10,
           ),
         ],
       ),
@@ -123,65 +123,109 @@ class _TraceBottomNavigation extends StatelessWidget {
           final color = selected ? TraceColors.cyan : TraceColors.muted;
 
           return Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => onChanged(index),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    height: 58,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? TraceColors.cyan.withOpacity(0.16)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: selected
-                            ? TraceColors.cyan.withOpacity(0.38)
-                            : Colors.transparent,
-                      ),
-                      boxShadow: selected
-                          ? [
-                              BoxShadow(
-                                color: TraceColors.cyan.withOpacity(0.3),
-                                blurRadius: 18,
-                                spreadRadius: -6,
-                              ),
-                            ]
-                          : const [],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          selected ? item.activeIcon : item.icon,
-                          color: color,
-                          size: selected ? 22 : 21,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(30),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(30),
+                      onTap: () => onChanged(index),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        height: 68,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? TraceColors.cyan.withOpacity(0.07)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: selected
+                              ? [
+                                  BoxShadow(
+                                    color: TraceColors.cyan.withOpacity(0.24),
+                                    blurRadius: 24,
+                                    spreadRadius: -8,
+                                  ),
+                                ]
+                              : const [],
                         ),
-                        const SizedBox(width: 7),
-                        Flexible(
-                          child: Text(
-                            item.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: selected ? TraceColors.text : TraceColors.muted,
-                              fontSize: 13,
-                              fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              selected ? item.activeIcon : item.icon,
+                              color: color,
+                              size: selected ? 27 : 25,
+                              shadows: selected
+                                  ? [
+                                      Shadow(
+                                        color:
+                                            TraceColors.cyan.withOpacity(0.85),
+                                        blurRadius: 14,
+                                      ),
+                                    ]
+                                  : const [],
                             ),
-                          ),
+                            const SizedBox(height: 5),
+                            Text(
+                              item.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: selected
+                                    ? TraceColors.cyanSoft
+                                    : TraceColors.muted,
+                                fontSize: 14,
+                                height: 1,
+                                fontWeight: selected
+                                    ? FontWeight.w900
+                                    : FontWeight.w700,
+                                shadows: selected
+                                    ? [
+                                        Shadow(
+                                          color: TraceColors.cyan
+                                              .withOpacity(0.75),
+                                          blurRadius: 12,
+                                        ),
+                                      ]
+                                    : const [],
+                              ),
+                            ),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 220),
+                              margin: const EdgeInsets.only(top: 6),
+                              width: selected ? 40 : 0,
+                              height: 2,
+                              decoration: BoxDecoration(
+                                color: TraceColors.cyan,
+                                borderRadius: BorderRadius.circular(2),
+                                boxShadow: selected
+                                    ? [
+                                        BoxShadow(
+                                          color: TraceColors.cyan
+                                              .withOpacity(0.9),
+                                          blurRadius: 8,
+                                        ),
+                                      ]
+                                    : const [],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+                if (index != items.length - 1)
+                  Container(
+                    width: 1,
+                    height: 32,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    color: TraceColors.cyan.withOpacity(0.14),
+                  ),
+              ],
             ),
           );
         }),
