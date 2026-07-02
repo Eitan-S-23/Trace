@@ -52,8 +52,8 @@ export async function publishRelease(env: WorkerEnv, input: PublishInput): Promi
 
   await ensureAndroidCompleteness(env, target);
 
-  const beforeJson = canonicalJson(channel);
-  const afterJson = canonicalJson({ ...channel, current_release_id: target.id });
+  const beforeJson = canonicalJson(channelSnapshot(channel));
+  const afterJson = canonicalJson(channelSnapshot(channel, target.id));
   const updatedChannel = await env.DB.prepare(
     `
       UPDATE channels
@@ -210,4 +210,22 @@ async function ensureAndroidCompleteness(env: WorkerEnv, release: ReleaseRow): P
   if (!apk) {
     throw new ApiError("BACKEND_UNAVAILABLE", "Android release is missing an APK asset", 503);
   }
+}
+
+function channelSnapshot(
+  channel: ChannelRow,
+  currentReleaseId = channel.current_release_id
+): Record<string, unknown> {
+  return {
+    id: channel.id,
+    app_id: channel.app_id,
+    platform: channel.platform,
+    name: channel.name,
+    current_release_id: currentReleaseId,
+    revision: channel.revision,
+    disable_latest: channel.disable_latest,
+    disable_downloads: channel.disable_downloads,
+    maintenance_admin_only: channel.maintenance_admin_only,
+    maintenance_message: channel.maintenance_message
+  };
 }

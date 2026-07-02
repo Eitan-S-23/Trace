@@ -50,6 +50,46 @@ describe("Phase 1 update-service invariants", () => {
     expect(await historyCount(channelId)).toBe(1);
   });
 
+  it("keeps channel audit snapshots bounded across repeated publishes", async () => {
+    const appId = appIdFor("snapshot");
+    const current = await seedRelease(appId, 110, "v1.1.0");
+    const target = await seedRelease(appId, 111, "v1.1.1");
+    const channelId = await seedChannel(appId, current.releaseId, 0);
+    const oversizedSnapshot = JSON.stringify({
+      last_before_json: "x".repeat(20_000),
+      last_after_json: "y".repeat(20_000)
+    });
+
+    await env.DB.prepare(
+      "UPDATE channels SET last_before_json = ?, last_after_json = ? WHERE id = ?"
+    )
+      .bind(oversizedSnapshot, oversizedSnapshot, channelId)
+      .run();
+
+    const result = await publishRelease(env, {
+      appId,
+      platform: "android",
+      channel: "stable",
+      releaseId: target.releaseId,
+      expectedRevision: 0,
+      rollback: false,
+      actor: "tester@example.com",
+      actorType: "test",
+      requestId: `${appId}-publish`
+    });
+
+    expect(result).toEqual({ ok: true });
+    const row = await env.DB.prepare(
+      "SELECT last_before_json, last_after_json FROM channels WHERE id = ?"
+    )
+      .bind(channelId)
+      .first<{ last_before_json: string; last_after_json: string }>();
+    expect(row?.last_before_json.length).toBeLessThan(1000);
+    expect(row?.last_after_json.length).toBeLessThan(1000);
+    expect(JSON.parse(row?.last_before_json ?? "{}")).not.toHaveProperty("last_before_json");
+    expect(JSON.parse(row?.last_after_json ?? "{}")).not.toHaveProperty("last_after_json");
+  });
+
   it("keeps disabled releases invisible and not downloadable", async () => {
     const appId = appIdFor("disabled");
     await seedApp(appId);

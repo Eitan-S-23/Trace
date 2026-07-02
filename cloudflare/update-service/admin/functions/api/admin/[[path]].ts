@@ -550,8 +550,8 @@ async function publishRelease(
     await ensureAndroidCompleteness(env, releaseId);
   }
 
-  const beforeJson = canonicalJson(channel);
-  const afterJson = canonicalJson({ ...channel, current_release_id: releaseId });
+  const beforeJson = canonicalJson(channelSnapshot(channel));
+  const afterJson = canonicalJson(channelSnapshot(channel, releaseId));
   const updatedChannel = await env.DB.prepare(
     `
       UPDATE channels
@@ -632,8 +632,8 @@ async function publishFirmwareRelease(
     }
   }
 
-  const beforeJson = canonicalJson(channel);
-  const afterJson = canonicalJson({ ...channel, current_release_id: releaseId });
+  const beforeJson = canonicalJson(firmwareChannelSnapshot(channel));
+  const afterJson = canonicalJson(firmwareChannelSnapshot(channel, releaseId));
   const updatedChannel = await env.DB.prepare(
     `
       UPDATE firmware_channels
@@ -1302,6 +1302,41 @@ function assetTypeForR2Key(key: string): string {
   if (key.includes("/android/")) return "apk";
   if (key.includes("/windows/")) return "windows";
   return "other";
+}
+
+function channelSnapshot(
+  channel: ChannelRow,
+  currentReleaseId = channel.current_release_id
+): Record<string, unknown> {
+  return {
+    id: channel.id,
+    app_id: channel.app_id,
+    platform: channel.platform,
+    name: channel.name,
+    current_release_id: currentReleaseId,
+    revision: channel.revision,
+    disable_latest: channel.disable_latest,
+    disable_downloads: channel.disable_downloads,
+    maintenance_admin_only: channel.maintenance_admin_only,
+    maintenance_message: channel.maintenance_message
+  };
+}
+
+function firmwareChannelSnapshot(
+  channel: FirmwareChannelRow,
+  currentReleaseId = channel.current_release_id
+): Record<string, unknown> {
+  return {
+    id: channel.id,
+    app_id: channel.app_id,
+    device_model: channel.device_model,
+    name: channel.name,
+    current_release_id: currentReleaseId,
+    revision: channel.revision,
+    disable_latest: channel.disable_latest,
+    disable_downloads: channel.disable_downloads,
+    maintenance_message: channel.maintenance_message
+  };
 }
 
 function canonicalJson(value: unknown): string {
