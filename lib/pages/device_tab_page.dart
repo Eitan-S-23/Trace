@@ -326,11 +326,11 @@ class _DeviceNodeLabel extends StatelessWidget {
 /// 舞台几何：核心、四个对角卫星和外侧标签共用的一套坐标
 class _DeviceStageGeometry {
   _DeviceStageGeometry(this.width)
-      : height = width * 1.2,
+      : height = width * 1.34,
         coreSize = width * 0.48,
         nodeSize = width * 0.19,
         orbitRadius = width * 0.445,
-        core = Offset(width / 2, width * 1.2 * 0.51) {
+        core = Offset(width / 2, width * 1.34 * 0.49) {
     const diagonal = math.pi / 4;
     final offsets = [
       Offset(-math.cos(diagonal), -math.sin(diagonal)), // 左上
@@ -343,10 +343,9 @@ class _DeviceStageGeometry {
         .toList(growable: false);
 
     final gutter = width * 0.02;
-    final coreLeft = core.dx - coreSize / 2;
-    final coreRight = core.dx + coreSize / 2;
-    final sideWidth = math.max(width * 0.22, coreLeft - gutter * 2);
-    final topY = satellites[0].dy + nodeSize * 0.58;
+    final sideWidth = width * 0.31;
+    final rightLabelLeft = width - sideWidth - gutter;
+    final topY = satellites[0].dy + nodeSize * 0.7;
     final bottomY = satellites[2].dy + nodeSize * 0.74;
 
     labels = [
@@ -357,9 +356,9 @@ class _DeviceStageGeometry {
         alignment: TextAlign.left,
       ),
       _DeviceLabelGeometry(
-        left: coreRight + gutter,
+        left: rightLabelLeft,
         top: topY,
-        width: width - coreRight - gutter * 2,
+        width: sideWidth,
         alignment: TextAlign.right,
       ),
       _DeviceLabelGeometry(
@@ -369,9 +368,9 @@ class _DeviceStageGeometry {
         alignment: TextAlign.left,
       ),
       _DeviceLabelGeometry(
-        left: coreRight + gutter,
+        left: rightLabelLeft,
         top: bottomY,
-        width: width - coreRight - gutter * 2,
+        width: sideWidth,
         alignment: TextAlign.right,
       ),
     ];

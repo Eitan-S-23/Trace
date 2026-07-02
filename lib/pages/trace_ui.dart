@@ -32,12 +32,21 @@ class TraceTheme {
 }
 
 class TracePageScaffold extends StatelessWidget {
-  const TracePageScaffold({super.key, required this.child});
+  const TracePageScaffold({
+    super.key,
+    required this.child,
+    this.paintBackground = true,
+  });
 
   final Widget child;
+  final bool paintBackground;
 
   @override
   Widget build(BuildContext context) {
+    if (!paintBackground) {
+      return child;
+    }
+
     return Container(
       decoration: const BoxDecoration(gradient: TraceTheme.pageGradient),
       child: Stack(
