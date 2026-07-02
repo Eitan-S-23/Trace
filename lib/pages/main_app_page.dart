@@ -101,7 +101,7 @@ class _TraceBottomNavigation extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: const Color(0xFF031018).withOpacity(0.92),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(26),
         border: Border.all(color: TraceColors.cyan.withOpacity(0.18)),
         boxShadow: [
           BoxShadow(
@@ -127,9 +127,9 @@ class _TraceBottomNavigation extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Material(
                 color: Colors.transparent,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(20),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(20),
                   onTap: () => onChanged(index),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 220),
@@ -140,12 +140,21 @@ class _TraceBottomNavigation extends StatelessWidget {
                       color: selected
                           ? TraceColors.cyan.withOpacity(0.16)
                           : Colors.transparent,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: selected
                             ? TraceColors.cyan.withOpacity(0.38)
                             : Colors.transparent,
                       ),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: TraceColors.cyan.withOpacity(0.3),
+                                blurRadius: 18,
+                                spreadRadius: -6,
+                              ),
+                            ]
+                          : const [],
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,

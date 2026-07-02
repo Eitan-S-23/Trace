@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,122 +32,90 @@ class ProfileTabPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actions = _buildOrbitActions();
-
     return TracePageScaffold(
       child: SafeArea(
         bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final stageWidth = math.min(constraints.maxWidth - 42, 392.0);
-            final compact = constraints.maxHeight < 720;
-
-            return SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                22,
-                compact ? 18 : 24,
-                22,
-                TraceTheme.bottomNavHeight + 28,
-              ),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: math.max(
-                    0,
-                    constraints.maxHeight - TraceTheme.bottomNavHeight - 28,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            18,
+            18,
+            18,
+            TraceTheme.bottomNavHeight + 24,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '我的',
+                    style: TextStyle(
+                      color: TraceColors.text,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
+                      shadows: [
+                        Shadow(color: Color(0x6624F6DE), blurRadius: 18),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  const _ProfileAvatar(),
+                ],
+              ).animate().fadeIn(duration: 420.ms).slideY(begin: 0.14, end: 0),
+              const SizedBox(height: 22),
+              _ProfilePanel(
+                versionHeader: _buildVersionText(
+                  style: const TextStyle(
+                    color: TraceColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
                   ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const TracePageTitle(
-                      eyebrow: 'PROFILE CONSOLE',
-                      title: '我的',
-                      subtitle: '数据、更新、设置、帮助和关于集中在圆形控制台内',
-                      trailing: TracePill(
-                        icon: Icons.person,
-                        label: 'USER',
-                      ),
-                    ).animate().fadeIn(duration: 420.ms).slideY(begin: 0.14, end: 0),
-                    SizedBox(height: compact ? 16 : 24),
-                    Center(
-                      child: SizedBox(
-                        width: stageWidth,
-                        child: TraceRadialConsole(
-                          centerTitle: '我的中心',
-                          centerSubtitle: 'LOCAL USER',
-                          centerIcon: Icons.person,
-                          badgeLabel: 'PROFILE',
-                          footerLabel: 'SERVICE',
-                          primaryColor: TraceColors.cyan,
-                          actions: actions,
-                        ),
-                      ),
-                    )
-                        .animate(delay: 110.ms)
-                        .fadeIn(duration: 520.ms)
-                        .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-                    SizedBox(height: compact ? 18 : 26),
-                    Center(
-                      child: _buildVersionText(
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: TraceColors.muted.withOpacity(0.72),
-                          height: 1.6,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
+                actions: _buildActions(),
+              )
+                  .animate(delay: 100.ms)
+                  .fadeIn(duration: 520.ms)
+                  .slideY(begin: 0.08, end: 0),
+              const SizedBox(height: 24),
+              const _ProfileFooter()
+                  .animate(delay: 220.ms)
+                  .fadeIn(duration: 480.ms),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  List<TraceOrbitAction> _buildOrbitActions() {
+  List<_ProfileAction> _buildActions() {
     return [
-      TraceOrbitAction(
-        title: '数据',
-        subtitle: '查看设备数据统计',
-        code: '01',
-        icon: Icons.storage,
-        color: TraceColors.cyan,
+      _ProfileAction(
+        label: '数据统计',
+        icon: Icons.bar_chart,
         onTap: _showDataStatistics,
       ),
-      TraceOrbitAction(
-        title: '更新',
-        subtitle: '检查应用更新',
-        code: '02',
-        icon: Icons.system_update_alt,
-        color: TraceColors.cyanSoft,
-        onTap: _checkForUpdates,
-      ),
-      TraceOrbitAction(
-        title: '设置',
-        subtitle: '个性化选项',
-        code: '03',
+      _ProfileAction(
+        label: '应用设置',
         icon: Icons.settings,
-        color: TraceColors.mint,
         onTap: _showSettingsDialog,
       ),
-      TraceOrbitAction(
-        title: '帮助',
-        subtitle: '查看使用帮助',
-        code: '04',
-        icon: Icons.help_outline,
-        color: TraceColors.amber,
+      _ProfileAction(
+        label: '检查更新',
+        icon: Icons.autorenew,
+        onTap: _checkForUpdates,
+      ),
+      _ProfileAction(
+        label: '帮助与反馈',
+        icon: Icons.chat_bubble_outline,
         onTap: _showHelpDialog,
       ),
-      TraceOrbitAction(
-        title: '关于',
-        subtitle: '版本与应用信息',
-        code: '05',
+      _ProfileAction(
+        label: '关于应用',
         icon: Icons.info_outline,
-        color: TraceColors.rose,
         onTap: _showAboutDialog,
       ),
     ];
@@ -202,7 +169,7 @@ class ProfileTabPage extends StatelessWidget {
       _showTraceDialog(
         TraceDialog(
           title: '数据统计',
-          icon: Icons.storage,
+          icon: Icons.bar_chart,
           color: TraceColors.cyan,
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -245,8 +212,8 @@ class ProfileTabPage extends StatelessWidget {
   void _showHelpDialog() {
     _showTraceDialog(
       TraceDialog(
-        title: '使用帮助',
-        icon: Icons.help_outline,
+        title: '帮助与反馈',
+        icon: Icons.chat_bubble_outline,
         color: TraceColors.amber,
         content: const Column(
           mainAxisSize: MainAxisSize.min,
@@ -318,6 +285,259 @@ class ProfileTabPage extends StatelessWidget {
     Get.dialog<void>(
       dialog,
       barrierColor: Colors.black.withOpacity(0.62),
+    );
+  }
+}
+
+class _ProfileAction {
+  const _ProfileAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+}
+
+/// 右上角发光头像与身份标签
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                TraceColors.cyan.withOpacity(0.22),
+                const Color(0xFF06202A).withOpacity(0.95),
+              ],
+            ),
+            border: Border.all(color: TraceColors.cyan.withOpacity(0.85), width: 1.6),
+            boxShadow: [
+              BoxShadow(
+                color: TraceColors.cyan.withOpacity(0.45),
+                blurRadius: 24,
+                spreadRadius: -2,
+              ),
+            ],
+          ),
+          child: Container(
+            margin: const EdgeInsets.all(5),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: TraceColors.cyan.withOpacity(0.25)),
+            ),
+            child: const Icon(Icons.person, color: TraceColors.cyan, size: 30),
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          '智能设备用户',
+          style: TextStyle(
+            color: TraceColors.text,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 中央功能面板：版本头 + 2+3 圆形功能网格
+class _ProfilePanel extends StatelessWidget {
+  const _ProfilePanel({
+    required this.versionHeader,
+    required this.actions,
+  }) : assert(actions.length == 5);
+
+  final Widget versionHeader;
+  final List<_ProfileAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 26),
+          decoration: BoxDecoration(
+            color: const Color(0xFF071B25).withOpacity(0.78),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: TraceColors.cyan.withOpacity(0.26)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 30,
+                offset: const Offset(0, 16),
+              ),
+              BoxShadow(
+                color: TraceColors.cyan.withOpacity(0.12),
+                blurRadius: 34,
+                spreadRadius: -10,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 3.5,
+                    height: 15,
+                    decoration: BoxDecoration(
+                      color: TraceColors.cyan,
+                      borderRadius: BorderRadius.circular(2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: TraceColors.cyan.withOpacity(0.7),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(child: versionHeader),
+                ],
+              ),
+              const SizedBox(height: 26),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final action in actions.sublist(0, 2))
+                    TraceGlowNode(
+                      size: 88,
+                      icon: action.icon,
+                      label: action.label,
+                      labelWidth: 110,
+                      onTap: action.onTap,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final action in actions.sublist(2))
+                    TraceGlowNode(
+                      size: 72,
+                      icon: action.icon,
+                      label: action.label,
+                      labelWidth: 92,
+                      onTap: action.onTap,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // 面板顶部中央发光饰线
+        Positioned(
+          top: -1,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              width: 130,
+              height: 2.4,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    TraceColors.cyan.withOpacity(0.9),
+                    Colors.transparent,
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: TraceColors.cyan.withOpacity(0.55),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 面板下方标语与装饰
+class _ProfileFooter extends StatelessWidget {
+  const _ProfileFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildFadeLine(reverse: false)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'BLE Monitor 智能设备管理助手',
+                style: TextStyle(
+                  color: TraceColors.muted.withOpacity(0.85),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            Expanded(child: _buildFadeLine(reverse: true)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final opacity in [0.25, 0.8, 0.25])
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Container(
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: TraceColors.cyan.withOpacity(opacity),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFadeLine({required bool reverse}) {
+    return Container(
+      height: 1,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: reverse ? Alignment.centerRight : Alignment.centerLeft,
+          end: reverse ? Alignment.centerLeft : Alignment.centerRight,
+          colors: [
+            Colors.transparent,
+            TraceColors.cyan.withOpacity(0.45),
+          ],
+        ),
+      ),
     );
   }
 }
