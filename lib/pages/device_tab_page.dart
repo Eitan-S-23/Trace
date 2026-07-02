@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
@@ -7,6 +9,12 @@ import 'power_meter_page.dart';
 import 'remote_control_page.dart';
 import 'speedometer_page.dart';
 import 'trace_ui.dart';
+
+class DeviceOrbitInteractionNotification extends Notification {
+  const DeviceOrbitInteractionNotification(this.active);
+
+  final bool active;
+}
 
 class DeviceTabPage extends StatelessWidget {
   const DeviceTabPage({super.key});
@@ -148,10 +156,13 @@ class _DeviceStage extends StatefulWidget {
 class _DeviceStageState extends State<_DeviceStage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _settleController;
+  late final AudioPlayer _gearPlayer;
   Animation<double>? _settleAnimation;
   double _rotation = 0;
   double _dragStartAngle = 0;
   double _dragStartRotation = 0;
+  int? _activePointer;
+  bool _gearSoundActive = false;
 
   @override
   void initState() {
@@ -163,12 +174,21 @@ class _DeviceStageState extends State<_DeviceStage>
         final animation = _settleAnimation;
         if (animation == null) return;
         setState(() => _rotation = animation.value);
+      })
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          _stopGearSound();
+        }
       });
+    _gearPlayer = AudioPlayer(playerId: 'device-orbit-gear');
+    unawaited(_gearPlayer.setReleaseMode(ReleaseMode.loop));
+    unawaited(_gearPlayer.setPlayerMode(PlayerMode.lowLatency));
   }
 
   @override
   void dispose() {
     _settleController.dispose();
+    unawaited(_gearPlayer.dispose());
     super.dispose();
   }
 
@@ -176,6 +196,7 @@ class _DeviceStageState extends State<_DeviceStage>
   Widget build(BuildContext context) {
     final geometry = _DeviceStageGeometry(widget.width, rotation: _rotation);
     final actions = _buildActions();
+    final coreTouchSize = geometry.coreSize * 1.18;
 
     return SizedBox(
       width: geometry.width,
@@ -209,21 +230,26 @@ class _DeviceStageState extends State<_DeviceStage>
               ),
             ),
           Positioned(
-            left: geometry.core.dx - geometry.coreSize / 2,
-            top: geometry.core.dy - geometry.coreSize / 2,
-            child: GestureDetector(
+            left: geometry.core.dx - coreTouchSize / 2,
+            top: geometry.core.dy - coreTouchSize / 2,
+            child: Listener(
               behavior: HitTestBehavior.opaque,
-              onPanStart: (details) => _startRotation(
-                details.localPosition,
-                geometry.coreSize,
+              onPointerDown: (event) => _startRotation(
+                event.pointer,
+                event.localPosition,
+                coreTouchSize,
               ),
-              onPanUpdate: (details) => _updateRotation(
-                details.localPosition,
-                geometry.coreSize,
+              onPointerMove: (event) => _updateRotation(
+                event.pointer,
+                event.localPosition,
+                coreTouchSize,
               ),
-              onPanEnd: (_) => _settleRotation(),
-              onPanCancel: _settleRotation,
-              child: _DeviceCore(size: geometry.coreSize),
+              onPointerUp: (event) => _finishRotation(event.pointer),
+              onPointerCancel: (event) => _finishRotation(event.pointer),
+              child: SizedBox.square(
+                dimension: coreTouchSize,
+                child: Center(child: _DeviceCore(size: geometry.coreSize)),
+              ),
             ),
           ),
         ],
@@ -231,16 +257,28 @@ class _DeviceStageState extends State<_DeviceStage>
     );
   }
 
-  void _startRotation(Offset localPosition, double size) {
+  void _startRotation(int pointer, Offset localPosition, double size) {
+    if (_activePointer != null) return;
+    _activePointer = pointer;
     _settleController.stop();
     _dragStartAngle = _angleFromCorePosition(localPosition, size);
     _dragStartRotation = _rotation;
+    _notifyOrbitInteraction(active: true);
+    _startGearSound();
   }
 
-  void _updateRotation(Offset localPosition, double size) {
+  void _updateRotation(int pointer, Offset localPosition, double size) {
+    if (_activePointer != pointer) return;
     final currentAngle = _angleFromCorePosition(localPosition, size);
     final delta = _normalizeAngle(currentAngle - _dragStartAngle);
     setState(() => _rotation = _dragStartRotation + delta);
+  }
+
+  void _finishRotation(int pointer) {
+    if (_activePointer != pointer) return;
+    _activePointer = null;
+    _notifyOrbitInteraction(active: false);
+    _settleRotation();
   }
 
   void _settleRotation() {
@@ -250,6 +288,41 @@ class _DeviceStageState extends State<_DeviceStage>
       CurvedAnimation(parent: _settleController, curve: Curves.easeOutCubic),
     );
     _settleController.forward(from: 0);
+  }
+
+  void _notifyOrbitInteraction({required bool active}) {
+    DeviceOrbitInteractionNotification(active).dispatch(context);
+  }
+
+  void _startGearSound() {
+    if (_gearSoundActive) return;
+    _gearSoundActive = true;
+    unawaited(_playGearSound());
+  }
+
+  void _stopGearSound() {
+    if (!_gearSoundActive) return;
+    _gearSoundActive = false;
+    unawaited(_stopGearSoundSafely());
+  }
+
+  Future<void> _playGearSound() async {
+    try {
+      await _gearPlayer.play(
+        AssetSource('audio/gear_rotate.wav'),
+        volume: 0.42,
+      );
+    } catch (_) {
+      _gearSoundActive = false;
+    }
+  }
+
+  Future<void> _stopGearSoundSafely() async {
+    try {
+      await _gearPlayer.stop();
+    } catch (_) {
+      // Audio feedback is non-critical; rotation must remain responsive.
+    }
   }
 
   double _angleFromCorePosition(Offset localPosition, double size) {
@@ -405,16 +478,18 @@ class _DeviceStageGeometry {
     final gutter = width * 0.02;
     final sideWidth = width * 0.31;
     final rightLabelLeft = width - sideWidth - gutter;
-    labels = satellites.map((satellite) {
+    labels = List.generate(satellites.length, (index) {
+      final satellite = satellites[index];
       final isLeft = satellite.dx < core.dx;
       final isTop = satellite.dy < core.dy;
+      final requestedOffset = index < 2 ? 9.0 : -9.0;
       return _DeviceLabelGeometry(
         left: isLeft ? gutter : rightLabelLeft,
-        top: satellite.dy + nodeSize * (isTop ? 0.44 : 0.74),
+        top: satellite.dy + nodeSize * (isTop ? 0.44 : 0.74) + requestedOffset,
         width: sideWidth,
         alignment: isLeft ? TextAlign.left : TextAlign.right,
       );
-    }).toList(growable: false);
+    }, growable: false);
   }
 
   final double width;

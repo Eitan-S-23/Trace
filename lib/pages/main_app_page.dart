@@ -13,6 +13,7 @@ class MainAppPage extends StatefulWidget {
 
 class _MainAppPageState extends State<MainAppPage> {
   int _selectedIndex = 0;
+  bool _deviceOrbitActive = false;
   late final PageController _pageController;
 
   final List<Widget> _pages = const [
@@ -71,16 +72,28 @@ class _MainAppPageState extends State<MainAppPage> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: PageView(
-                controller: _pageController,
-                physics: const BouncingScrollPhysics(),
-                onPageChanged: (index) {
-                  if (index == _selectedIndex) return;
-                  setState(() {
-                    _selectedIndex = index;
-                  });
+              child: NotificationListener<DeviceOrbitInteractionNotification>(
+                onNotification: (notification) {
+                  if (_deviceOrbitActive != notification.active) {
+                    setState(() {
+                      _deviceOrbitActive = notification.active;
+                    });
+                  }
+                  return false;
                 },
-                children: _pages,
+                child: PageView(
+                  controller: _pageController,
+                  physics: _deviceOrbitActive
+                      ? const NeverScrollableScrollPhysics()
+                      : const BouncingScrollPhysics(),
+                  onPageChanged: (index) {
+                    if (index == _selectedIndex) return;
+                    setState(() {
+                      _selectedIndex = index;
+                    });
+                  },
+                  children: _pages,
+                ),
               ),
             ),
             Positioned(
