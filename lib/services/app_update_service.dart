@@ -132,28 +132,45 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     var cancelledByUser = false;
     final manifestCancelToken = CancelToken();
 
-    void closeCheckingDialog([BuildContext? context]) {
-      if (checkingDialogOpen) {
-        if (context != null) {
-          TraceDialog.close(context);
-        } else if (Get.isDialogOpen == true) {
+    Future<void> closeCheckingDialog({
+      BuildContext? context,
+      bool force = false,
+    }) async {
+      if (!force && !checkingDialogOpen) return;
+
+      if (context != null) {
+        TraceDialog.close(context);
+        checkingDialogOpen = false;
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        return;
+      }
+
+      // Get.dialog is pushed asynchronously. A fast "no update" response can
+      // finish before Get.isDialogOpen flips to true, so wait briefly before
+      // giving up; otherwise the stale checking dialog can appear underneath
+      // the result dialog and its cancel button no longer has useful work.
+      for (var attempt = 0; attempt < 6; attempt++) {
+        if (Get.isDialogOpen == true) {
           final overlayContext = Get.overlayContext;
           if (overlayContext != null) {
-            unawaited(
-              Navigator.of(overlayContext, rootNavigator: true).maybePop(),
-            );
+            await Navigator.of(overlayContext, rootNavigator: true).maybePop();
           } else {
             Get.back<void>();
           }
+          checkingDialogOpen = false;
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+          return;
         }
+        await Future<void>.delayed(const Duration(milliseconds: 16));
       }
+
       checkingDialogOpen = false;
     }
 
     void cancelChecking(BuildContext context) {
       cancelledByUser = true;
       manifestCancelToken.cancel('用户取消检查更新');
-      closeCheckingDialog(context);
+      unawaited(closeCheckingDialog(context: context, force: true));
     }
 
     updateProgress.value = 0;
@@ -161,6 +178,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     if (manual) {
       checkingDialogOpen = true;
       _showCheckingDialog(onCancel: cancelChecking);
+      await Future<void>.delayed(Duration.zero);
     }
 
     try {
@@ -186,7 +204,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       );
 
       if (updateInfo.versionCode <= localInfo.versionCode) {
-        closeCheckingDialog();
+        await closeCheckingDialog();
         if (manual) {
           _showCheckResultDialog(
             title: '已是最新版本',
@@ -203,15 +221,15 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
         oldSha256: localApkSha256,
       );
       if (patch == null) {
-        closeCheckingDialog();
+        await closeCheckingDialog();
         _showNoIncrementalPatchDialog(localInfo, updateInfo);
         return;
       }
 
-      closeCheckingDialog();
+      await closeCheckingDialog();
       _showUpdateDialog(localInfo, updateInfo, patch);
     } on DioException catch (e) {
-      closeCheckingDialog();
+      await closeCheckingDialog();
       if (cancelledByUser || e.type == DioExceptionType.cancel) {
         return;
       }
@@ -219,17 +237,17 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
         _showCheckFailedDialog(_formatDioException(e));
       }
     } on _UpdateException catch (e) {
-      closeCheckingDialog();
+      await closeCheckingDialog();
       if (manual) {
         _showCheckFailedDialog(e.messageWithCode);
       }
     } catch (e) {
-      closeCheckingDialog();
+      await closeCheckingDialog();
       if (manual) {
         _showCheckFailedDialog('$e');
       }
     } finally {
-      closeCheckingDialog();
+      await closeCheckingDialog();
       isChecking.value = false;
     }
   }
