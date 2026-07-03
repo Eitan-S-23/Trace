@@ -105,6 +105,12 @@ android {
             }
         }
     }
+
+    packaging {
+        jniLibs {
+            excludes += setOf("lib/x86_64/**")
+        }
+    }
 }
 
 flutter {
