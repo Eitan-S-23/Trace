@@ -130,55 +130,91 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     isChecking.value = true;
     var checkingDialogOpen = false;
     var cancelledByUser = false;
+    var checkingDialogCloseRequested = false;
+    BuildContext? checkingDialogContext;
+    Future<void>? checkingDialogClosed;
+    final checkingDialogPresented = Completer<void>();
     final manifestCancelToken = CancelToken();
 
-    Future<void> closeCheckingDialog({
-      BuildContext? context,
-      bool force = false,
-    }) async {
-      if (!force && !checkingDialogOpen) return;
+    Future<void> waitForCheckingDialogPresented() async {
+      if (checkingDialogPresented.isCompleted) return;
+      try {
+        await checkingDialogPresented.future.timeout(
+          const Duration(milliseconds: 350),
+        );
+      } on TimeoutException {
+        // A close request before the route is built is handled when the
+        // delayed checking dialog finally appears.
+      }
+    }
 
-      if (context != null) {
-        TraceDialog.close(context);
-        checkingDialogOpen = false;
-        await Future<void>.delayed(const Duration(milliseconds: 80));
+    Future<void> waitForCheckingDialogClosed() async {
+      final dialogClosed = checkingDialogClosed;
+      if (dialogClosed == null) return;
+      try {
+        await dialogClosed.timeout(const Duration(milliseconds: 350));
+      } on TimeoutException {
+        // Do not block result dialogs on a route that has already been asked
+        // to close.
+      }
+    }
+
+    void markCheckingDialogPresented(BuildContext context) {
+      checkingDialogContext = context;
+      if (!checkingDialogPresented.isCompleted) {
+        checkingDialogPresented.complete();
+      }
+      if (!checkingDialogCloseRequested) return;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _closeDialogRouteForContext(context);
+      });
+    }
+
+    Future<void> closeCheckingDialog({bool force = false}) async {
+      if (!force && !checkingDialogOpen && checkingDialogContext == null) {
         return;
       }
 
-      // Get.dialog is pushed asynchronously. A fast "no update" response can
-      // finish before Get.isDialogOpen flips to true, so wait briefly before
-      // giving up; otherwise the stale checking dialog can appear underneath
-      // the result dialog and its cancel button no longer has useful work.
-      for (var attempt = 0; attempt < 6; attempt++) {
-        if (Get.isDialogOpen == true) {
-          final overlayContext = Get.overlayContext;
-          if (overlayContext != null) {
-            await Navigator.of(overlayContext, rootNavigator: true).maybePop();
-          } else {
-            Get.back<void>();
-          }
-          checkingDialogOpen = false;
-          await Future<void>.delayed(const Duration(milliseconds: 80));
-          return;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 16));
+      checkingDialogCloseRequested = true;
+      await waitForCheckingDialogPresented();
+
+      final context = checkingDialogContext;
+      if (context != null) {
+        _closeDialogRouteForContext(context);
+      } else if (Get.isDialogOpen == true) {
+        Get.back<void>();
       }
 
       checkingDialogOpen = false;
+      checkingDialogContext = null;
+      await waitForCheckingDialogClosed();
     }
 
     void cancelChecking(BuildContext context) {
       cancelledByUser = true;
+      checkingDialogCloseRequested = true;
       manifestCancelToken.cancel('用户取消检查更新');
-      unawaited(closeCheckingDialog(context: context, force: true));
+      _closeDialogRouteForContext(context);
+      checkingDialogOpen = false;
+      checkingDialogContext = null;
     }
 
     updateProgress.value = 0;
     updateStatus.value = '正在检查更新...';
     if (manual) {
       checkingDialogOpen = true;
-      _showCheckingDialog(onCancel: cancelChecking);
-      await Future<void>.delayed(Duration.zero);
+      checkingDialogClosed = _showCheckingDialog(
+        onCancel: cancelChecking,
+        onPresented: markCheckingDialogPresented,
+      ).whenComplete(() {
+        checkingDialogOpen = false;
+        checkingDialogContext = null;
+        if (!checkingDialogPresented.isCompleted) {
+          checkingDialogPresented.complete();
+        }
+      });
+      await waitForCheckingDialogPresented();
     }
 
     try {
@@ -643,15 +679,36 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     return uri.replace(queryParameters: queryParameters).toString();
   }
 
-  void _showTraceUpdateDialog(
+  Future<T?> _showTraceUpdateDialog<T>(
     Widget dialog, {
     bool barrierDismissible = true,
   }) {
-    Get.dialog<void>(
+    return Get.dialog<T>(
       dialog,
       barrierDismissible: barrierDismissible,
       barrierColor: Colors.black.withOpacity(0.62),
     );
+  }
+
+  void _closeDialogRouteForContext(BuildContext context) {
+    if (!context.mounted) return;
+
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final route = ModalRoute.of(context);
+    if (route != null && route.isActive) {
+      if (route.isCurrent) {
+        if (navigator.canPop()) {
+          navigator.pop();
+        }
+      } else {
+        navigator.removeRoute(route);
+      }
+      return;
+    }
+
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
   }
 
   void _showUpdateDialog(
@@ -1212,51 +1269,69 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       barrierDismissible: false,
     );
   }
-  void _showCheckingDialog({required ValueChanged<BuildContext> onCancel}) {
-    _showTraceUpdateDialog(
-      Obx(
-        () => TraceDialog(
-          title: '检查更新',
-          icon: Icons.radar,
-          color: TraceColors.cyan,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+  Future<void> _showCheckingDialog({
+    required ValueChanged<BuildContext> onCancel,
+    required ValueChanged<BuildContext> onPresented,
+  }) {
+    var didNotifyPresented = false;
+    return _showTraceUpdateDialog<void>(
+      Builder(
+        builder: (context) {
+          if (!didNotifyPresented) {
+            didNotifyPresented = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) {
+                onPresented(context);
+              }
+            });
+          }
+
+          return Obx(
+            () => TraceDialog(
+              title: '检查更新',
+              icon: Icons.radar,
+              color: TraceColors.cyan,
+              content: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.6,
-                      color: TraceColors.cyan,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          color: TraceColors.cyan,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(child: Text(updateStatus.value)),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(child: Text(updateStatus.value)),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '优先连接配置的 Cloudflare 更新服务；如不可用，会按内置备用清单规则重试，最多等待 30 秒。',
+                    style: TextStyle(fontSize: 12),
+                  ),
                 ],
               ),
-              const SizedBox(height: 12),
-              const Text(
-                '优先连接配置的 Cloudflare 更新服务；如不可用，会按内置备用清单规则重试，最多等待 30 秒。',
-                style: TextStyle(fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            TraceDialogAction(
-              label: '取消',
-              color: TraceColors.cyan,
-              onPressed: onCancel,
+              actions: [
+                TraceDialogAction(
+                  label: '取消',
+                  color: TraceColors.cyan,
+                  onPressed: onCancel,
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
       barrierDismissible: false,
-    );
+    ).then((_) {});
   }
+
   String _dateKey(DateTime value) {
     return '${value.year.toString().padLeft(4, '0')}-'
         '${value.month.toString().padLeft(2, '0')}-'

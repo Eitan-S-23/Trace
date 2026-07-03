@@ -16,10 +16,7 @@ const output = options.output ?? process.env.TRACE_RELEASE_METADATA_JSON;
 const fixedSigningConfigured = parseBoolean(
   options["fixed-signing-configured"] ?? process.env.TRACE_FIXED_SIGNING_CONFIGURED
 );
-const releaseNotes =
-  options["release-notes"] ??
-  process.env.TRACE_RELEASE_NOTES ??
-  `Automated build from workflow run ${runId} for commit ${commitSha}.`;
+const releaseNotes = await resolveReleaseNotes(options, runId, commitSha);
 const minClientVersionCode = parseInteger(
   options["min-client-version-code"] ?? process.env.TRACE_MIN_CLIENT_VERSION_CODE ?? "0",
   "min-client-version-code"
@@ -162,6 +159,20 @@ async function fileInfo(filePath) {
     sha256: createHash("sha256").update(bytes).digest("hex"),
     sizeBytes: metadata.size
   };
+}
+
+async function resolveReleaseNotes(options, runId, commitSha) {
+  if (options["release-notes"] !== undefined) {
+    return options["release-notes"];
+  }
+  const releaseNotesFile = options["release-notes-file"] ?? process.env.TRACE_RELEASE_NOTES_FILE;
+  if (releaseNotesFile) {
+    return readFile(releaseNotesFile, "utf8");
+  }
+  if (process.env.TRACE_RELEASE_NOTES !== undefined) {
+    return process.env.TRACE_RELEASE_NOTES;
+  }
+  return `Automated build from workflow run ${runId} for commit ${commitSha}.`;
 }
 
 function payloadSignature(securityPayload, allowPlaceholder) {

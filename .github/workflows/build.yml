@@ -605,16 +605,23 @@ jobs:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
           RELEASE_EXISTS: ${{ steps.release_guard.outputs.exists }}
           AUTO_RELEASE_ON_PUSH: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
+          RELEASE_NOTES_PATH: ${{ runner.temp }}/trace-release-notes.md
         shell: bash
         run: |
+          set -euo pipefail
+
           release_flags=()
           if [[ "${AUTO_RELEASE_ON_PUSH}" == "true" ]]; then
             release_flags+=(--latest=false)
           fi
-          notes="Automated build from workflow run ${GITHUB_RUN_NUMBER} for commit ${GITHUB_SHA}."
+
+          git log -1 --pretty=%B "${GITHUB_SHA}" > "${RELEASE_NOTES_PATH}"
+          if ! grep -q '[^[:space:]]' "${RELEASE_NOTES_PATH}"; then
+            printf 'Automated build from workflow run %s for commit %s.\n' "${GITHUB_RUN_NUMBER}" "${GITHUB_SHA}" > "${RELEASE_NOTES_PATH}"
+          fi
 
           if [[ "${RELEASE_EXISTS}" == "true" ]]; then
-            gh release edit "${RELEASE_TAG}" --target "${GITHUB_SHA}" --notes "${notes}"
+            gh release edit "${RELEASE_TAG}" --target "${GITHUB_SHA}" --notes-file "${RELEASE_NOTES_PATH}"
             for asset_path in release-assets/*; do
               if [[ -f "${asset_path}" ]]; then
                 gh release delete-asset "${RELEASE_TAG}" "$(basename "${asset_path}")" -y >/dev/null 2>&1 || true
@@ -624,7 +631,7 @@ jobs:
             gh release create "${RELEASE_TAG}" \
               --target "${GITHUB_SHA}" \
               --title "Trace ${RELEASE_TAG}" \
-              --notes "${notes}" \
+              --notes-file "${RELEASE_NOTES_PATH}" \
               "${release_flags[@]}"
           fi
 
@@ -637,6 +644,7 @@ jobs:
           FIXED_SIGNING_CONFIGURED: ${{ needs.android.outputs.fixed_signing_configured }}
           TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64: ${{ secrets.TRACE_UPDATE_PAYLOAD_ED25519_PRIVATE_KEY_BASE64 }}
           TRACE_UPDATE_PAYLOAD_KEY_VERSION: ${{ vars.TRACE_UPDATE_PAYLOAD_KEY_VERSION || 'staging' }}
+          RELEASE_NOTES_PATH: ${{ runner.temp }}/trace-release-notes.md
         shell: bash
         run: |
           set -euo pipefail
@@ -647,6 +655,7 @@ jobs:
             --run-id "${GITHUB_RUN_ID}" \
             --commit-sha "${GITHUB_SHA}" \
             --repository "${GITHUB_REPOSITORY}" \
+            --release-notes-file "${RELEASE_NOTES_PATH}" \
             --fixed-signing-configured "${FIXED_SIGNING_CONFIGURED}" \
             --output release-assets/cloudflare-release-metadata.json \
             --allow-placeholder-signature
