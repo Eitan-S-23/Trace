@@ -6,8 +6,16 @@ This project must not be built locally.
 
 - Do not run local build or packaging commands such as `flutter build`, `gradle build`, `./gradlew assemble*`, `xcodebuild`, `dart compile`, or platform package/signing commands.
 - Use GitHub Actions for all compile/build verification and release artifacts.
+- After changing Flutter app code, if local compile/build verification is unavailable or prohibited, the change must be committed and pushed so GitHub Actions performs the build verification.
 - Local non-build checks are allowed when useful, such as formatting, static analysis, tests that do not invoke a build, and file/content inspection.
 - If a task requires a real build result, trigger or inspect the relevant GitHub Actions workflow instead of attempting a local build.
+
+### GitHub Actions Verification Gate
+
+- Do not report Flutter app code changes as complete until a GitHub Actions build has been pushed or manually triggered and the run conclusion has been inspected.
+- If the current local worktree is dirty, behind `origin/main`, or otherwise unsafe to push, create a clean temporary clone or worktree from the latest `origin/main`, apply only the intended changes, commit, push with the `Eitan-S-23` credential, and trigger or inspect the relevant workflow there.
+- A final response for Flutter app code changes must include the commit SHA, workflow run URL, and whether Android APK and Windows EXE jobs succeeded. Local `git diff --check`, formatting, or analysis results are not enough by themselves.
+- If the user explicitly says not to push, do not push; state that GitHub Actions verification was intentionally not performed and provide the exact git commands the user can run.
 
 ## GitHub Credentials
 
