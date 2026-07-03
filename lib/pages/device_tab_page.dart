@@ -155,6 +155,9 @@ class _DeviceStage extends StatefulWidget {
 
 class _DeviceStageState extends State<_DeviceStage>
     with SingleTickerProviderStateMixin {
+  static const Duration _vaultRotateSinglePlayDuration =
+      Duration(milliseconds: 11750);
+
   late final AnimationController _settleController;
   late final AudioPlayer _gearPlayer;
   Animation<double>? _settleAnimation;
@@ -168,6 +171,9 @@ class _DeviceStageState extends State<_DeviceStage>
   DateTime? _lastDragAt;
   Offset? _lastDragPosition;
   bool _gearSoundActive = false;
+  double _orbitGlowDirection = 1;
+  double _orbitGlowIntensity = 0;
+  double _settleGlowBaseIntensity = 0;
 
   @override
   void initState() {
@@ -178,10 +184,20 @@ class _DeviceStageState extends State<_DeviceStage>
     )..addListener(() {
         final animation = _settleAnimation;
         if (animation == null) return;
-        setState(() => _rotation = animation.value);
+        final fade = 1 - _settleController.value;
+        setState(() {
+          _rotation = animation.value;
+          _orbitGlowIntensity =
+              (_settleGlowBaseIntensity * (0.36 + fade * 0.64))
+                  .clamp(0.18, 1.0);
+        });
       })
       ..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
+          setState(() {
+            _orbitGlowIntensity = 0;
+            _settleGlowBaseIntensity = 0;
+          });
           _stopGearSound();
         }
       });
@@ -199,7 +215,10 @@ class _DeviceStageState extends State<_DeviceStage>
 
   @override
   Widget build(BuildContext context) {
-    final geometry = _DeviceStageGeometry(widget.width, rotation: _rotation);
+    final geometry = _DeviceStageGeometry(
+      widget.width,
+      rotation: _rotation,
+    );
     final actions = _buildActions();
     final coreTouchSize = geometry.coreSize * 1.18;
 
@@ -210,7 +229,13 @@ class _DeviceStageState extends State<_DeviceStage>
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: CustomPaint(painter: _DeviceStagePainter(geometry)),
+            child: CustomPaint(
+              painter: _DeviceStagePainter(
+                geometry,
+                orbitGlowDirection: _orbitGlowDirection,
+                orbitGlowIntensity: _orbitGlowIntensity,
+              ),
+            ),
           ),
           for (var i = 0; i < actions.length; i++)
             Builder(
@@ -296,6 +321,8 @@ class _DeviceStageState extends State<_DeviceStage>
     _dragTravel = 0;
     _lastDragAt = DateTime.now();
     _lastDragPosition = stagePosition;
+    _orbitGlowIntensity = 0;
+    _settleGlowBaseIntensity = 0;
     _notifyOrbitInteraction(active: true);
   }
 
@@ -322,6 +349,10 @@ class _DeviceStageState extends State<_DeviceStage>
     _lastDragAt = now;
     _lastDragPosition = stagePosition;
     if (delta.abs() > 0.002) {
+      _orbitGlowDirection = delta.sign;
+      final speedGlow = (_dragAngularVelocity.abs() / 10).clamp(0.0, 0.45);
+      final travelGlow = (_dragTravel / (widget.width * 0.9)).clamp(0.0, 0.35);
+      _orbitGlowIntensity = (0.38 + speedGlow + travelGlow).clamp(0.38, 1.0);
       _startGearSound();
     }
     setState(() => _rotation += delta);
@@ -345,32 +376,61 @@ class _DeviceStageState extends State<_DeviceStage>
   }) {
     final step = math.pi / 2;
     final dragDelta = _normalizeAngle(_rotation - _dragStartRotation);
-    final direction = throwVelocity.abs() > 0.08
+    final moved = dragDelta.abs() > 0.01 ||
+        throwVelocity.abs() > 0.08 ||
+        throwDistance > widget.width * 0.025;
+    final rawDirection = throwVelocity.abs() > 0.08
         ? throwVelocity.sign
         : dragDelta == 0
             ? 0.0
             : dragDelta.sign;
+    final direction = rawDirection != 0
+        ? rawDirection
+        : throwDistance > widget.width * 0.025
+            ? _orbitGlowDirection.sign
+            : 0.0;
     final distanceFactor =
-        (throwDistance / widget.width).clamp(0.0, 1.45).toDouble();
-    final projected = _rotation +
-        throwVelocity.clamp(-12.0, 12.0).toDouble() * 0.22 +
-        direction * distanceFactor * math.pi;
-    var target = (projected / step).roundToDouble() * step;
-    if (direction != 0 && throwDistance > widget.width * 0.16) {
-      final currentStep = (_rotation / step).roundToDouble() * step;
-      if ((target - currentStep).abs() < step * 0.5) {
-        target = currentStep + direction * step;
+        (throwDistance / widget.width).clamp(0.0, 2.4).toDouble();
+    final velocityFactor =
+        (throwVelocity.abs() / 18.0).clamp(0.0, 1.0).toDouble();
+    var target = (_rotation / step).roundToDouble() * step;
+    var duration = const Duration(milliseconds: 280);
+
+    if (moved && direction != 0) {
+      final flingTurns =
+          (1.2 + distanceFactor * 3.2 + velocityFactor * 2.4)
+              .clamp(1.2, 9.0)
+              .toDouble();
+      final projected = _rotation + direction * flingTurns * math.pi * 2;
+      target = (projected / step).roundToDouble() * step;
+      if ((target - _rotation).sign != direction) {
+        target += direction * step;
       }
+      final extraMs = (distanceFactor * 1200 + velocityFactor * 950)
+          .clamp(0.0, 3300.0)
+          .round();
+      duration =
+          _vaultRotateSinglePlayDuration + Duration(milliseconds: extraMs);
+      _orbitGlowDirection = direction;
+      _settleGlowBaseIntensity =
+          (0.58 + distanceFactor * 0.18 + velocityFactor * 0.22)
+              .clamp(0.58, 1.0)
+              .toDouble();
+      _orbitGlowIntensity = _settleGlowBaseIntensity;
+    } else {
+      final travelSteps = ((target - _rotation).abs() / step).clamp(0.2, 1.0);
+      duration = Duration(milliseconds: (180 + travelSteps * 120).round());
     }
-    final travelSteps = ((target - _rotation).abs() / step).clamp(1.0, 5.0);
-    _settleController.duration = Duration(
-      milliseconds: (260 + travelSteps * 95).round(),
-    );
+
+    _settleController.duration = duration;
     if ((target - _rotation).abs() > 0.002) {
       _startGearSound();
     }
     _settleAnimation = Tween<double>(begin: _rotation, end: target).animate(
-      CurvedAnimation(parent: _settleController, curve: Curves.easeOutQuart),
+      CurvedAnimation(
+        parent: _settleController,
+        curve: moved ? const _FlingKeepMovingCurve() : Curves.easeOutQuart,
+      ),
     );
     _settleController.forward(from: 0);
   }
@@ -538,6 +598,17 @@ class _DeviceNodeLabel extends StatelessWidget {
   }
 }
 
+class _FlingKeepMovingCurve extends Curve {
+  const _FlingKeepMovingCurve();
+
+  @override
+  double transformInternal(double t) {
+    const minimumMotionShare = 0.18;
+    final eased = 1 - math.pow(1 - t, 3).toDouble();
+    return eased * (1 - minimumMotionShare) + t * minimumMotionShare;
+  }
+}
+
 /// 舞台几何：核心、四个对角卫星和外侧标签共用的一套坐标
 class _DeviceStageGeometry {
   _DeviceStageGeometry(this.width, {required this.rotation})
@@ -588,9 +659,15 @@ class _DeviceStageGeometry {
 }
 
 class _DeviceStagePainter extends CustomPainter {
-  const _DeviceStagePainter(this.geometry);
+  const _DeviceStagePainter(
+    this.geometry, {
+    required this.orbitGlowDirection,
+    required this.orbitGlowIntensity,
+  });
 
   final _DeviceStageGeometry geometry;
+  final double orbitGlowDirection;
+  final double orbitGlowIntensity;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -630,6 +707,7 @@ class _DeviceStagePainter extends CustomPainter {
       geometry.orbitRadius * 0.64,
       orbitPaint..color = TraceColors.cyan.withOpacity(0.08),
     );
+    _paintMotionGlow(canvas, center);
 
     final tickPaint = Paint()
       ..strokeCap = StrokeCap.round
@@ -760,10 +838,64 @@ class _DeviceStagePainter extends CustomPainter {
     );
   }
 
+  void _paintMotionGlow(Canvas canvas, Offset center) {
+    if (orbitGlowIntensity <= 0.01 || orbitGlowDirection == 0) return;
+
+    final direction = orbitGlowDirection.sign;
+    final radius = geometry.orbitRadius;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final headAngle = -math.pi / 2 + geometry.rotation;
+    final tailSpan = math.pi * 0.82;
+    const segments = 14;
+
+    for (var i = 0; i < segments; i++) {
+      final t = (i + 1) / segments;
+      final segmentSweep = direction * tailSpan / segments;
+      final start = headAngle - direction * tailSpan * (1 - t);
+      final opacity = orbitGlowIntensity * math.pow(t, 1.85).toDouble();
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = geometry.nodeSize * (0.24 + t * 0.2)
+        ..color = TraceColors.cyanSoft.withOpacity(0.26 * opacity)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 9 + 11 * t);
+      canvas.drawArc(rect, start, segmentSweep, false, paint);
+    }
+
+    final head =
+        center + Offset(math.cos(headAngle), math.sin(headAngle)) * radius;
+    final headPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          TraceColors.cyanSoft.withOpacity(0.46 * orbitGlowIntensity),
+          TraceColors.cyan.withOpacity(0.2 * orbitGlowIntensity),
+          Colors.transparent,
+        ],
+      ).createShader(
+        Rect.fromCircle(center: head, radius: geometry.nodeSize * 0.82),
+      );
+    canvas.drawCircle(head, geometry.nodeSize * 0.82, headPaint);
+
+    final rimPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2.2
+      ..color = TraceColors.text.withOpacity(0.5 * orbitGlowIntensity);
+    canvas.drawArc(
+      rect,
+      headAngle - direction * tailSpan * 0.34,
+      direction * tailSpan * 0.34,
+      false,
+      rimPaint,
+    );
+  }
+
   @override
   bool shouldRepaint(covariant _DeviceStagePainter oldDelegate) {
     return oldDelegate.geometry.width != geometry.width ||
-        oldDelegate.geometry.rotation != geometry.rotation;
+        oldDelegate.geometry.rotation != geometry.rotation ||
+        oldDelegate.orbitGlowDirection != orbitGlowDirection ||
+        oldDelegate.orbitGlowIntensity != orbitGlowIntensity;
   }
 }
 
