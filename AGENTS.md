@@ -15,6 +15,7 @@ This project must not be built locally.
 - Do not report Flutter app code changes as complete until a GitHub Actions build has been pushed or manually triggered and the run conclusion has been inspected.
 - If the current local worktree is dirty, behind `origin/main`, or otherwise unsafe to push, create a clean temporary clone or worktree from the latest `origin/main`, apply only the intended changes, commit, push with the `Eitan-S-23` credential, and trigger or inspect the relevant workflow there.
 - A final response for Flutter app code changes must include the commit SHA, workflow run URL, and whether Android APK and Windows EXE jobs succeeded. Local `git diff --check`, formatting, or analysis results are not enough by themselves.
+- Android APK and Windows EXE build verification is required only when Flutter app build inputs or `pubspec.yaml` / `pubspec.lock` version/dependency inputs change. Cloudflare admin Pages UI, docs, AGENTS.md, and other non-app changes must use their own checks/deploys and should not trigger APK/EXE rebuilds.
 - If the user explicitly says not to push, do not push; state that GitHub Actions verification was intentionally not performed and provide the exact git commands the user can run.
 
 ## GitHub Credentials

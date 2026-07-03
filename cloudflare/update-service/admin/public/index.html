@@ -1283,8 +1283,11 @@
 
       .dots {
         display: flex;
+        flex-wrap: wrap;
         gap: 9px;
+        align-items: center;
         justify-content: center;
+        max-width: 100%;
         min-height: 28px;
       }
 
@@ -2636,6 +2639,19 @@
 
         .timeline-footer {
           padding: 0 20px;
+        }
+
+        .dots {
+          gap: 7px;
+        }
+
+        .dot {
+          width: 9px;
+          height: 9px;
+        }
+
+        .dot.active {
+          width: 24px;
         }
 
         .right-rail {
