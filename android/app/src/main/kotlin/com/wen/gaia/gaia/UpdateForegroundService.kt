@@ -309,5 +309,13 @@ class UpdateForegroundService : Service() {
                 false
             }
         }
+
+        private fun immutablePendingIntentFlag(): Int {
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_IMMUTABLE
+            } else {
+                0
+            }
+        }
     }
 }
