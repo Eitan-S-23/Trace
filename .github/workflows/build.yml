@@ -211,7 +211,8 @@ jobs:
           TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64: ${{ secrets.TRACE_UPDATE_PAYLOAD_ED25519_PUBLIC_KEY_BASE64 }}
         run: |
           set +e
-          build_args=(apk --release)
+          build_args=(apk --release --target-platform=android-arm,android-arm64)
+          echo "Android release APK targets ARM ABIs only to keep the sideload package smaller."
           if [[ -n "${TRACE_PUBLIC_UPDATE_SERVICE_URL:-}" ]]; then
             update_service_url="${TRACE_PUBLIC_UPDATE_SERVICE_URL%/}"
             build_args+=(--dart-define="TRACE_CLOUDFLARE_UPDATE_MANIFEST_URL=${update_service_url}/api/public/latest")
