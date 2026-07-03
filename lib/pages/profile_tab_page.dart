@@ -53,7 +53,7 @@ class ProfileTabPage extends StatelessWidget {
                 children: [
                   const _ProfileTitle(),
                   const Spacer(),
-                  const _ProfileAvatar(),
+                  _ProfileAvatar(onTap: _showUserInfoDialog),
                 ],
               ).animate().fadeIn(duration: 420.ms).slideY(begin: 0.14, end: 0),
               const SizedBox(height: 30),
@@ -152,6 +152,43 @@ class ProfileTabPage extends StatelessWidget {
     );
   }
 
+  void _showUserInfoDialog() {
+    _showTraceDialog(
+      TraceDialog(
+        title: '用户信息',
+        icon: Icons.person_outline,
+        color: TraceColors.cyan,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildUserInfoRow('身份', '智能设备用户'),
+            const SizedBox(height: 10),
+            FutureBuilder<String>(
+              future: _appVersionLabelFuture,
+              builder: (context, snapshot) {
+                return _buildUserInfoRow(
+                  '应用',
+                  snapshot.data ?? _appName,
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            _buildUserInfoRow('数据', '设备与骑行记录保存在本机'),
+          ],
+        ),
+        actions: [
+          TraceDialogAction(
+            label: '确定',
+            isPrimary: true,
+            color: TraceColors.cyan,
+            onPressed: TraceDialog.close,
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showDataStatistics() async {
     try {
       final dbService = DatabaseService();
@@ -194,6 +231,33 @@ class ProfileTabPage extends StatelessWidget {
           style: const TextStyle(
             fontWeight: FontWeight.w900,
             color: TraceColors.cyan,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUserInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 52,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: TraceColors.text.withOpacity(0.74),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: TraceColors.cyanSoft,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ),
       ],
@@ -371,7 +435,9 @@ class _ProfileTitle extends StatelessWidget {
 
 /// 右上角发光头像与身份标签
 class _ProfileAvatar extends StatelessWidget {
-  const _ProfileAvatar();
+  const _ProfileAvatar({required this.onTap});
+
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -387,36 +453,50 @@ class _ProfileAvatar extends StatelessWidget {
                 size: const Size.square(118),
                 painter: _ProfileAvatarDialPainter(),
               ),
-              Container(
-                width: 82,
-                height: 82,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      TraceColors.cyan.withOpacity(0.2),
-                      const Color(0xFF06202A).withOpacity(0.96),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: TraceColors.cyan.withOpacity(0.9),
-                    width: 1.8,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: TraceColors.cyan.withOpacity(0.45),
-                      blurRadius: 28,
-                      spreadRadius: -2,
+              Semantics(
+                button: true,
+                label: '查看用户信息',
+                child: Material(
+                  color: Colors.transparent,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    onTap: onTap,
+                    customBorder: const CircleBorder(),
+                    splashColor: TraceColors.cyan.withOpacity(0.18),
+                    highlightColor: TraceColors.cyan.withOpacity(0.08),
+                    child: Ink(
+                      width: 82,
+                      height: 82,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            TraceColors.cyan.withOpacity(0.2),
+                            const Color(0xFF06202A).withOpacity(0.96),
+                          ],
+                        ),
+                        border: Border.all(
+                          color: TraceColors.cyan.withOpacity(0.9),
+                          width: 1.8,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: TraceColors.cyan.withOpacity(0.45),
+                            blurRadius: 28,
+                            spreadRadius: -2,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.person_outline,
+                        color: TraceColors.cyanSoft,
+                        size: 44,
+                        shadows: [
+                          Shadow(color: Color(0xAA24F6DE), blurRadius: 14),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.person_outline,
-                  color: TraceColors.cyanSoft,
-                  size: 44,
-                  shadows: [
-                    Shadow(color: Color(0xAA24F6DE), blurRadius: 14),
-                  ],
+                  ),
                 ),
               ),
             ],
