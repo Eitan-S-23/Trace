@@ -26,6 +26,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   static const String _pendingInstallVersionCodeKey =
       'app_update_pending_install_version_code';
   static const String _unknownAppSourcesCode = 'UNKNOWN_APP_SOURCES';
+  static const String _appNotForegroundCode = 'APP_NOT_FOREGROUND';
   static const String _patchAlgorithmTracePatch = 'tracepatch';
   static const String _patchAlgorithmVcdiff = 'vcdiff';
   static const int _manifestSchemaVersion = 2;
@@ -73,10 +74,20 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !Platform.isAndroid) return;
 
-    unawaited(_resumePendingInstallIfPermitted(
-      showMessage: true,
+    unawaited(_resumePendingInstallAfterForegroundSettles(showMessage: true));
+  }
+
+  Future<void> _resumePendingInstallAfterForegroundSettles({
+    required bool showMessage,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    await _resumePendingInstallIfPermitted(
+      showMessage: showMessage,
       force: true,
-    ));
+    );
   }
 
   Future<void> checkDailyOnStartup() async {
@@ -256,6 +267,9 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
       }
       return launched;
     } on PlatformException catch (e) {
+      if (e.code == _appNotForegroundCode) {
+        return false;
+      }
       if (e.code != _unknownAppSourcesCode) {
         await _clearPendingInstallApkPath();
       }
@@ -465,7 +479,21 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
   void _markInstallerReadyForForegroundRetry() {
     updateProgress.value = 1;
     updateStatus.value = '安装包已就绪，请点按通知或回到 Trace 继续安装';
-    _queueUpdateForegroundService(force: true);
+    unawaited(_showInstallReadyNotification());
+  }
+
+  Future<void> _showInstallReadyNotification() async {
+    if (!Platform.isAndroid) return;
+    final apkPath = await _pendingInstallApkPath();
+    if (apkPath == null) return;
+    try {
+      await _platform.invokeMethod<bool>('showInstallReadyNotification', {
+        'apkPath': apkPath,
+        'status': updateStatus.value,
+      });
+    } catch (_) {
+      _queueUpdateForegroundService(force: true);
+    }
   }
 
   void _closeUpdateDialogIfOpen() {

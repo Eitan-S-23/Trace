@@ -1,18 +1,19 @@
 package com.wen.gaia.gaia
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import java.io.File
+import androidx.lifecycle.Lifecycle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 class MainActivity: FlutterActivity() {
     private var deepLinkChannel: MethodChannel? = null
     private var appUpdateChannel: MethodChannel? = null
-    private var isActivityResumed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -51,6 +52,19 @@ class MainActivity: FlutterActivity() {
                 "stopUpdateForegroundService" -> {
                     result.success(UpdateForegroundService.stop(applicationContext))
                 }
+                "showInstallReadyNotification" -> {
+                    val apkPath = call.argument<String>("apkPath")
+                    val status = call.argument<String>("status")
+                        ?: "安装包已就绪，请点按继续安装"
+                    result.success(
+                        UpdateForegroundService.showInstallReadyNotification(
+                            applicationContext,
+                            apkPath,
+                            packageName,
+                            status,
+                        )
+                    )
+                }
                 else -> result.notImplemented()
             }
         }
@@ -64,15 +78,6 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        isActivityResumed = true
-    }
-
-    override fun onPause() {
-        isActivityResumed = false
-        super.onPause()
-    }
 
     companion object {
         private const val DEEP_LINK_CHANNEL = "trace/deep_link"
@@ -105,6 +110,15 @@ class MainActivity: FlutterActivity() {
             return
         }
 
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            result.error(
+                "APP_NOT_FOREGROUND",
+                "Trace must be foreground before launching the package installer",
+                null,
+            )
+            return
+        }
+
         if (!canRequestPackageInstalls()) {
             val settingsIntent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
@@ -120,42 +134,33 @@ class MainActivity: FlutterActivity() {
             return
         }
 
-        if (isActivityResumed) {
-            val installIntent = UpdateForegroundService.installIntentFor(
-                this,
-                apkFile.path,
-                packageName,
+        val installIntent = UpdateForegroundService.installIntentFor(
+            this,
+            apkFile.path,
+            packageName,
+        )
+        try {
+            startActivity(installIntent)
+            result.success(mapOf("requested" to true, "launched" to true))
+        } catch (e: ActivityNotFoundException) {
+            result.error(
+                "INSTALLER_LAUNCH_FAILED",
+                e.message ?: "No package installer activity found",
+                null,
             )
-            try {
-                startActivity(installIntent)
-                result.success(mapOf("requested" to true, "launched" to true))
-            } catch (_: Exception) {
-                val launched = UpdateForegroundService.requestInstallerActivity(
-                    applicationContext,
-                    apkFile.path,
-                    packageName,
-                )
-                val requested = launched || UpdateForegroundService.openInstaller(
-                    applicationContext,
-                    apkFile.path,
-                    packageName,
-                )
-                result.success(mapOf("requested" to requested, "launched" to launched))
-            }
-            return
+        } catch (e: SecurityException) {
+            result.error(
+                "INSTALLER_LAUNCH_FAILED",
+                e.message ?: "Package installer launch was denied",
+                null,
+            )
+        } catch (e: Exception) {
+            result.error(
+                "INSTALLER_LAUNCH_FAILED",
+                e.message ?: "Failed to launch package installer",
+                null,
+            )
         }
-
-        val launched = UpdateForegroundService.requestInstallerActivity(
-            applicationContext,
-            apkFile.path,
-            packageName,
-        )
-        val requested = launched || UpdateForegroundService.openInstaller(
-            applicationContext,
-            apkFile.path,
-            packageName,
-        )
-        result.success(mapOf("requested" to requested, "launched" to launched))
     }
 
     private fun canRequestPackageInstalls(): Boolean {

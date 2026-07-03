@@ -35,3 +35,12 @@ The update pipeline prepares Cloudflare release candidates automatically, but it
 - Keep `TRACE_UPDATE_SERVICE_URL` as the Worker URL for CI `/api/ci/releases`; keep `TRACE_PUBLIC_UPDATE_SERVICE_URL` as the Pages URL compiled into APKs for public update checks.
 - VCDIFF patches must only be generated for source clients with versionCode `41` or newer. Earlier clients contain the upstream `vcdiff_decoder` address-cache bug and must use one full APK transition before receiving VCDIFF again. Read `cloudflare/update-service/docs/VCDIFF-COMPATIBILITY.md` before changing patch generation, decoder dependencies, or update publishing thresholds.
 - Do not use local Flutter/Gradle builds to verify release artifacts. Inspect or trigger GitHub Actions instead.
+
+## Android Self-Update Installer
+
+- Android 10+ restricts background activity launches. Do not treat a foreground service, `PendingIntent.send()`, or a full-screen notification as proof that the package installer appeared while Trace is backgrounded.
+- Android 14+ requires explicit background-activity-launch opt-in for PendingIntent senders, and Android 15+ also requires creator-side opt-in. Even with opt-ins, system policy can block or downgrade the launch, so background update completion must not depend on it.
+- Full-screen notifications are not guaranteed to open a full-screen UI while the user is using the device; the system can show a heads-up notification instead. Use the notification as a user-tapped install entry, not as an automatic installer launch guarantee.
+- Native `installApk` must fail closed with `APP_NOT_FOREGROUND` unless `MainActivity` is at least `Lifecycle.State.RESUMED`. Dart must keep `app_update_pending_install_apk_path` and retry only after Trace returns to foreground and settles.
+- After download or synthesis finishes in background, close the progress dialog, show an install-ready notification, and leave status at ready-to-install. Avoid leaving the UI stuck on `打开系统安装器` / `正在调用系统安装器` when Android refused a background installer launch.
+- Do not preflight package installer availability with `resolveActivity` on Android 11+ unless package visibility is configured; it can return false negatives. Prefer `startActivity` with `ActivityNotFoundException` and `SecurityException` handling from a resumed Activity.
