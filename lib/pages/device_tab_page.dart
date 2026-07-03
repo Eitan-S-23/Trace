@@ -180,7 +180,7 @@ class _DeviceStageState extends State<_DeviceStage>
     super.initState();
     _settleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 360),
+      duration: const Duration(milliseconds: 720),
     )..addListener(() {
         final animation = _settleAnimation;
         if (animation == null) return;
@@ -842,52 +842,157 @@ class _DeviceStagePainter extends CustomPainter {
     if (orbitGlowIntensity <= 0.01 || orbitGlowDirection == 0) return;
 
     final direction = orbitGlowDirection.sign;
-    final radius = geometry.orbitRadius;
-    final rect = Rect.fromCircle(center: center, radius: radius);
     final headAngle = -math.pi / 2 + geometry.rotation;
-    final tailSpan = math.pi * 0.82;
-    const segments = 14;
+    final tailSpan = math.pi * 1.42;
+    const segments = 28;
 
-    for (var i = 0; i < segments; i++) {
-      final t = (i + 1) / segments;
-      final segmentSweep = direction * tailSpan / segments;
-      final start = headAngle - direction * tailSpan * (1 - t);
-      final opacity = orbitGlowIntensity * math.pow(t, 1.85).toDouble();
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = geometry.nodeSize * (0.24 + t * 0.2)
-        ..color = TraceColors.cyanSoft.withOpacity(0.26 * opacity)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 9 + 11 * t);
-      canvas.drawArc(rect, start, segmentSweep, false, paint);
-    }
+    _paintMotionRingTrail(
+      canvas,
+      center,
+      geometry.orbitRadius * 1.14,
+      headAngle,
+      direction,
+      tailSpan,
+      segments,
+      strokeWidth: 3.2,
+      blurSigma: 8,
+      opacityScale: 0.88,
+    );
+    _paintMotionRingTrail(
+      canvas,
+      center,
+      geometry.orbitRadius * 0.78,
+      headAngle,
+      direction,
+      tailSpan,
+      segments,
+      strokeWidth: 2.6,
+      blurSigma: 7,
+      opacityScale: 0.76,
+    );
+    _paintMotionRingTrail(
+      canvas,
+      center,
+      geometry.orbitRadius * 0.64,
+      headAngle,
+      direction,
+      tailSpan,
+      segments,
+      strokeWidth: 2.2,
+      blurSigma: 6,
+      opacityScale: 0.68,
+    );
+    _paintMotionTickTrail(canvas, center, headAngle, direction, tailSpan);
 
+    final radius = geometry.orbitRadius;
     final head =
         center + Offset(math.cos(headAngle), math.sin(headAngle)) * radius;
     final headPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          TraceColors.cyanSoft.withOpacity(0.46 * orbitGlowIntensity),
-          TraceColors.cyan.withOpacity(0.2 * orbitGlowIntensity),
+          TraceColors.cyanSoft.withOpacity(0.52 * orbitGlowIntensity),
+          TraceColors.cyan.withOpacity(0.24 * orbitGlowIntensity),
           Colors.transparent,
         ],
       ).createShader(
-        Rect.fromCircle(center: head, radius: geometry.nodeSize * 0.82),
+        Rect.fromCircle(center: head, radius: geometry.nodeSize * 0.9),
       );
-    canvas.drawCircle(head, geometry.nodeSize * 0.82, headPaint);
+    canvas.drawCircle(head, geometry.nodeSize * 0.9, headPaint);
+  }
 
-    final rimPaint = Paint()
-      ..style = PaintingStyle.stroke
+  void _paintMotionRingTrail(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    double headAngle,
+    double direction,
+    double tailSpan,
+    int segments, {
+    required double strokeWidth,
+    required double blurSigma,
+    required double opacityScale,
+  }) {
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    for (var i = 0; i < segments; i++) {
+      final t = (i + 1) / segments;
+      final segmentSweep = direction * tailSpan / segments;
+      final start = headAngle - direction * tailSpan * (1 - t);
+      final opacity = orbitGlowIntensity * math.pow(t, 0.72).toDouble();
+      final glowPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = strokeWidth * (3.2 + t * 2.2)
+        ..color = TraceColors.cyanSoft.withOpacity(0.12 * opacity * opacityScale)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma + 6 * t);
+      canvas.drawArc(rect, start, segmentSweep, false, glowPaint);
+
+      final rimPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = strokeWidth
+        ..color = TraceColors.text.withOpacity(0.46 * opacity * opacityScale);
+      canvas.drawArc(rect, start, segmentSweep, false, rimPaint);
+    }
+  }
+
+  void _paintMotionTickTrail(
+    Canvas canvas,
+    Offset center,
+    double headAngle,
+    double direction,
+    double tailSpan,
+  ) {
+    final tickGlowPaint = Paint()
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = 2.2
-      ..color = TraceColors.text.withOpacity(0.5 * orbitGlowIntensity);
-    canvas.drawArc(
-      rect,
-      headAngle - direction * tailSpan * 0.34,
-      direction * tailSpan * 0.34,
-      false,
-      rimPaint,
-    );
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    final tickHotPaint = Paint()..strokeCap = StrokeCap.round;
+
+    for (var i = 0; i < 112; i++) {
+      final angle = -math.pi / 2 + i * math.pi * 2 / 112;
+      final progress = _motionTrailProgress(
+        angle,
+        headAngle,
+        direction,
+        tailSpan,
+      );
+      if (progress <= 0) continue;
+
+      final major = i % 14 == 0;
+      final opacity = orbitGlowIntensity * math.pow(progress, 0.68).toDouble();
+      final outer = geometry.orbitRadius * 0.94;
+      final inner = geometry.orbitRadius * (major ? 0.78 : 0.84);
+      final start = center + Offset(math.cos(angle), math.sin(angle)) * inner;
+      final end = center + Offset(math.cos(angle), math.sin(angle)) * outer;
+
+      tickGlowPaint
+        ..strokeWidth = major ? 4.2 : 3.2
+        ..color = TraceColors.cyanSoft.withOpacity(0.22 * opacity);
+      canvas.drawLine(start, end, tickGlowPaint);
+
+      tickHotPaint
+        ..strokeWidth = major ? 1.8 : 1.2
+        ..color = TraceColors.text.withOpacity(0.5 * opacity);
+      canvas.drawLine(start, end, tickHotPaint);
+    }
+  }
+
+  double _motionTrailProgress(
+    double angle,
+    double headAngle,
+    double direction,
+    double tailSpan,
+  ) {
+    final deltaFromHead = direction > 0
+        ? _normalizePositiveAngle(headAngle - angle)
+        : _normalizePositiveAngle(angle - headAngle);
+    if (deltaFromHead > tailSpan) return 0;
+    return 1 - deltaFromHead / tailSpan;
+  }
+
+  double _normalizePositiveAngle(double angle) {
+    final fullTurn = math.pi * 2;
+    final normalized = angle % fullTurn;
+    return normalized < 0 ? normalized + fullTurn : normalized;
   }
 
   @override
