@@ -37,6 +37,19 @@ The update pipeline prepares Cloudflare release candidates automatically, but it
 - VCDIFF patches must only be generated for source clients with versionCode `41` or newer. Earlier clients contain the upstream `vcdiff_decoder` address-cache bug and must use one full APK transition before receiving VCDIFF again. Read `cloudflare/update-service/docs/VCDIFF-COMPATIBILITY.md` before changing patch generation, decoder dependencies, or update publishing thresholds.
 - Do not use local Flutter/Gradle builds to verify release artifacts. Inspect or trigger GitHub Actions instead.
 
+## Cloudflare Admin Pages Deployment
+
+- Before deploying or troubleshooting the update admin UI at `cloudflare/update-service/admin`, read `.codex/skills/deploy-update-admin-pages/SKILL.md` and follow it.
+- Normal admin UI/code redeploys must use `.cloudflareupdate-servicescriptsdeploy-admin-staging.ps1 -Yes -SkipSecrets` unless the user explicitly asks to update Access secrets and provides current values.
+- Keep the admin Pages `wrangler.jsonc` bindings synchronized with `AdminEnv` in `functions/api/admin/[[path]].ts`; notably, `/api/admin/storage` requires the `RELEASES_BUCKET` R2 binding.
+- Do not treat GitHub Actions deployment attempts as proof that the Admin Pages fix is live. The repository `CLOUDFLARE_API_TOKEN` may lack Pages or D1 permissions; an Actions failure with Cloudflare `Authentication error [code: 10000]` means the token is insufficient, not that the UI code is invalid.
+- If the repository Cloudflare token lacks Pages/D1 permissions, switch to local Wrangler browser authorization instead of repeatedly retrying the Actions deploy. Run `node node_modules/wrangler/bin/wrangler.js login --browser=true` from `cloudflare/update-service/admin`, let the browser open, and ask the user to approve the Cloudflare authorization page.
+- After local browser authorization succeeds, deploy with `.cloudflareupdate-servicescriptsdeploy-admin-staging.ps1 -Yes -SkipSecrets`; do not omit `-SkipSecrets` unless intentionally updating Access secrets.
+- After deploying, verify the latest Pages deployment with `wrangler pages deployment list --project-name trace-update-admin-staging` and confirm the `Source` commit is the intended commit.
+- If local Wrangler cannot run because the Windows host blocks Node child processes with `spawn EPERM`, state that deployment is blocked by the local runtime and provide the exact browser-login and deploy commands for the user to run; do not claim the Pages fix is live.
+- If the admin UI reports `BACKEND_UNAVAILABLE: Admin backend unavailable`, first inspect the response `detail` and `requestId`, then verify the production Pages deployment, Access secrets, D1 binding, and R2 binding. A missing binding in an auxiliary endpoint such as `/api/admin/storage` can break the UI even when the release candidate itself is valid.
+- Do not claim the Access-protected admin publish button was verified unless it was tested with a real Cloudflare Access session. Without that session, verify release state through D1 plus the public latest/download path, or use the staging publish wrapper and state clearly that it validates the release pipeline rather than the UI button.
+- After publishing, verify `channels.current_release_id` and `revision` in D1, confirm `/api/public/latest` returns the intended release/versionCode, and confirm at least one patch or full download is served from R2 via `X-Trace-Asset-Source: r2`.
 ## Android Self-Update Installer
 
 - Android 10+ restricts background activity launches. Do not treat a foreground service, `PendingIntent.send()`, or a full-screen notification as proof that the package installer appeared while Trace is backgrounded.
