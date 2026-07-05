@@ -2641,35 +2641,53 @@ class _StatisticsPageState extends State<_StatisticsPage> {
       ),
     ];
   }
-  // 年：运动类型分布 + 月度统计 + 强度分布
+  // 年：运动类型分布 + 月度里程统计 + 月度时长统计 + 强度分布
   List<Widget> _yearPanels() {
+    const monthLabels = ['1月', '3月', '5月', '7月', '9月', '11月'];
+    const monthLabelIndices = <int>[0, 2, 4, 6, 8, 10];
+    const monthTooltipTitles = <String>[
+      '1月',
+      '2月',
+      '3月',
+      '4月',
+      '5月',
+      '6月',
+      '7月',
+      '8月',
+      '9月',
+      '10月',
+      '11月',
+      '12月',
+    ];
     return [
       const _AnnualDistributionPanel(),
       const SizedBox(height: 12),
       _BarTrendPanel(
-        title: '月度统计',
+        title: '月度里程统计',
         unit: '单位：km',
         values: const <double>[320, 0, 410, 680, 920, 1026, 0, 0, 0, 0, 0, 0],
-        labels: const ['1月', '3月', '5月', '7月', '9月', '11月'],
-        labelIndices: const <int>[0, 2, 4, 6, 8, 10],
+        labels: monthLabels,
+        labelIndices: monthLabelIndices,
         color: _RideColors.orange,
-        tooltipTitles: const <String>[
-          '1月',
-          '2月',
-          '3月',
-          '4月',
-          '5月',
-          '6月',
-          '7月',
-          '8月',
-          '9月',
-          '10月',
-          '11月',
-          '12月',
-        ],
+        tooltipTitles: monthTooltipTitles,
         tooltipTitle: '5月',
         tooltipValue: '1026.3 km',
         maxValue: 1500,
+      ),
+      const SizedBox(height: 12),
+      _BarTrendPanel(
+        title: '月度时长统计',
+        unit: '单位：小时',
+        values: const <double>[
+          12.6, 0, 18.4, 28.7, 39.2, 45.6, 0, 0, 0, 0, 0, 0,
+        ],
+        labels: monthLabels,
+        labelIndices: monthLabelIndices,
+        color: const Color(0xFF268DFF),
+        tooltipTitles: monthTooltipTitles,
+        tooltipTitle: '5月',
+        tooltipValue: '45.6 小时',
+        maxValue: 60.0,
       ),
       const SizedBox(height: 12),
       const _ZoneDistributionPanel(
@@ -2698,42 +2716,50 @@ class _StatisticsPageState extends State<_StatisticsPage> {
     ];
   }
 
-  // 全部：总览 + 运动类型分布 + 月度里程趋势
+  // 全部：总览 + 运动类型分布 + 年度里程统计 + 年度时长统计
   List<Widget> _allPanels(_RideStats stats) {
+    const yearLabels = ['2020', '2021', '2022', '2023', '2024'];
+    const yearLabelIndices = <int>[0, 1, 2, 3, 4];
+    const yearTooltipTitles = <String>[
+      '2020年',
+      '2021年',
+      '2022年',
+      '2023年',
+      '2024年',
+    ];
     return [
       _StatsOverview(stats: stats),
       const SizedBox(height: 12),
       const _AnnualDistributionPanel(),
       const SizedBox(height: 12),
       _BarTrendPanel(
-        title: '月度里程趋势',
+        title: '年度里程统计',
         unit: '单位：km',
-        values: const <double>[
-          320, 280, 410, 680, 920, 1026, 760, 540, 620, 880, 700, 430,
-        ],
-        labels: const ['1月', '3月', '5月', '7月', '9月', '11月'],
-        labelIndices: const <int>[0, 2, 4, 6, 8, 10],
+        values: const <double>[2680, 4520, 6810, 7900, 8564.7],
+        labels: yearLabels,
+        labelIndices: yearLabelIndices,
         color: _RideColors.orange,
-        tooltipTitles: const <String>[
-          '1月',
-          '2月',
-          '3月',
-          '4月',
-          '5月',
-          '6月',
-          '7月',
-          '8月',
-          '9月',
-          '10月',
-          '11月',
-          '12月',
-        ],
-        tooltipTitle: '5月',
-        tooltipValue: '1026.3 km',
-        maxValue: 1500,
+        tooltipTitles: yearTooltipTitles,
+        tooltipTitle: '2024年',
+        tooltipValue: '8564.7 km',
+        maxValue: 10000,
+      ),
+      const SizedBox(height: 12),
+      _BarTrendPanel(
+        title: '年度时长统计',
+        unit: '单位：小时',
+        values: const <double>[118.6, 192.4, 286.8, 332.5, 360.3],
+        labels: yearLabels,
+        labelIndices: yearLabelIndices,
+        color: const Color(0xFF268DFF),
+        tooltipTitles: yearTooltipTitles,
+        tooltipTitle: '2024年',
+        tooltipValue: '360.3 小时',
+        maxValue: 420.0,
       ),
     ];
   }
+
 }
 
 class _PeriodSegment extends StatelessWidget {
