@@ -1110,7 +1110,7 @@ class DatabaseService {
     await batch.commit(noResult: true);
   }
 
-  Future<List<RideSession>> getRecentRides({int limit = 20}) async {
+  Future<List<RideSession>> getRides({int? limit}) async {
     final db = await database;
     await _createRideTables(db);
     final maps = await db.query(
@@ -1119,6 +1119,10 @@ class DatabaseService {
       limit: limit,
     );
     return maps.map(RideSession.fromMap).toList();
+  }
+
+  Future<List<RideSession>> getRecentRides({int limit = 20}) {
+    return getRides(limit: limit);
   }
 
   Future<List<RidePoint>> getRidePoints(int rideId) async {

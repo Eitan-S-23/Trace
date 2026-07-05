@@ -249,6 +249,8 @@ class _ActivityHeroCard extends StatelessWidget {
       final routeTitle = selectedRoute?.title ?? '户外骑行';
       final routeDate = selectedRoute?.date ??
           (controller.isRecording.value ? '当前骑行记录中' : '未选择路线');
+      final gpsAccuracy = controller.gpsAccuracyM.value;
+      final gpsUnit = gpsAccuracy > 0 ? '±${gpsAccuracy.toStringAsFixed(0)}m' : '';
 
       // 整张英雄卡可点击 → 进入当前选中的路线详情；
       // 全屏/分享圆钮为更内层 InkWell，点击时由最内层赢得手势，互不干扰。
@@ -420,11 +422,11 @@ class _ActivityHeroCard extends StatelessWidget {
                           unit: 'm',
                         ),
                       ),
-                      const Expanded(
+                      Expanded(
                         child: _HeroStat(
-                          label: '训练负荷',
-                          value: '--',
-                          unit: '暂无',
+                          label: 'GPS',
+                          value: controller.gpsStatus.value,
+                          unit: gpsUnit,
                         ),
                       ),
                     ],
@@ -2317,29 +2319,11 @@ class _StatisticsPageState extends State<_StatisticsPage> {
 
   late final PageController _periodPageController;
   var _periodIndex = 1; // 0 周 / 1 月 / 2 年 / 3 全部
-  DateTime _selectedWeekStart = DateTime(2024, 5, 12);
-  DateTime _selectedMonth = DateTime(2024, 5);
-  int _selectedYear = 2024;
-  DateTime _allStart = DateTime(2023, 1, 1);
-  DateTime _allEnd = DateTime(2024, 5, 18);
-
-  // 周/全部 的总览为示例数据（统计页定位为示例驱动的设计复刻）。
-  static const _weekStats = _RideStats(
-    rideCount: '5',
-    totalDistance: '128.7',
-    totalDuration: '05:32:18',
-    totalClimb: '1586',
-    calories: '4028',
-    avgSpeed: '23.2',
-  );
-  static const _allStats = _RideStats(
-    rideCount: '320',
-    totalDistance: '8564.7',
-    totalDuration: '360:15:42',
-    totalClimb: '95688',
-    calories: '245680',
-    avgSpeed: '23.8',
-  );
+  late DateTime _selectedWeekStart;
+  late DateTime _selectedMonth;
+  late int _selectedYear;
+  late DateTime _allStart;
+  late DateTime _allEnd;
 
   String get _dateLabel {
     switch (_periodIndex) {
@@ -2361,6 +2345,12 @@ class _StatisticsPageState extends State<_StatisticsPage> {
   @override
   void initState() {
     super.initState();
+    final today = _dateOnly(DateTime.now());
+    _selectedWeekStart = _weekStartSunday(today);
+    _selectedMonth = DateTime(today.year, today.month);
+    _selectedYear = today.year;
+    _allStart = DateTime(today.year);
+    _allEnd = today;
     _periodPageController = PageController(initialPage: _periodIndex);
   }
 
@@ -2460,7 +2450,7 @@ class _StatisticsPageState extends State<_StatisticsPage> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final monthStats = _RideStats.from(widget.controller);
+      final rides = widget.controller.rideHistory.toList();
       return Column(
         children: [
           // 固定子头：周期分段 + 日期选择器（无第二顶部栏）
@@ -2497,7 +2487,7 @@ class _StatisticsPageState extends State<_StatisticsPage> {
                 return SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
-                  child: Column(children: _panelsForPeriod(index, monthStats)),
+                  child: Column(children: _panelsForPeriod(index, rides)),
                 );
               },
             ),
@@ -2507,68 +2497,30 @@ class _StatisticsPageState extends State<_StatisticsPage> {
     });
   }
 
-  List<Widget> _panelsForPeriod(int index, _RideStats monthStats) {
+  List<Widget> _panelsForPeriod(int index, List<RideSession> rides) {
     switch (index) {
       case 0:
-        return _trendPanels(_weekStats, isWeek: true);
+        return _trendPanels(rides, isWeek: true);
       case 2:
-        return _yearPanels();
+        return _yearPanels(rides);
       case 3:
-        return _allPanels(_allStats);
+        return _allPanels(rides);
       case 1:
       default:
-        return _trendPanels(monthStats, isWeek: false);
+        return _trendPanels(rides, isWeek: false);
     }
   }
 
-  // 周/月：总览 + 里程趋势 + 运动时长趋势
-  List<Widget> _trendPanels(_RideStats stats, {required bool isWeek}) {
-    const weekMileage = <double>[18, 24, 0, 32, 27, 41, 36];
-    const weekDuration = <double>[0.9, 1.2, 0, 1.7, 1.4, 2.1, 1.8];
-    const monthMileageSeed = <double>[
-      82,
-      32,
-      74,
-      8,
-      41,
-      79,
-      11,
-      58,
-      44,
-      88,
-      99,
-      59,
-      14,
-      75,
-      80,
-      102,
-      66,
-    ];
-    const monthDurationSeed = <double>[
-      5,
-      2,
-      5,
-      0.5,
-      2.5,
-      4.9,
-      0.7,
-      3.4,
-      2.7,
-      5.3,
-      6.0,
-      3.7,
-      0.9,
-      4.6,
-      5.0,
-      6.6,
-      4.2,
-    ];
+  List<Widget> _trendPanels(List<RideSession> rides, {required bool isWeek}) {
     final dates = isWeek
         ? [
             for (var i = 0; i < 7; i++)
               _selectedWeekStart.add(Duration(days: i)),
           ]
         : _datesForMonth(_selectedMonth);
+    final start = dates.first;
+    final end = _exclusiveDayAfter(dates.last);
+    final periodRides = _ridesInRange(rides, start, end);
     final labelIndices = isWeek
         ? [for (var i = 0; i < dates.length; i++) i]
         : _monthTickIndices(dates.length);
@@ -2578,14 +2530,10 @@ class _StatisticsPageState extends State<_StatisticsPage> {
     final tooltipTitles = [
       for (final date in dates) _formatChineseMonthDay(date),
     ];
-    final mileage = isWeek
-        ? weekMileage
-        : _spreadTrendValues(monthMileageSeed, dates.length);
-    final duration = isWeek
-        ? weekDuration
-        : _spreadTrendValues(monthDurationSeed, dates.length);
+    final mileage = _dailyDistanceSeries(periodRides, dates);
+    final duration = _dailyDurationSeries(periodRides, dates);
     return [
-      _StatsOverview(stats: stats),
+      _StatsOverview(stats: _RideStats.fromRides(periodRides)),
       const SizedBox(height: 12),
       _BarTrendPanel(
         title: '里程趋势',
@@ -2596,8 +2544,8 @@ class _StatisticsPageState extends State<_StatisticsPage> {
         color: _RideColors.orange,
         tooltipTitles: tooltipTitles,
         tooltipTitle: tooltipTitles.isEmpty ? '' : tooltipTitles.first,
-        tooltipValue: isWeek ? '32.4 km' : '102.6 km',
-        maxValue: isWeek ? 60.0 : 120.0,
+        tooltipValue: '0.0 km',
+        maxValue: _barMaxValue(mileage, fallback: isWeek ? 10.0 : 30.0),
       ),
       const SizedBox(height: 12),
       _BarTrendPanel(
@@ -2609,58 +2557,50 @@ class _StatisticsPageState extends State<_StatisticsPage> {
         color: const Color(0xFF268DFF),
         tooltipTitles: tooltipTitles,
         tooltipTitle: tooltipTitles.isEmpty ? '' : tooltipTitles.first,
-        tooltipValue: isWeek ? '1:45:28' : '3:45:28',
-        maxValue: isWeek ? 3.0 : 8.0,
+        tooltipValue: '0 分钟',
+        maxValue: _barMaxValue(duration, fallback: isWeek ? 1.0 : 2.0),
       ),
     ];
   }
   // 年：运动类型分布 + 月度里程统计 + 月度时长统计 + 强度分布
-  List<Widget> _yearPanels() {
+  List<Widget> _yearPanels(List<RideSession> rides) {
+    final yearStart = DateTime(_selectedYear);
+    final yearEnd = DateTime(_selectedYear + 1);
+    final yearRides = _ridesInRange(rides, yearStart, yearEnd);
+    final monthMileage = _monthlyDistanceSeries(yearRides);
+    final monthDuration = _monthlyDurationSeries(yearRides);
     const monthLabels = ['1月', '3月', '5月', '7月', '9月', '11月'];
     const monthLabelIndices = <int>[0, 2, 4, 6, 8, 10];
-    const monthTooltipTitles = <String>[
-      '1月',
-      '2月',
-      '3月',
-      '4月',
-      '5月',
-      '6月',
-      '7月',
-      '8月',
-      '9月',
-      '10月',
-      '11月',
-      '12月',
+    final monthTooltipTitles = <String>[
+      for (var month = 1; month <= 12; month++) '$month月',
     ];
     return [
-      const _AnnualDistributionPanel(),
+      _AnnualDistributionPanel(outdoorDistanceKm: _sumDistance(yearRides)),
       const SizedBox(height: 12),
       _BarTrendPanel(
         title: '月度里程统计',
         unit: '单位：km',
-        values: const <double>[320, 0, 410, 680, 920, 1026, 0, 0, 0, 0, 0, 0],
+        values: monthMileage,
         labels: monthLabels,
         labelIndices: monthLabelIndices,
         color: _RideColors.orange,
         tooltipTitles: monthTooltipTitles,
-        tooltipTitle: '5月',
-        tooltipValue: '1026.3 km',
-        maxValue: 1500,
+        tooltipTitle: '${DateTime.now().month}月',
+        tooltipValue: '0.0 km',
+        maxValue: _barMaxValue(monthMileage, fallback: 50.0),
       ),
       const SizedBox(height: 12),
       _BarTrendPanel(
         title: '月度时长统计',
         unit: '单位：小时',
-        values: const <double>[
-          12.6, 0, 18.4, 28.7, 39.2, 45.6, 0, 0, 0, 0, 0, 0,
-        ],
+        values: monthDuration,
         labels: monthLabels,
         labelIndices: monthLabelIndices,
         color: const Color(0xFF268DFF),
         tooltipTitles: monthTooltipTitles,
-        tooltipTitle: '5月',
-        tooltipValue: '45.6 小时',
-        maxValue: 60.0,
+        tooltipTitle: '${DateTime.now().month}月',
+        tooltipValue: '0 分钟',
+        maxValue: _barMaxValue(monthDuration, fallback: 3.0),
       ),
       const SizedBox(height: 12),
       const _ZoneDistributionPanel(
@@ -2690,45 +2630,45 @@ class _StatisticsPageState extends State<_StatisticsPage> {
   }
 
   // 全部：总览 + 运动类型分布 + 年度里程统计 + 年度时长统计
-  List<Widget> _allPanels(_RideStats stats) {
-    const yearLabels = ['2020', '2021', '2022', '2023', '2024'];
-    const yearLabelIndices = <int>[0, 1, 2, 3, 4];
-    const yearTooltipTitles = <String>[
-      '2020年',
-      '2021年',
-      '2022年',
-      '2023年',
-      '2024年',
-    ];
+  List<Widget> _allPanels(List<RideSession> rides) {
+    final rangeStart = _dateOnly(_allStart);
+    final rangeEnd = _exclusiveDayAfter(_allEnd);
+    final allRides = _ridesInRange(rides, rangeStart, rangeEnd);
+    final years = _yearsForRange(rangeStart, _allEnd);
+    final yearLabels = [for (final year in years) '$year'];
+    final yearLabelIndices = [for (var i = 0; i < years.length; i++) i];
+    final yearTooltipTitles = [for (final year in years) '$year年'];
+    final yearMileage = _yearlyDistanceSeries(allRides, years);
+    final yearDuration = _yearlyDurationSeries(allRides, years);
     return [
-      _StatsOverview(stats: stats),
+      _StatsOverview(stats: _RideStats.fromRides(allRides)),
       const SizedBox(height: 12),
-      const _AnnualDistributionPanel(),
+      _AnnualDistributionPanel(outdoorDistanceKm: _sumDistance(allRides)),
       const SizedBox(height: 12),
       _BarTrendPanel(
         title: '年度里程统计',
         unit: '单位：km',
-        values: const <double>[2680, 4520, 6810, 7900, 8564.7],
+        values: yearMileage,
         labels: yearLabels,
         labelIndices: yearLabelIndices,
         color: _RideColors.orange,
         tooltipTitles: yearTooltipTitles,
-        tooltipTitle: '2024年',
-        tooltipValue: '8564.7 km',
-        maxValue: 10000,
+        tooltipTitle: '${_selectedYear}年',
+        tooltipValue: '0.0 km',
+        maxValue: _barMaxValue(yearMileage, fallback: 50.0),
       ),
       const SizedBox(height: 12),
       _BarTrendPanel(
         title: '年度时长统计',
         unit: '单位：小时',
-        values: const <double>[118.6, 192.4, 286.8, 332.5, 360.3],
+        values: yearDuration,
         labels: yearLabels,
         labelIndices: yearLabelIndices,
         color: const Color(0xFF268DFF),
         tooltipTitles: yearTooltipTitles,
-        tooltipTitle: '2024年',
-        tooltipValue: '360.3 小时',
-        maxValue: 420.0,
+        tooltipTitle: '${_selectedYear}年',
+        tooltipValue: '0 分钟',
+        maxValue: _barMaxValue(yearDuration, fallback: 3.0),
       ),
     ];
   }
@@ -4313,20 +4253,112 @@ List<int> _monthTickIndices(int dayCount) {
   return indices;
 }
 
-List<double> _spreadTrendValues(List<double> seed, int count) {
-  if (count <= 0 || seed.isEmpty) return <double>[];
-  if (count == 1) return <double>[seed.first];
-  if (seed.length == count) return List<double>.of(seed);
+DateTime _dateOnly(DateTime date) {
+  return DateTime(date.year, date.month, date.day);
+}
 
-  final lastSeedIndex = seed.length - 1;
+DateTime _exclusiveDayAfter(DateTime date) {
+  final day = _dateOnly(date);
+  return DateTime(day.year, day.month, day.day + 1);
+}
+
+List<RideSession> _ridesInRange(
+  List<RideSession> rides,
+  DateTime startInclusive,
+  DateTime endExclusive,
+) {
+  return rides
+      .where(
+        (ride) =>
+            !ride.startTime.isBefore(startInclusive) &&
+            ride.startTime.isBefore(endExclusive),
+      )
+      .toList(growable: false);
+}
+
+List<double> _dailyDistanceSeries(
+  List<RideSession> rides,
+  List<DateTime> dates,
+) {
   return [
-    for (var i = 0; i < count; i++)
-      seed[(i * lastSeedIndex / (count - 1))
-          .round()
-          .clamp(0, lastSeedIndex)
-          .toInt()],
+    for (final date in dates)
+      _sumDistance(_ridesInRange(rides, _dateOnly(date), _exclusiveDayAfter(date))),
   ];
 }
+
+List<double> _dailyDurationSeries(
+  List<RideSession> rides,
+  List<DateTime> dates,
+) {
+  return [
+    for (final date in dates)
+      _sumDurationHours(
+        _ridesInRange(rides, _dateOnly(date), _exclusiveDayAfter(date)),
+      ),
+  ];
+}
+
+List<double> _monthlyDistanceSeries(List<RideSession> rides) {
+  final values = List<double>.filled(12, 0);
+  for (final ride in rides) {
+    values[ride.startTime.month - 1] += ride.distanceKm;
+  }
+  return values;
+}
+
+List<double> _monthlyDurationSeries(List<RideSession> rides) {
+  final values = List<double>.filled(12, 0);
+  for (final ride in rides) {
+    values[ride.startTime.month - 1] += ride.durationSeconds / 3600;
+  }
+  return values;
+}
+
+List<int> _yearsForRange(DateTime start, DateTime end) {
+  final firstYear = math.min(start.year, end.year);
+  final lastYear = math.max(start.year, end.year);
+  return [for (var year = firstYear; year <= lastYear; year++) year];
+}
+
+List<double> _yearlyDistanceSeries(List<RideSession> rides, List<int> years) {
+  return [
+    for (final year in years)
+      _sumDistance(
+        rides.where((ride) => ride.startTime.year == year),
+      ),
+  ];
+}
+
+List<double> _yearlyDurationSeries(List<RideSession> rides, List<int> years) {
+  return [
+    for (final year in years)
+      _sumDurationHours(
+        rides.where((ride) => ride.startTime.year == year),
+      ),
+  ];
+}
+
+double _sumDistance(Iterable<RideSession> rides) {
+  return rides.fold<double>(0, (sum, ride) => sum + ride.distanceKm);
+}
+
+double _sumDurationHours(Iterable<RideSession> rides) {
+  return rides.fold<double>(
+    0,
+    (sum, ride) => sum + ride.durationSeconds / 3600,
+  );
+}
+
+double _barMaxValue(List<double> values, {required double fallback}) {
+  if (values.isEmpty) return fallback;
+  final maxValue = values.fold<double>(
+    0,
+    (currentMax, value) => math.max(currentMax, value).toDouble(),
+  );
+  if (maxValue <= 0) return fallback;
+  return math.max(fallback, maxValue * 1.25);
+}
+
 class _StatsOverview extends StatelessWidget {
   const _StatsOverview({required this.stats});
 
@@ -4633,7 +4665,9 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
   }
 }
 class _AnnualDistributionPanel extends StatelessWidget {
-  const _AnnualDistributionPanel();
+  const _AnnualDistributionPanel({required this.outdoorDistanceKm});
+
+  final double outdoorDistanceKm;
 
   @override
   Widget build(BuildContext context) {
@@ -4642,9 +4676,15 @@ class _AnnualDistributionPanel extends StatelessWidget {
       Color(0xFF268DFF),
       Color(0xFF62D729),
     ];
-    const distribution = [0.85, 0.10, 0.05];
+    final hasDistance = outdoorDistanceKm > 0;
+    const distribution = <double>[1, 0, 0];
     const labels = ['户外骑行', '室内骑行', '其他运动'];
-    const details = ['872.3 km  85%', '102.4 km  10%', '51.6 km  5%'];
+    final outdoorDistanceText = outdoorDistanceKm.toStringAsFixed(1);
+    final details = [
+      '$outdoorDistanceText km  ${hasDistance ? '100%' : '0%'}',
+      '0.0 km  0%',
+      '0.0 km  0%',
+    ];
 
     return _GlassPanel(
       padding: const EdgeInsets.all(16),
@@ -4676,26 +4716,26 @@ class _AnnualDistributionPanel extends StatelessWidget {
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 400;
               final legend = Column(
-                children: const [
+                children: [
                   _DistributionRow(
                     color: _RideColors.orange,
                     label: '户外骑行',
-                    value: '872.3 km',
-                    ratio: '85%',
+                    value: '$outdoorDistanceText km',
+                    ratio: hasDistance ? '100%' : '0%',
                   ),
-                  SizedBox(height: 18),
-                  _DistributionRow(
+                  const SizedBox(height: 18),
+                  const _DistributionRow(
                     color: Color(0xFF268DFF),
                     label: '室内骑行',
-                    value: '102.4 km',
-                    ratio: '10%',
+                    value: '0.0 km',
+                    ratio: '0%',
                   ),
-                  SizedBox(height: 18),
-                  _DistributionRow(
+                  const SizedBox(height: 18),
+                  const _DistributionRow(
                     color: Color(0xFF62D729),
                     label: '其他运动',
-                    value: '51.6 km',
-                    ratio: '5%',
+                    value: '0.0 km',
+                    ratio: '0%',
                   ),
                 ],
               );
@@ -8984,27 +9024,22 @@ class _RideStats {
   final String calories;
   final String avgSpeed;
 
-  factory _RideStats.from(RideController controller) {
-    final rides = controller.recentRides.toList();
-    final hasHistory = rides.isNotEmpty;
-    final totalDistance = hasHistory
-        ? rides.fold<double>(0, (sum, ride) => sum + ride.distanceKm)
-        : 1026.3;
-    final totalSeconds = hasHistory
-        ? rides.fold<int>(0, (sum, ride) => sum + ride.durationSeconds)
-        : const Duration(hours: 45, minutes: 32, seconds: 18).inSeconds;
-    final totalClimb = hasHistory
-        ? rides.fold<double>(0, (sum, ride) => sum + ride.totalClimbM)
-        : 12868.0;
+  factory _RideStats.fromRides(List<RideSession> rides) {
+    final totalDistance =
+        rides.fold<double>(0, (sum, ride) => sum + ride.distanceKm);
+    final totalSeconds =
+        rides.fold<int>(0, (sum, ride) => sum + ride.durationSeconds);
+    final totalClimb =
+        rides.fold<double>(0, (sum, ride) => sum + ride.totalClimbM);
     final avgSpeed = totalSeconds > 0 ? totalDistance / totalSeconds * 3600 : 0;
 
     return _RideStats(
-      rideCount: hasHistory ? rides.length.toString() : '27',
+      rideCount: rides.length.toString(),
       totalDistance: totalDistance.toStringAsFixed(1),
       totalDuration: _formatSeconds(totalSeconds),
       totalClimb: totalClimb.toStringAsFixed(0),
       calories: (totalDistance * 31.73).round().toString(),
-      avgSpeed: (avgSpeed > 0 ? avgSpeed : 22.5).toStringAsFixed(1),
+      avgSpeed: avgSpeed.toStringAsFixed(1),
     );
   }
 }

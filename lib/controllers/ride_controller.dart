@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
@@ -26,6 +27,7 @@ class RideController extends GetxController {
   final currentPaceSecondsPerKm = 0.0.obs;
   final caloriesKcal = 0.obs;
   final recentRides = <RideSession>[].obs;
+  final rideHistory = <RideSession>[].obs;
   final weeklyDistancesKm = <double>[].obs;
   final monthlyDistanceKm = 0.0.obs;
   final monthGoalKm = 500.0.obs;
@@ -67,12 +69,15 @@ class RideController extends GetxController {
   void onInit() {
     super.onInit();
     loadRideHistory();
+    unawaited(refreshGpsStatus());
   }
 
   Future<void> loadRideHistory() async {
     try {
-      recentRides.assignAll(await _db.getRecentRides(limit: 20));
-      weeklyDistancesKm.assignAll(_buildWeeklyDistances(recentRides));
+      final rides = await _db.getRides();
+      rideHistory.assignAll(rides);
+      recentRides.assignAll(rides.take(20).toList());
+      weeklyDistancesKm.assignAll(_buildWeeklyDistances(rideHistory));
       final now = DateTime.now();
       final monthStart = DateTime(now.year, now.month);
       final totals = await _db.getRideTotals(since: monthStart);
@@ -82,10 +87,36 @@ class RideController extends GetxController {
     }
   }
 
+  Future<void> refreshGpsStatus({bool requestPermission = false}) async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      gpsStatus.value = '定位服务关闭';
+      return;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (requestPermission && permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      gpsStatus.value = 'GPS 未授权';
+      return;
+    }
+    if (permission == LocationPermission.deniedForever) {
+      gpsStatus.value = 'GPS 权限被禁用';
+      return;
+    }
+
+    gpsStatus.value = 'GPS 就绪';
+  }
+
   Future<bool> _ensurePermission() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      gpsStatus.value = '定位服务关闭';
       Get.snackbar('定位不可用', '请先开启系统定位服务', snackPosition: SnackPosition.BOTTOM);
+      await Geolocator.openLocationSettings();
       return false;
     }
 
@@ -95,14 +126,17 @@ class RideController extends GetxController {
     }
 
     if (permission == LocationPermission.deniedForever) {
+      gpsStatus.value = 'GPS 权限被禁用';
       Get.snackbar('定位权限被禁用', '请在系统设置中允许定位权限',
           snackPosition: SnackPosition.BOTTOM);
+      await Geolocator.openAppSettings();
       return false;
     }
 
     final allowed = permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always;
     if (!allowed) {
+      gpsStatus.value = 'GPS 未授权';
       Get.snackbar('定位权限未授予', '无法开始记录骑行',
           snackPosition: SnackPosition.BOTTOM);
     }
@@ -129,10 +163,7 @@ class RideController extends GetxController {
 
     _positionSub?.cancel();
     _positionSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 1,
-      ),
+      locationSettings: _rideLocationSettings(),
     ).listen(
       _onPosition,
       onError: (Object error) {
@@ -236,9 +267,7 @@ class RideController extends GetxController {
   Future<void> _seedCurrentPosition() async {
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-        ),
+        locationSettings: _rideLocationSettings(),
       ).timeout(const Duration(seconds: 8));
       _onPosition(position);
     } on TimeoutException {
@@ -309,7 +338,7 @@ class RideController extends GetxController {
   }
 
   double _normalizedSpeedKmh(Position position, DateTime now) {
-    if (position.speed.isFinite && position.speed >= 0) {
+    if (position.speed.isFinite && position.speed > 0.2) {
       return position.speed * 3.6;
     }
     if (_lastPosition == null || _lastPositionTime == null) return 0;
@@ -325,6 +354,29 @@ class RideController extends GetxController {
       position.longitude,
     );
     return meters / seconds * 3.6;
+  }
+
+  LocationSettings _rideLocationSettings() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 1,
+        intervalDuration: const Duration(seconds: 1),
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 1,
+        activityType: ActivityType.fitness,
+        pauseLocationUpdatesAutomatically: false,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 1,
+    );
   }
 
   void _updateDerivedMetrics() {
