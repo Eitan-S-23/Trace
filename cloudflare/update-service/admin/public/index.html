@@ -3650,6 +3650,7 @@
           "metrics.patches": "Patches",
           "metrics.installerSize": "Package",
           "metrics.fallback": "Fallback",
+          "metrics.buildTime": "Build time",
           "status.loadingReleaseData": "Loading release data",
           "status.operational": "All systems operational",
           "status.fault": "Fault",
@@ -3921,6 +3922,7 @@
           "metrics.patches": "补丁",
           "metrics.installerSize": "安装包",
           "metrics.fallback": "回退",
+          "metrics.buildTime": "构建时间",
           "status.loadingReleaseData": "正在加载发布数据",
           "status.operational": "系统运行正常",
           "status.fault": "故障",
@@ -5135,6 +5137,7 @@
               <div class="metric-line"><span>${escapeHtml(t("metrics.notesReady"))}</span><strong>${notesReady ? '<span class="ok-dot">✓</span>' : '<span class="warn-dot">!</span>'}</strong></div>
               <div class="metric-line"><span>${escapeHtml(t("metrics.patches"))}</span><strong>${escapeHtml(release.patch_count ?? 0)}</strong></div>
               <div class="metric-line"><span>${escapeHtml(t("metrics.installerSize"))}</span><strong>${escapeHtml(installerSize ? formatBytes(installerSize) : "--")}</strong></div>
+              <div class="metric-line"><span>${escapeHtml(t("metrics.buildTime"))}</span><strong>${escapeHtml(formatBuildTime(release.created_at))}</strong></div>
               <div class="metric-line"><span>${escapeHtml(t("metrics.fallback"))}</span><strong>${fallback > 0 ? `<span class="warn-dot">!</span>` : `<span class="ok-dot">✓</span>`}</strong></div>
             </div>
           </button>
@@ -5333,6 +5336,7 @@
             <div class="firmware-meta-grid">
               ${firmwareMeta(t("firmware.version"), release.version_name)}
               ${firmwareMeta(t("firmware.versionCode"), release.version_code)}
+              ${firmwareMeta(t("metrics.buildTime"), formatBuildTime(release.created_at))}
               ${firmwareMeta(t("firmware.size"), formatBytes(release.size_bytes ?? 0))}
               ${firmwareMeta(t("firmware.transport"), release.transport ?? "ble")}
               ${firmwareMeta(t("firmware.file"), release.file_name)}
@@ -5558,6 +5562,10 @@
             <span>${escapeHtml(t("gates.notes"))}</span>
             <strong>${notesReady ? escapeHtml(t("checks.ready")) : escapeHtml(t("gates.required"))}</strong>
           </div>
+          <div class="quick-meta-card">
+            <span>${escapeHtml(t("metrics.buildTime"))}</span>
+            <strong>${escapeHtml(formatBuildTime(release.created_at))}</strong>
+          </div>
         `;
       }
 
@@ -5579,6 +5587,7 @@
           release.release_notes,
           release.commit_sha,
           release.run_id,
+          formatBuildTime(release.created_at),
           release.state,
           publishedChannels(release).join(" ")
         ]
@@ -5902,6 +5911,19 @@
         return `${new Intl.NumberFormat(state.language === "zh" ? "zh-CN" : "en-US", {
           maximumFractionDigits: digits
         }).format(amount)} ${units[unitIndex]}`;
+      }
+
+      function formatBuildTime(value) {
+        const date = new Date(normalizedDate(value));
+        if (Number.isNaN(date.getTime())) return "--";
+        return new Intl.DateTimeFormat(state.language === "zh" ? "zh-CN" : "en-US", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false
+        }).format(date);
       }
 
       function r2QuotaRatio(bytes, { clamp = true } = {}) {
