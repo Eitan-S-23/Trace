@@ -32,6 +32,7 @@ class RideController extends GetxController {
   final speedTrendKmh = <double>[].obs;
   final altitudeTrendM = <double>[].obs;
   final activeTabIndex = 0.obs;
+  final selectedRoute = Rxn<RideRouteSelection>();
 
   StreamSubscription<Position>? _positionSub;
   Timer? _timer;
@@ -49,6 +50,17 @@ class RideController extends GetxController {
   void selectTab(int index) {
     if (index < 0 || index > 3) return;
     activeTabIndex.value = index;
+  }
+
+  void selectRoute(RideRouteSelection route) {
+    selectedRoute.value = route;
+  }
+
+  void clearSelectedRoute([String? title]) {
+    final current = selectedRoute.value;
+    if (title == null || current?.title == title) {
+      selectedRoute.value = null;
+    }
   }
 
   @override

@@ -86,7 +86,7 @@ class _SelectedPage extends StatelessWidget {
       case 1:
         return _StatisticsPage(controller: controller);
       case 2:
-        return const _RoutesPage();
+        return _RoutesPage(controller: controller);
       case 3:
         return _DevicesPage(controller: controller);
       case 0:
@@ -242,23 +242,26 @@ class _ActivityHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final sample = _RideSample.from(controller);
+      final selectedRoute = controller.selectedRoute.value;
+      final selectedGpxTrack = selectedRoute == null
+          ? const <_GpxPoint>[]
+          : _gpxPointsFromRideRoute(selectedRoute.track);
+      final routeTitle = selectedRoute?.title ?? '户外骑行';
+      final routeDate = selectedRoute?.date ??
+          (controller.isRecording.value ? '当前骑行记录中' : '未选择路线');
 
-      // 整张英雄卡可点击 → 进入路线详情（用当前骑行数据）；
+      // 整张英雄卡可点击 → 进入当前选中的路线详情；
       // 全屏/分享圆钮为更内层 InkWell，点击时由最内层赢得手势，互不干扰。
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => _openRidePage(
-          () => _RideRouteDetailPage(
-            title: '户外骑行',
-            date: '2024/05/18  08:32',
-            distance: sample.distanceText,
-            climb: sample.climbText,
-            duration: sample.durationText,
-            difficulty: '中等',
-            difficultyColor: const Color(0xFFA46AFF),
-            variant: 0,
-          ),
-        ),
+        onTap: () {
+          if (selectedRoute == null) {
+            controller.selectTab(2);
+            _showUiMessage('路线', '请先导入路线');
+            return;
+          }
+          _openSelectedRideRoute(selectedRoute);
+        },
         child: _GlassPanel(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -277,7 +280,13 @@ class _ActivityHeroCard extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(14),
                     child: CustomPaint(
-                      painter: _RouteMapPainter(track: controller.points),
+                      painter: _RouteMapPainter(
+                        variant: selectedRoute?.variant ?? 0,
+                        track: selectedRoute == null
+                            ? controller.points
+                            : const <RidePoint>[],
+                        gpxTrack: selectedGpxTrack,
+                      ),
                       child: const SizedBox.expand(),
                     ),
                   ),
@@ -292,13 +301,18 @@ class _ActivityHeroCard extends StatelessWidget {
                         icon: Icons.fullscreen,
                         onTap: () => _openRidePage(
                           () => _RideFullscreenMapPage(
-                            title: '户外骑行',
-                            date: '2024/05/18  08:32',
-                            distance: sample.distanceText,
-                            climb: sample.climbText,
-                            duration: sample.durationText,
-                            variant: 0,
-                            track: controller.points,
+                            title: routeTitle,
+                            date: routeDate,
+                            distance: selectedRoute?.distance ??
+                                sample.distanceText,
+                            climb: selectedRoute?.climb ?? sample.climbText,
+                            duration:
+                                selectedRoute?.duration ?? sample.durationText,
+                            variant: selectedRoute?.variant ?? 0,
+                            track: selectedRoute == null
+                                ? controller.points
+                                : const <RidePoint>[],
+                            gpxTrack: selectedGpxTrack,
                           ),
                         ),
                       ),
@@ -327,7 +341,9 @@ class _ActivityHeroCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 7),
                           Text(
-                            '户外骑行',
+                            routeTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.96),
                               fontSize: 16,
@@ -338,7 +354,9 @@ class _ActivityHeroCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '2024/05/18  08:32',
+                        routeDate,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.62),
                           fontSize: 12,
@@ -405,8 +423,8 @@ class _ActivityHeroCard extends StatelessWidget {
                       const Expanded(
                         child: _HeroStat(
                           label: '训练负荷',
-                          value: '187',
-                          unit: '高',
+                          value: '--',
+                          unit: '暂无',
                         ),
                       ),
                     ],
@@ -432,18 +450,50 @@ class _DesignMetricGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final sample = _RideSample.from(controller);
+      final speedTrend = controller.speedTrendKmh.toList();
+      final altitudeTrend = controller.altitudeTrendM.toList();
       final speedDetail = _MetricDetailData.speed(
         sample,
-        controller.speedTrendKmh.toList(),
+        speedTrend,
+        controller.elapsed.value,
       );
-      final powerDetail = _MetricDetailData.power();
-      final heartRateDetail = _MetricDetailData.heartRate();
-      final cadenceDetail = _MetricDetailData.cadence();
+      final powerDetail = _MetricDetailData.unavailable(
+        icon: Icons.bolt,
+        title: '功率',
+        color: const Color(0xFF64D72A),
+        primaryLabel: '平均功率',
+        secondaryLabel: '最大功率',
+        unit: 'w',
+      );
+      final heartRateDetail = _MetricDetailData.unavailable(
+        icon: Icons.favorite,
+        title: '心率',
+        color: const Color(0xFFFF3B5F),
+        primaryLabel: '平均心率',
+        secondaryLabel: '最大心率',
+        unit: 'bpm',
+      );
+      final cadenceDetail = _MetricDetailData.unavailable(
+        icon: Icons.track_changes,
+        title: '踏频',
+        color: const Color(0xFFFFC400),
+        primaryLabel: '平均踏频',
+        secondaryLabel: '最高踏频',
+        unit: 'rpm',
+      );
       final climbDetail = _MetricDetailData.climb(
         sample,
-        controller.altitudeTrendM.toList(),
+        altitudeTrend,
+        controller.elapsed.value,
       );
-      final temperatureDetail = _MetricDetailData.temperature();
+      final temperatureDetail = _MetricDetailData.unavailable(
+        icon: Icons.thermostat,
+        title: '温度',
+        color: const Color(0xFF42D8E6),
+        primaryLabel: '平均温度',
+        secondaryLabel: '最高温度',
+        unit: '°C',
+      );
       final cards = [
         _MetricTile(
           icon: Icons.speed,
@@ -453,40 +503,40 @@ class _DesignMetricGrid extends StatelessWidget {
           unit: 'km/h',
           footnote: '最高 ${sample.maxSpeedText} km/h',
           sparkColor: const Color(0xFF2088FF),
-          values: const [16, 17, 18, 18, 20, 24, 22, 29, 27, 31, 30, 33],
+          values: speedTrend,
           onTap: () => _showMetricDetailDialog(context, speedDetail),
         ),
         _MetricTile(
           icon: Icons.bolt,
           color: const Color(0xFF64D72A),
           title: '平均功率',
-          value: '186',
+          value: '--',
           unit: 'w',
-          footnote: '最大 562 w',
+          footnote: '暂无传感器数据',
           sparkColor: const Color(0xFF64D72A),
-          values: const [110, 112, 118, 135, 172, 188, 160, 176, 182, 194, 181, 202],
+          values: const <double>[],
           onTap: () => _showMetricDetailDialog(context, powerDetail),
         ),
         _MetricTile(
           icon: Icons.favorite,
           color: const Color(0xFFFF3B5F),
           title: '平均心率',
-          value: '156',
+          value: '--',
           unit: 'bpm',
-          footnote: '最大 188 bpm',
+          footnote: '暂无传感器数据',
           sparkColor: const Color(0xFFFF3B5F),
-          values: const [98, 106, 118, 130, 146, 159, 154, 165, 172, 169, 176, 182],
+          values: const <double>[],
           onTap: () => _showMetricDetailDialog(context, heartRateDetail),
         ),
         _MetricTile(
           icon: Icons.track_changes,
           color: const Color(0xFFFFC400),
           title: '平均踏频',
-          value: '87',
+          value: '--',
           unit: 'rpm',
-          footnote: '最高 118 rpm',
+          footnote: '暂无传感器数据',
           sparkColor: const Color(0xFFFFC400),
-          values: const [62, 64, 63, 70, 76, 91, 84, 79, 82, 88, 84, 92],
+          values: const <double>[],
           onTap: () => _showMetricDetailDialog(context, cadenceDetail),
         ),
         _MetricTile(
@@ -497,31 +547,18 @@ class _DesignMetricGrid extends StatelessWidget {
           unit: 'm',
           footnote: '总上升 ${sample.climbText} m',
           sparkColor: const Color(0xFFA533FF),
-          values: const [
-            0,
-            20,
-            45,
-            110,
-            180,
-            260,
-            360,
-            510,
-            650,
-            820,
-            1010,
-            1268,
-          ],
+          values: altitudeTrend,
           onTap: () => _showMetricDetailDialog(context, climbDetail),
         ),
         _MetricTile(
           icon: Icons.thermostat,
           color: const Color(0xFF42D8E6),
           title: '平均温度',
-          value: '22.4',
+          value: '--',
           unit: '°C',
-          footnote: '最高 28.6 °C',
+          footnote: '暂无传感器数据',
           sparkColor: const Color(0xFF42D8E6),
-          values: const [24, 23, 22, 20, 18, 19, 23, 22, 20, 19, 22, 21],
+          values: const <double>[],
           onTap: () => _showMetricDetailDialog(context, temperatureDetail),
         ),
       ];
@@ -707,6 +744,7 @@ class _MetricDetailData {
     this.zones = const [],
     this.detailRows = const [],
     this.footerIcon,
+    this.duration = Duration.zero,
   });
 
   final IconData icon;
@@ -728,17 +766,45 @@ class _MetricDetailData {
   final String footerLabel;
   final String footerValue;
   final IconData? footerIcon;
+  final Duration duration;
+
+  static _MetricDetailData unavailable({
+    required IconData icon,
+    required String title,
+    required Color color,
+    required String primaryLabel,
+    required String secondaryLabel,
+    required String unit,
+  }) {
+    return _MetricDetailData(
+      icon: icon,
+      title: title,
+      color: color,
+      primaryLabel: primaryLabel,
+      primaryValue: '--',
+      primaryUnit: unit,
+      secondaryLabel: secondaryLabel,
+      secondaryValue: '--',
+      secondaryUnit: unit,
+      chartUnit: unit,
+      chartMax: 1,
+      chartTicks: const <double>[0, 1],
+      chartValues: const <double>[],
+      distributionTitle: '数据分布',
+      detailRows: const [
+        _MetricDetailRow(label: '状态', value: '暂无实时传感器数据'),
+      ],
+      footerLabel: '数据来源',
+      footerValue: '等待传感器接入',
+    );
+  }
 
   static _MetricDetailData speed(
     _RideSample sample,
     List<double> liveValues,
+    Duration duration,
   ) {
-    const fallback = [
-      31.0, 8.0, 35.0, 27.0, 38.0, 30.0, 41.0, 33.0, 37.0, 29.0, 39.0, 36.0,
-      33.0, 34.0, 40.0, 32.0, 44.0, 37.0, 42.0, 6.0, 39.0, 34.0, 36.0, 35.0,
-      41.0, 28.0, 45.0, 31.0, 33.0, 35.0, 30.0, 37.0, 44.0, 40.0, 34.0, 38.0,
-      36.0, 39.0, 35.0, 42.0, 24.0,
-    ];
+    final hasSeries = liveValues.where((value) => value.isFinite).length >= 2;
     return _MetricDetailData(
       icon: Icons.speed,
       title: '速度',
@@ -752,47 +818,17 @@ class _MetricDetailData {
       chartUnit: 'km/h',
       chartMax: 60,
       chartTicks: const <double>[0, 20, 40, 60],
-      chartValues: _detailSeries(liveValues, fallback),
+      chartValues: _detailSeries(liveValues),
       distributionTitle: '速度分布',
-      zones: const [
-        _MetricZoneRow(
-          color: Color(0xFFFF3158),
-          zone: 'Z5',
-          range: '> 50 km/h',
-          value: '12:15',
-          ratio: '11%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFFFF7A1A),
-          zone: 'Z4',
-          range: '40 - 50 km/h',
-          value: '28:47',
-          ratio: '26%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFFFFD21A),
-          zone: 'Z3',
-          range: '30 - 40 km/h',
-          value: '40:21',
-          ratio: '36%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFF4AD14A),
-          zone: 'Z2',
-          range: '20 - 30 km/h',
-          value: '32:16',
-          ratio: '18%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFF268DFF),
-          zone: 'Z1',
-          range: '< 20 km/h',
-          value: '12:09',
-          ratio: '9%',
+      detailRows: [
+        _MetricDetailRow(
+          label: '状态',
+          value: hasSeries ? '当前骑行 GPS 速度' : '等待实时速度数据',
         ),
       ],
-      footerLabel: '本段平均配速',
-      footerValue: '02:12 /km',
+      footerLabel: '数据来源',
+      footerValue: hasSeries ? '当前骑行记录' : '等待 GPS 数据',
+      duration: duration,
     );
   }
 
@@ -985,13 +1021,12 @@ class _MetricDetailData {
   static _MetricDetailData climb(
     _RideSample sample,
     List<double> liveValues,
+    Duration duration,
   ) {
-    const fallback = [
-      180.0, 230.0, 260.0, 320.0, 360.0, 440.0, 500.0, 540.0, 620.0, 720.0,
-      820.0, 900.0, 960.0, 1030.0, 1090.0, 1060.0, 1140.0, 1110.0, 1185.0,
-      1100.0, 1160.0, 1190.0, 1280.0, 1360.0, 1390.0, 1420.0, 1460.0, 1440.0,
-      1490.0, 1470.0, 1500.0,
-    ];
+    final cleaned = liveValues.where((value) => value.isFinite).toList();
+    final hasSeries = cleaned.length >= 2;
+    final currentAltitude =
+        cleaned.isEmpty ? '--' : cleaned.last.toStringAsFixed(0);
     return _MetricDetailData(
       icon: Icons.terrain,
       title: '爬升',
@@ -999,53 +1034,23 @@ class _MetricDetailData {
       primaryLabel: '累计爬升',
       primaryValue: sample.climbText,
       primaryUnit: 'm',
-      secondaryLabel: '累计下降',
-      secondaryValue: '1187',
+      secondaryLabel: '当前海拔',
+      secondaryValue: currentAltitude,
       secondaryUnit: 'm',
       chartUnit: 'm',
       chartMax: 1500,
       chartTicks: const <double>[0, 500, 1000, 1500],
-      chartValues: _detailSeries(liveValues, fallback),
+      chartValues: _detailSeries(liveValues),
       distributionTitle: '爬升分布',
-      zones: const [
-        _MetricZoneRow(
-          color: Color(0xFFB64CFF),
-          zone: '',
-          range: '> 20%',
-          value: '2.1 km',
-          ratio: '8%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFF7A35D8),
-          zone: '',
-          range: '10% - 20%',
-          value: '6.5 km',
-          ratio: '24%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFF365CCF),
-          zone: '',
-          range: '5% - 10%',
-          value: '11.8 km',
-          ratio: '43%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFF22BCD1),
-          zone: '',
-          range: '1% - 5%',
-          value: '9.3 km',
-          ratio: '18%',
-        ),
-        _MetricZoneRow(
-          color: Color(0xFF66D34C),
-          zone: '',
-          range: '< 1%',
-          value: '2.0 km',
-          ratio: '7%',
+      detailRows: [
+        _MetricDetailRow(
+          label: '状态',
+          value: hasSeries ? '当前骑行 GPS 海拔' : '等待实时海拔数据',
         ),
       ],
-      footerLabel: '最大坡度',
-      footerValue: '24.3%',
+      footerLabel: '数据来源',
+      footerValue: hasSeries ? '当前骑行记录' : '等待 GPS 数据',
+      duration: duration,
     );
   }
 
@@ -1107,9 +1112,9 @@ class _MetricDetailRow {
   final String value;
 }
 
-List<double> _detailSeries(List<double> liveValues, List<double> fallback) {
+List<double> _detailSeries(List<double> liveValues) {
   final cleaned = liveValues.where((value) => value.isFinite).toList();
-  return cleaned.length >= 2 ? cleaned : fallback;
+  return cleaned.length >= 2 ? cleaned : const <double>[];
 }
 
 void _showMetricDetailDialog(BuildContext context, _MetricDetailData data) {
@@ -1810,7 +1815,7 @@ class _MetricAreaChartPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
 
-    const labels = ['0:00', '45:00', '1:30:00', '2:15:00', '3:45:28'];
+    final labels = _timeAxisLabels(data.duration, count: 5);
     for (var i = 0; i < labels.length; i++) {
       final x = chartRect.left + chartRect.width * i / (labels.length - 1);
       _drawText(
@@ -1859,7 +1864,8 @@ class _MetricAreaChartPainter extends CustomPainter {
 
     final valueText =
         '${_formatChartValue(value, data.chartUnit)} ${data.chartUnit}';
-    final timeText = _timeLabelForIndex(index, data.chartValues.length);
+    final timeText =
+        _timeLabelForIndex(index, data.chartValues.length, data.duration);
     _drawTooltip(
       canvas,
       anchor: point,
@@ -2009,13 +2015,20 @@ double _clampDouble(double value, double min, double max) {
   return value.clamp(min, max).toDouble();
 }
 
-String _timeLabelForIndex(int index, int length) {
+String _timeLabelForIndex(
+  int index,
+  int length, [
+  Duration duration = Duration.zero,
+]) {
   if (length <= 1) return '0:00';
-  return _timeLabelForT(index / (length - 1));
+  return _timeLabelForT(index / (length - 1), duration);
 }
 
-String _timeLabelForT(double t) {
-  const totalSeconds = 3 * 3600 + 45 * 60 + 28;
+String _timeLabelForT(
+  double t, [
+  Duration duration = Duration.zero,
+]) {
+  final totalSeconds = math.max(0, duration.inSeconds);
   final seconds = (totalSeconds * t.clamp(0.0, 1.0)).round();
   final hours = seconds ~/ 3600;
   final minutes = (seconds % 3600) ~/ 60;
@@ -2024,6 +2037,15 @@ String _timeLabelForT(double t) {
     return '$hours:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
   return '$minutes:${secs.toString().padLeft(2, '0')}';
+}
+
+List<String> _timeAxisLabels(Duration duration, {required int count}) {
+  final safeCount = math.max(2, count);
+  return List.generate(
+    safeCount,
+    (index) => _timeLabelForT(index / (safeCount - 1), duration),
+    growable: false,
+  );
 }
 
 class _SpeedAltitudePanel extends StatelessWidget {
@@ -2035,42 +2057,8 @@ class _SpeedAltitudePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       final sample = _RideSample.from(controller);
-      final List<double> speedData = controller.speedTrendKmh.isEmpty
-          ? const <double>[
-              32,
-              28,
-              35,
-              20,
-              34,
-              30,
-              38,
-              27,
-              31,
-              34,
-              25,
-              36,
-              33,
-              29,
-            ]
-          : controller.speedTrendKmh.toList();
-      final List<double> altitudeData = controller.altitudeTrendM.isEmpty
-          ? const <double>[
-              0,
-              35,
-              70,
-              180,
-              320,
-              420,
-              620,
-              900,
-              1150,
-              1268,
-              1040,
-              780,
-              520,
-              360,
-            ]
-          : controller.altitudeTrendM.toList();
+      final speedData = controller.speedTrendKmh.toList();
+      final altitudeData = controller.altitudeTrendM.toList();
 
       return _GlassPanel(
         padding: const EdgeInsets.fromLTRB(8, 14, 8, 10),
@@ -2107,6 +2095,7 @@ class _SpeedAltitudePanel extends StatelessWidget {
             child: _InteractiveDualLineChart(
               speed: speedData,
               altitude: altitudeData,
+              duration: controller.elapsed.value,
             ),
           ),
         ],
@@ -2128,48 +2117,32 @@ class _DistributionGrid extends StatelessWidget {
           const _ZoneDistributionPanel(
             title: '功率分布',
             summaryLabel: '平均功率',
-            summaryValue: '186 w',
-            centerText: '186',
+            summaryValue: '-- w',
+            centerText: '--',
             centerSubtext: '平均功率',
             colors: [
-              Color(0xFFFF3158),
-              Color(0xFFFF7A1A),
-              Color(0xFFFFD21A),
-              Color(0xFF4AD14A),
-              Color(0xFF268DFF),
+              Color(0xFF64D72A),
             ],
             labels: [
-              'Z5  > 350 w',
-              'Z4  250 - 350 w',
-              'Z3  180 - 250 w',
-              'Z2  120 - 180 w',
-              'Z1  < 120 w',
+              '暂无实时传感器数据',
             ],
-            values: ['12:15   11%', '28:47   26%', '40:21   36%', '32:16   18%', '12:09   9%'],
-            distribution: [0.11, 0.26, 0.36, 0.18, 0.09],
+            values: ['等待传感器接入'],
+            distribution: [1],
           ),
           const _ZoneDistributionPanel(
             title: '心率分布',
             summaryLabel: '平均心率',
-            summaryValue: '156 bpm',
-            centerText: '156',
+            summaryValue: '-- bpm',
+            centerText: '--',
             centerSubtext: '平均心率',
             colors: [
-              Color(0xFFFF3158),
-              Color(0xFFFF7A1A),
-              Color(0xFFFFD21A),
-              Color(0xFF4AD14A),
-              Color(0xFF268DFF),
+              Color(0xFFFF3B5F),
             ],
             labels: [
-              'Z5  > 178 bpm',
-              'Z4  160 - 178 bpm',
-              'Z3  140 - 160 bpm',
-              'Z2  120 - 140 bpm',
-              'Z1  < 120 bpm',
+              '暂无实时传感器数据',
             ],
-            values: ['08:36   6%', '26:18   17%', '55:21   36%', '48:23   31%', '11:10   10%'],
-            distribution: [0.06, 0.17, 0.36, 0.31, 0.10],
+            values: ['等待传感器接入'],
+            distribution: [1],
           ),
         ];
 
@@ -4986,7 +4959,9 @@ class _InteractiveDonutChartState extends State<_InteractiveDonutChart> {
 }
 
 class _RoutesPage extends StatefulWidget {
-  const _RoutesPage();
+  const _RoutesPage({required this.controller});
+
+  final RideController controller;
 
   @override
   State<_RoutesPage> createState() => _RoutesPageState();
@@ -4997,6 +4972,7 @@ const _routeFilterLabels = <String>['全部', '简单', '中等', '困难'];
 class _RoutesPageState extends State<_RoutesPage> {
   static const _favoriteRoutesPrefsKey = 'speedometer.favorite_routes';
   static const _importedRoutesPrefsKey = 'speedometer.imported_routes';
+  static const _selectedRoutePrefsKey = 'speedometer.selected_route';
   static const _routeModeCount = 3;
 
   late final PageController _routePageController;
@@ -5089,6 +5065,16 @@ class _RoutesPageState extends State<_RoutesPage> {
             ?.where(knownTitles.contains)
             .toSet() ??
         <String>{};
+    final selectedTitle = prefs.getString(_selectedRoutePrefsKey);
+    _RouteListEntry? selectedRoute;
+    if (selectedTitle != null) {
+      for (final route in importedRoutes) {
+        if (route.title == selectedTitle) {
+          selectedRoute = route;
+          break;
+        }
+      }
+    }
     if (!mounted) return;
     setState(() {
       _importedRoutes
@@ -5098,6 +5084,14 @@ class _RoutesPageState extends State<_RoutesPage> {
         ..clear()
         ..addAll(titles);
     });
+    if (selectedRoute == null) {
+      widget.controller.clearSelectedRoute();
+      if (selectedTitle != null) {
+        await prefs.remove(_selectedRoutePrefsKey);
+      }
+    } else {
+      widget.controller.selectRoute(selectedRoute.toRideRouteSelection());
+    }
   }
 
   Future<void> _saveFavoriteRoutes() async {
@@ -5112,6 +5106,16 @@ class _RoutesPageState extends State<_RoutesPage> {
       _importedRoutesPrefsKey,
       _importedRoutes.map((route) => jsonEncode(route.toJson())).toList(),
     );
+  }
+
+  Future<void> _saveSelectedRouteTitle(String title) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_selectedRoutePrefsKey, title);
+  }
+
+  Future<void> _clearSelectedRouteTitle() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_selectedRoutePrefsKey);
   }
 
   void _toggleFavorite(_RouteListEntry route) {
@@ -5139,9 +5143,20 @@ class _RoutesPageState extends State<_RoutesPage> {
       _importedRoutes.removeWhere((item) => item.title == route.title);
       _favoriteRouteTitles.remove(route.title);
     });
+    if (widget.controller.selectedRoute.value?.title == route.title) {
+      widget.controller.clearSelectedRoute(route.title);
+      unawaited(_clearSelectedRouteTitle());
+    }
     unawaited(_saveImportedRoutes());
     unawaited(_saveFavoriteRoutes());
     _showUiMessage('删除路线', '已删除 ${route.title}');
+  }
+
+  void _selectRouteForRide(_RouteListEntry route) {
+    widget.controller.selectRoute(route.toRideRouteSelection());
+    setState(() {});
+    unawaited(_saveSelectedRouteTitle(route.title));
+    _showUiMessage('当前骑行路线', '已选择 ${route.title}');
   }
 
   Future<void> _importGpxRoute() async {
@@ -5324,6 +5339,8 @@ class _RoutesPageState extends State<_RoutesPage> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final route = visibleRoutes[index];
+        final selectedForRide =
+            widget.controller.selectedRoute.value?.title == route.title;
         return _RouteListCard(
           title: route.title,
           date: route.date,
@@ -5335,7 +5352,9 @@ class _RoutesPageState extends State<_RoutesPage> {
           variant: route.variant,
           track: route.track,
           favorited: _favoriteRouteTitles.contains(route.title),
+          selectedForRide: selectedForRide,
           onFavoriteToggle: () => _toggleFavorite(route),
+          onSelectForRide: () => _selectRouteForRide(route),
           onDelete: route.imported
               ? () => unawaited(_confirmDeleteImportedRoute(route))
               : null,
@@ -5457,6 +5476,30 @@ class _RouteListEntry {
         .map(_GpxPoint.tryFromJson)
         .whereType<_GpxPoint>()
         .toList(growable: false);
+  }
+}
+
+extension _RouteListEntrySelection on _RouteListEntry {
+  RideRouteSelection toRideRouteSelection() {
+    return RideRouteSelection(
+      title: title,
+      date: date,
+      distance: distance,
+      climb: climb,
+      duration: duration,
+      difficulty: difficulty,
+      difficultyColorValue: difficultyColor.value,
+      variant: variant,
+      track: track
+          .map(
+            (point) => RideRoutePoint(
+              latitude: point.lat,
+              longitude: point.lon,
+              altitudeM: point.ele,
+            ),
+          )
+          .toList(growable: false),
+    );
   }
 }
 
@@ -6062,6 +6105,34 @@ class _GpxPoint {
   }
 }
 
+List<_GpxPoint> _gpxPointsFromRideRoute(List<RideRoutePoint> track) {
+  return track
+      .map(
+        (point) => _GpxPoint(
+          lat: point.latitude,
+          lon: point.longitude,
+          ele: point.altitudeM,
+        ),
+      )
+      .toList(growable: false);
+}
+
+void _openSelectedRideRoute(RideRouteSelection route) {
+  _openRidePage(
+    () => _RideRouteDetailPage(
+      title: route.title,
+      date: route.date,
+      distance: route.distance,
+      climb: route.climb,
+      duration: route.duration,
+      difficulty: route.difficulty,
+      difficultyColor: Color(route.difficultyColorValue),
+      variant: route.variant,
+      track: _gpxPointsFromRideRoute(route.track),
+    ),
+  );
+}
+
 List<double> _routeElevationValues(List<_GpxPoint> track) {
   final values = track
       .map((point) => point.ele)
@@ -6303,7 +6374,9 @@ class _RouteListCard extends StatefulWidget {
     required this.variant,
     required this.track,
     required this.favorited,
+    required this.selectedForRide,
     required this.onFavoriteToggle,
+    required this.onSelectForRide,
     this.onDelete,
   });
 
@@ -6317,7 +6390,9 @@ class _RouteListCard extends StatefulWidget {
   final int variant;
   final List<_GpxPoint> track;
   final bool favorited;
+  final bool selectedForRide;
   final VoidCallback onFavoriteToggle;
+  final VoidCallback onSelectForRide;
   final VoidCallback? onDelete;
 
   @override
@@ -6433,17 +6508,23 @@ class _RouteListCardState extends State<_RouteListCard> {
                                   ),
                                 ),
                                 const SizedBox(height: 10),
-                                Row(
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
                                   children: [
                                     _RouteBadge(
                                       label: '公路',
                                       color: _RideColors.orange,
                                     ),
-                                    const SizedBox(width: 8),
                                     _RouteBadge(
                                       label: '难度 $difficulty',
                                       color: difficultyColor,
                                     ),
+                                    if (widget.selectedForRide)
+                                      const _RouteBadge(
+                                        label: '当前',
+                                        color: Color(0xFF3BE23E),
+                                      ),
                                   ],
                                 ),
                                 const Spacer(),
@@ -6470,6 +6551,13 @@ class _RouteListCardState extends State<_RouteListCard> {
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
                               _RouteActionButton(
+                                icon: Icons.navigation,
+                                active: widget.selectedForRide,
+                                tooltip: '设为当前骑行路线',
+                                onTap: widget.onSelectForRide,
+                              ),
+                              const SizedBox(width: 14),
+                              _RouteActionButton(
                                 icon: widget.favorited
                                     ? Icons.star
                                     : Icons.star_border,
@@ -6477,7 +6565,7 @@ class _RouteListCardState extends State<_RouteListCard> {
                                 tooltip: '收藏',
                                 onTap: _toggleFavorite,
                               ),
-                              const SizedBox(width: 18),
+                              const SizedBox(width: 14),
                               _RouteActionButton(
                                 icon: Icons.share_outlined,
                                 tooltip: '分享',
@@ -6486,7 +6574,7 @@ class _RouteListCardState extends State<_RouteListCard> {
                                   title: title,
                                 ),
                               ),
-                              const SizedBox(width: 18),
+                              const SizedBox(width: 14),
                               _RouteActionButton(
                                 icon: Icons.more_horiz,
                                 tooltip: '更多',
@@ -8359,19 +8447,65 @@ class _RecordingBar extends StatelessWidget {
 
   final RideController controller;
 
-  void _confirmFinish() {
-    Get.defaultDialog(
-      title: '结束骑行',
-      middleText: '确定结束并保存本次骑行吗？',
-      textConfirm: '结束并保存',
-      textCancel: '继续骑行',
-      confirmTextColor: Colors.white,
-      buttonColor: _RideColors.orange,
-      onConfirm: () {
-        Get.back();
-        controller.saveCurrentRide();
+  Future<void> _confirmFinish(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF121922),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(color: Colors.white.withOpacity(0.10)),
+          ),
+          title: const Text(
+            '结束骑行',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: Text(
+            '确定结束并保存本次骑行吗？',
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.72),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                '继续骑行',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.72),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _RideColors.orange,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                '结束并保存',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ],
+        );
       },
     );
+
+    if (confirmed == true) {
+      await controller.saveCurrentRide();
+    }
   }
 
   @override
@@ -8419,7 +8553,7 @@ class _RecordingBar extends StatelessWidget {
             ),
             const Spacer(),
             TextButton.icon(
-              onPressed: _confirmFinish,
+              onPressed: () => unawaited(_confirmFinish(context)),
               style: TextButton.styleFrom(
                 foregroundColor: _RideColors.orange,
                 textStyle: const TextStyle(fontWeight: FontWeight.w900),
@@ -8823,25 +8957,12 @@ class _RideSample {
   final String climbText;
 
   factory _RideSample.from(RideController controller) {
-    final hasLiveRide = controller.distanceKm.value > 0 ||
-        controller.elapsed.value > Duration.zero ||
-        controller.isRecording.value;
     return _RideSample(
-      distanceText: hasLiveRide
-          ? controller.distanceKm.value.toStringAsFixed(2)
-          : '102.63',
-      durationText: hasLiveRide
-          ? _formatDuration(controller.elapsed.value)
-          : '03:45:28',
-      avgSpeedText: hasLiveRide && controller.avgSpeedKmh.value > 0
-          ? controller.avgSpeedKmh.value.toStringAsFixed(1)
-          : '27.3',
-      maxSpeedText: hasLiveRide && controller.maxSpeedKmh.value > 0
-          ? controller.maxSpeedKmh.value.toStringAsFixed(1)
-          : '52.6',
-      climbText: hasLiveRide && controller.totalClimbM.value > 0
-          ? controller.totalClimbM.value.toStringAsFixed(0)
-          : '1268',
+      distanceText: controller.distanceKm.value.toStringAsFixed(2),
+      durationText: _formatDuration(controller.elapsed.value),
+      avgSpeedText: controller.avgSpeedKmh.value.toStringAsFixed(1),
+      maxSpeedText: controller.maxSpeedKmh.value.toStringAsFixed(1),
+      climbText: controller.totalClimbM.value.toStringAsFixed(0),
     );
   }
 }
@@ -9526,10 +9647,12 @@ class _InteractiveDualLineChart extends StatefulWidget {
   const _InteractiveDualLineChart({
     required this.speed,
     required this.altitude,
+    required this.duration,
   });
 
   final List<double> speed;
   final List<double> altitude;
+  final Duration duration;
 
   @override
   State<_InteractiveDualLineChart> createState() =>
@@ -9588,6 +9711,7 @@ class _InteractiveDualLineChartState extends State<_InteractiveDualLineChart> {
               painter: _DualLineChartPainter(
                 speed: widget.speed,
                 altitude: widget.altitude,
+                duration: widget.duration,
                 selectedT: _selectedT,
               ),
               child: const SizedBox.expand(),
@@ -9606,11 +9730,13 @@ class _DualLineChartPainter extends CustomPainter {
   const _DualLineChartPainter({
     required this.speed,
     required this.altitude,
+    required this.duration,
     this.selectedT,
   });
 
   final List<double> speed;
   final List<double> altitude;
+  final Duration duration;
   final double? selectedT;
 
   static const _speedMax = 60.0;
@@ -9643,7 +9769,7 @@ class _DualLineChartPainter extends CustomPainter {
     _drawSeries(canvas, rect, altitude, const Color(0xFFA533FF), _altMax);
     _drawSeries(canvas, rect, speed, const Color(0xFF2B9DFF), _speedMax);
 
-    const labels = ['0:00', '45:00', '1:30:00', '2:15:00', '3:00:00', '3:45:28'];
+    final labels = _timeAxisLabels(duration, count: 6);
     for (var i = 0; i < labels.length; i++) {
       final x = rect.left + rect.width * i / (labels.length - 1);
       _drawChartLabel(canvas, labels[i], Offset(x, size.height - 12), center: true);
@@ -9786,7 +9912,7 @@ class _DualLineChartPainter extends CustomPainter {
       _drawSelectionPoint(canvas, altitudeSelection);
     }
 
-    final title = _timeLabelForT(clampedT);
+    final title = _timeLabelForT(clampedT, duration);
     final rows = <_ChartTooltipRow>[
       if (speedSelection != null)
         _ChartTooltipRow(
@@ -9906,6 +10032,7 @@ class _DualLineChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _DualLineChartPainter oldDelegate) {
     return oldDelegate.speed != speed ||
         oldDelegate.altitude != altitude ||
+        oldDelegate.duration != duration ||
         oldDelegate.selectedT != selectedT;
   }
 }

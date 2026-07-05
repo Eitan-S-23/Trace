@@ -97,3 +97,39 @@ class RidePoint {
     );
   }
 }
+
+class RideRoutePoint {
+  const RideRoutePoint({
+    required this.latitude,
+    required this.longitude,
+    this.altitudeM,
+  });
+
+  final double latitude;
+  final double longitude;
+  final double? altitudeM;
+}
+
+class RideRouteSelection {
+  const RideRouteSelection({
+    required this.title,
+    required this.date,
+    required this.distance,
+    required this.climb,
+    required this.duration,
+    required this.difficulty,
+    required this.difficultyColorValue,
+    required this.variant,
+    this.track = const <RideRoutePoint>[],
+  });
+
+  final String title;
+  final String date;
+  final String distance;
+  final String climb;
+  final String duration;
+  final String difficulty;
+  final int difficultyColorValue;
+  final int variant;
+  final List<RideRoutePoint> track;
+}
