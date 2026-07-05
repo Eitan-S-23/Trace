@@ -2550,20 +2550,67 @@ class _StatisticsPageState extends State<_StatisticsPage> {
 
   // 周/月：总览 + 里程趋势 + 运动时长趋势
   List<Widget> _trendPanels(_RideStats stats, {required bool isWeek}) {
+    const weekMileage = <double>[18, 24, 0, 32, 27, 41, 36];
+    const weekDuration = <double>[0.9, 1.2, 0, 1.7, 1.4, 2.1, 1.8];
+    const monthMileageSeed = <double>[
+      82,
+      32,
+      74,
+      8,
+      41,
+      79,
+      11,
+      58,
+      44,
+      88,
+      99,
+      59,
+      14,
+      75,
+      80,
+      102,
+      66,
+    ];
+    const monthDurationSeed = <double>[
+      5,
+      2,
+      5,
+      0.5,
+      2.5,
+      4.9,
+      0.7,
+      3.4,
+      2.7,
+      5.3,
+      6.0,
+      3.7,
+      0.9,
+      4.6,
+      5.0,
+      6.6,
+      4.2,
+    ];
+    final dates = isWeek
+        ? [
+            for (var i = 0; i < 7; i++)
+              _selectedWeekStart.add(Duration(days: i)),
+          ]
+        : _datesForMonth(_selectedMonth);
+    final labelIndices = isWeek
+        ? [for (var i = 0; i < dates.length; i++) i]
+        : _monthTickIndices(dates.length);
     final labels = isWeek
-        ? const ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-        : const ['05/01', '05/08', '05/15', '05/22', '05/29'];
+        ? [for (final date in dates) _weekdayLabel(date)]
+        : [for (final index in labelIndices) _formatMonthDayTick(dates[index])];
+    final tooltipTitles = [
+      for (final date in dates) _formatChineseMonthDay(date),
+    ];
     final mileage = isWeek
-        ? const <double>[18, 24, 0, 32, 27, 41, 36]
-        : const <double>[
-            82, 32, 74, 8, 41, 79, 11, 58, 44, 88, 99, 59, 14, 75, 80, 102, 66,
-          ];
+        ? weekMileage
+        : _spreadTrendValues(monthMileageSeed, dates.length);
     final duration = isWeek
-        ? const <double>[0.9, 1.2, 0, 1.7, 1.4, 2.1, 1.8]
-        : const <double>[
-            5, 2, 5, 0.5, 2.5, 4.9, 0.7, 3.4, 2.7, 5.3, 6.0, 3.7, 0.9, 4.6, 5.0,
-            6.6, 4.2,
-          ];
+        ? weekDuration
+        : _spreadTrendValues(monthDurationSeed, dates.length);
     return [
       _StatsOverview(stats: stats),
       const SizedBox(height: 12),
@@ -2572,8 +2619,10 @@ class _StatisticsPageState extends State<_StatisticsPage> {
         unit: '单位：km',
         values: mileage,
         labels: labels,
+        labelIndices: labelIndices,
         color: _RideColors.orange,
-        tooltipTitle: isWeek ? '5月15日' : '5月18日',
+        tooltipTitles: tooltipTitles,
+        tooltipTitle: tooltipTitles.isEmpty ? '' : tooltipTitles.first,
         tooltipValue: isWeek ? '32.4 km' : '102.6 km',
         maxValue: isWeek ? 60.0 : 120.0,
       ),
@@ -2583,14 +2632,15 @@ class _StatisticsPageState extends State<_StatisticsPage> {
         unit: '单位：小时',
         values: duration,
         labels: labels,
+        labelIndices: labelIndices,
         color: const Color(0xFF268DFF),
-        tooltipTitle: isWeek ? '5月15日' : '5月18日',
+        tooltipTitles: tooltipTitles,
+        tooltipTitle: tooltipTitles.isEmpty ? '' : tooltipTitles.first,
         tooltipValue: isWeek ? '1:45:28' : '3:45:28',
         maxValue: isWeek ? 3.0 : 8.0,
       ),
     ];
   }
-
   // 年：运动类型分布 + 月度统计 + 强度分布
   List<Widget> _yearPanels() {
     return [
@@ -2601,7 +2651,22 @@ class _StatisticsPageState extends State<_StatisticsPage> {
         unit: '单位：km',
         values: const <double>[320, 0, 410, 680, 920, 1026, 0, 0, 0, 0, 0, 0],
         labels: const ['1月', '3月', '5月', '7月', '9月', '11月'],
+        labelIndices: const <int>[0, 2, 4, 6, 8, 10],
         color: _RideColors.orange,
+        tooltipTitles: const <String>[
+          '1月',
+          '2月',
+          '3月',
+          '4月',
+          '5月',
+          '6月',
+          '7月',
+          '8月',
+          '9月',
+          '10月',
+          '11月',
+          '12月',
+        ],
         tooltipTitle: '5月',
         tooltipValue: '1026.3 km',
         maxValue: 1500,
@@ -2647,7 +2712,22 @@ class _StatisticsPageState extends State<_StatisticsPage> {
           320, 280, 410, 680, 920, 1026, 760, 540, 620, 880, 700, 430,
         ],
         labels: const ['1月', '3月', '5月', '7月', '9月', '11月'],
+        labelIndices: const <int>[0, 2, 4, 6, 8, 10],
         color: _RideColors.orange,
+        tooltipTitles: const <String>[
+          '1月',
+          '2月',
+          '3月',
+          '4月',
+          '5月',
+          '6月',
+          '7月',
+          '8月',
+          '9月',
+          '10月',
+          '11月',
+          '12月',
+        ],
         tooltipTitle: '5月',
         tooltipValue: '1026.3 km',
         maxValue: 1500,
@@ -4185,6 +4265,69 @@ String _formatChineseMonth(DateTime date) {
   return '${date.year}年${date.month}月';
 }
 
+String _formatChineseMonthDay(DateTime date) {
+  return '${date.month}月${date.day}日';
+}
+
+String _formatMonthDayTick(DateTime date) {
+  return '${date.month.toString().padLeft(2, '0')}/'
+      '${date.day.toString().padLeft(2, '0')}';
+}
+
+String _weekdayLabel(DateTime date) {
+  switch (date.weekday) {
+    case DateTime.monday:
+      return '周一';
+    case DateTime.tuesday:
+      return '周二';
+    case DateTime.wednesday:
+      return '周三';
+    case DateTime.thursday:
+      return '周四';
+    case DateTime.friday:
+      return '周五';
+    case DateTime.saturday:
+      return '周六';
+    case DateTime.sunday:
+    default:
+      return '周日';
+  }
+}
+
+List<DateTime> _datesForMonth(DateTime month) {
+  final normalized = DateTime(month.year, month.month);
+  final daysInMonth = DateTime(normalized.year, normalized.month + 1, 0).day;
+  return [
+    for (var day = 1; day <= daysInMonth; day++)
+      DateTime(normalized.year, normalized.month, day),
+  ];
+}
+
+List<int> _monthTickIndices(int dayCount) {
+  final indices = <int>[];
+  for (final candidate in <int>[0, 7, 14, 21, dayCount - 1]) {
+    if (candidate < 0 || candidate >= dayCount || indices.contains(candidate)) {
+      continue;
+    }
+    indices.add(candidate);
+  }
+  return indices;
+}
+
+List<double> _spreadTrendValues(List<double> seed, int count) {
+  if (count <= 0 || seed.isEmpty) return <double>[];
+  if (count == 1) return <double>[seed.first];
+  if (seed.length == count) return List<double>.of(seed);
+
+  final lastSeedIndex = seed.length - 1;
+  return [
+    for (var i = 0; i < count; i++)
+      seed[(i * lastSeedIndex / (count - 1))
+          .round()
+          .clamp(0, lastSeedIndex)
+          .toInt()],
+  ];
+}
 class _StatsOverview extends StatelessWidget {
   const _StatsOverview({required this.stats});
 
@@ -4336,13 +4479,18 @@ class _BarTrendPanel extends StatefulWidget {
     required this.tooltipTitle,
     required this.tooltipValue,
     required this.maxValue,
-  });
+    this.labelIndices,
+    this.tooltipTitles,
+  })  : assert(labelIndices == null || labelIndices.length == labels.length),
+        assert(tooltipTitles == null || tooltipTitles.length == values.length);
 
   final String title;
   final String unit;
   final List<double> values;
   final List<String> labels;
+  final List<int>? labelIndices;
   final Color color;
+  final List<String>? tooltipTitles;
   final String tooltipTitle;
   final String tooltipValue;
   final double maxValue;
@@ -4355,6 +4503,14 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
   Timer? _hideTimer;
   int? _tooltipIndex;
 
+  int? get _validTooltipIndex {
+    final index = _tooltipIndex;
+    if (index == null || index < 0 || index >= widget.values.length) {
+      return null;
+    }
+    return index;
+  }
+
   @override
   void dispose() {
     _hideTimer?.cancel();
@@ -4362,6 +4518,7 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
   }
 
   void _showTooltip(int index) {
+    if (index < 0 || index >= widget.values.length) return;
     _hideTimer?.cancel();
     setState(() => _tooltipIndex = index);
     _hideTimer = Timer(const Duration(seconds: 3), () {
@@ -4384,14 +4541,15 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
   }
 
   String _tooltipTitleFor(int index) {
-    if (widget.title.contains('趋势')) {
-      final day = math.min(31, index * 2 + 1);
-      return '5月$day日';
+    final titles = widget.tooltipTitles;
+    if (titles != null && index >= 0 && index < titles.length) {
+      return titles[index];
     }
     return widget.tooltipTitle;
   }
 
   String _tooltipValueFor(int index) {
+    if (index < 0 || index >= widget.values.length) return widget.tooltipValue;
     final value = widget.values[index];
     if (widget.unit.contains('小时')) {
       return value >= 1
@@ -4434,7 +4592,7 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final size = Size(constraints.maxWidth, constraints.maxHeight);
-                final selectedIndex = _tooltipIndex;
+                final selectedIndex = _validTooltipIndex;
                 return TapRegion(
                   onTapOutside: (_) {
                     if (_tooltipIndex != null) {
@@ -4452,6 +4610,7 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
                       painter: _BarChartPainter(
                         values: widget.values,
                         labels: widget.labels,
+                        labelIndices: widget.labelIndices,
                         color: widget.color,
                         maxValue: widget.maxValue,
                         tooltipIndex: selectedIndex,
@@ -4474,7 +4633,6 @@ class _BarTrendPanelState extends State<_BarTrendPanel> {
     );
   }
 }
-
 class _AnnualDistributionPanel extends StatelessWidget {
   const _AnnualDistributionPanel();
 
@@ -9735,10 +9893,12 @@ class _BarChartPainter extends CustomPainter {
     required this.tooltipIndex,
     required this.tooltipTitle,
     required this.tooltipValue,
+    this.labelIndices,
   });
 
   final List<double> values;
   final List<String> labels;
+  final List<int>? labelIndices;
   final Color color;
   final double maxValue;
   final int? tooltipIndex;
@@ -9784,10 +9944,17 @@ class _BarChartPainter extends CustomPainter {
       );
     }
 
+    final labelPositions = labelIndices;
     for (var i = 0; i < labels.length; i++) {
-      final x = labels.length == 1
-          ? chartRect.center.dx
-          : chartRect.left + chartRect.width * i / (labels.length - 1);
+      int? valueIndex;
+      if (labelPositions != null && i < labelPositions.length) {
+        valueIndex = labelPositions[i].clamp(0, values.length - 1).toInt();
+      }
+      final x = valueIndex == null
+          ? labels.length == 1
+              ? chartRect.center.dx
+              : chartRect.left + chartRect.width * i / (labels.length - 1)
+          : chartRect.left + chartRect.width * (valueIndex + 0.5) / values.length;
       _drawText(
         canvas,
         labels[i],
@@ -9870,6 +10037,8 @@ class _BarChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _BarChartPainter oldDelegate) {
     return oldDelegate.values != values ||
+        oldDelegate.labels != labels ||
+        oldDelegate.labelIndices != labelIndices ||
         oldDelegate.color != color ||
         oldDelegate.maxValue != maxValue ||
         oldDelegate.tooltipIndex != tooltipIndex ||
@@ -9877,7 +10046,6 @@ class _BarChartPainter extends CustomPainter {
         oldDelegate.tooltipValue != tooltipValue;
   }
 }
-
 class _DonutPainter extends CustomPainter {
   const _DonutPainter({
     required this.colors,
