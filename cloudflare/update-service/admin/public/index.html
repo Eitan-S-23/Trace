@@ -1439,6 +1439,22 @@
         margin-top: 14px;
       }
 
+      .announcement-panel .panel-head {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .announcement-panel .panel-head > div {
+        min-width: min(100%, 34rem);
+      }
+
+      .announcement-create-button {
+        flex: 0 0 auto;
+        align-self: flex-start;
+        min-width: 112px;
+        white-space: nowrap;
+      }
+
       .announcement-grid {
         display: grid;
         grid-template-columns: minmax(300px, 0.92fr) minmax(360px, 1.08fr);
@@ -3452,7 +3468,7 @@
               <h2 data-i18n="announcements.title">Announcements</h2>
               <p data-i18n="announcements.hint">Publish manual notices shown in the app announcement dialog. Update announcements are generated from release notes automatically.</p>
             </div>
-            <button type="button" class="secondary-button" id="newAnnouncement" data-i18n="announcements.new">New Notice</button>
+            <button type="button" class="secondary-button announcement-create-button" id="newAnnouncement" data-i18n="announcements.new">New Notice</button>
           </header>
           <div class="announcement-grid">
             <div class="announcement-list" id="announcementList"></div>
