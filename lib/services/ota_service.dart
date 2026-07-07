@@ -14,7 +14,7 @@ import '../config/share_links.dart';
 
 /// OTA firmware service.
 ///
-/// The current implementation covers Cloudflare firmware discovery, download,
+/// The current implementation covers firmware discovery, download,
 /// and checksum verification. BLE packet transfer is intentionally left as a
 /// later step because the MCU packet protocol is not finalized yet.
 class OtaService extends GetxController {
@@ -54,8 +54,8 @@ class OtaService extends GetxController {
   void onInit() {
     super.onInit();
     _upgradeStatus.value = isFirmwareServiceConfigured
-        ? 'Cloudflare固件服务已就绪'
-        : 'Cloudflare固件服务未配置';
+        ? '固件服务已就绪'
+        : '固件服务未配置';
   }
 
   @override
@@ -64,7 +64,7 @@ class OtaService extends GetxController {
     super.onClose();
   }
 
-  /// Checks Cloudflare for the latest published MCU firmware.
+  /// Checks the firmware service for the latest published MCU firmware.
   Future<Map<String, dynamic>?> checkFirmwareUpdate(
     String deviceModel,
     String currentVersion, {
@@ -72,7 +72,7 @@ class OtaService extends GetxController {
     String? channel,
   }) async {
     if (!isFirmwareServiceConfigured) {
-      _upgradeStatus.value = 'Cloudflare固件服务未配置';
+      _upgradeStatus.value = '固件服务未配置';
       Get.snackbar('错误', '固件更新地址未配置，无法检查更新');
       return null;
     }
@@ -138,7 +138,7 @@ class OtaService extends GetxController {
     }
   }
 
-  /// Downloads the firmware binary from Cloudflare and verifies SHA-256.
+  /// Downloads the firmware binary and verifies SHA-256.
   Future<bool> downloadFirmware() async {
     if (_firmwareDownloadUrl == null ||
         _latestFirmwareVersion == null ||

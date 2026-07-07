@@ -8303,7 +8303,7 @@ class _DeviceFirmwareUpdateRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '下载 Cloudflare 中最新的码表固件',
+                      '下载最新码表固件',
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.62),
                         fontSize: 13,

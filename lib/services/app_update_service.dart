@@ -245,8 +245,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
           _showCheckResultDialog(
             title: '已是最新版本',
             message: '当前版本 ${localInfo.versionName} '
-                '(${localInfo.versionCode})\n'
-                '清单来源：${updateInfo.source.label}',
+                '(${localInfo.versionCode})',
           );
         }
         return;
@@ -618,7 +617,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     StackTrace? lastStackTrace;
     for (final request in requests) {
       try {
-        updateStatus.value = '获取更新清单...\n${request.source.label}';
+        updateStatus.value = '正在连接更新服务...';
         final response = await _dio.get<String>(
           request.url,
           cancelToken: cancelToken,
@@ -1312,7 +1311,7 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    '优先连接配置的 Cloudflare 更新服务；如不可用，会按内置备用清单规则重试，最多等待 30 秒。',
+                    '正在连接更新服务；如暂时不可用，会自动重试备用通道，最多等待 30 秒。',
                     style: TextStyle(fontSize: 12),
                   ),
                 ],
@@ -1359,10 +1358,10 @@ class AppUpdateService extends GetxService with WidgetsBindingObserver {
     final host = uri?.host.toLowerCase() ?? '';
     final path = uri?.path.toLowerCase() ?? '';
     if (host == 'github.com' || path.endsWith('/api/public/github-fallback')) {
-      return 'GitHub 备用';
+      return index == 0 ? '主下载' : '备用下载';
     }
     if (path.endsWith('/api/public/download')) {
-      return 'Cloudflare R2';
+      return index == 0 ? '主下载' : '备用下载';
     }
     return index == 0 ? '主下载' : '备用下载';
   }
@@ -2015,11 +2014,11 @@ extension _ManifestSourceLabel on _ManifestSource {
   String get label {
     switch (this) {
       case _ManifestSource.cloudflare:
-        return 'Cloudflare 更新服务';
+        return '更新服务';
       case _ManifestSource.emergency:
-        return '紧急更新清单';
+        return '备用更新服务';
       case _ManifestSource.legacyGithubLatest:
-        return 'GitHub latest 兼容清单';
+        return '备用更新服务';
     }
   }
 }

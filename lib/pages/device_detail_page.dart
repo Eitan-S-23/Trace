@@ -198,7 +198,7 @@ class DeviceDetailPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '从 Cloudflare 下载最新码表固件',
+                      '下载最新码表固件',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.82),
                         fontSize: 13,

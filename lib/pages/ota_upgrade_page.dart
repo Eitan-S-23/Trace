@@ -158,7 +158,7 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
                     const SizedBox(width: 8),
                     Text(
                       otaService.isFirmwareServiceConfigured
-                          ? 'Cloudflare可用'
+                          ? '固件服务可用'
                           : '固件服务未配置',
                       style: const TextStyle(
                         fontSize: 12,
@@ -208,7 +208,7 @@ class _OtaUpgradePageState extends State<OtaUpgradePage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            '从Cloudflare检查并下载最新单片机固件',
+            '检查并下载最新单片机固件',
             style: TextStyle(
               fontSize: 14,
               color: Colors.grey,
