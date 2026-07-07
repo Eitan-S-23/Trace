@@ -1435,6 +1435,83 @@
         font-style: italic;
       }
 
+      .announcement-panel {
+        margin-top: 14px;
+      }
+
+      .announcement-grid {
+        display: grid;
+        grid-template-columns: minmax(300px, 0.92fr) minmax(360px, 1.08fr);
+        gap: 14px;
+        padding: 0 16px 16px;
+      }
+
+      .announcement-list,
+      .announcement-editor {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+
+      .announcement-card {
+        display: grid;
+        gap: 8px;
+        border: 1px solid rgba(78, 166, 255, 0.16);
+        border-radius: 16px;
+        padding: 13px;
+        color: #dff4ff;
+        background:
+          radial-gradient(circle at 92% 8%, rgba(26, 167, 255, 0.12), transparent 9rem),
+          rgba(4, 17, 34, 0.58);
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .announcement-card.active {
+        border-color: rgba(123, 224, 255, 0.58);
+        box-shadow: 0 0 28px rgba(26, 167, 255, 0.16);
+      }
+
+      .announcement-card h3 {
+        margin: 0;
+        font-size: 0.98rem;
+      }
+
+      .announcement-card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .announcement-actions,
+      .announcement-flags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        align-items: center;
+      }
+
+      .announcement-flags label {
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .announcement-title-input {
+        min-height: 46px;
+        border: 1px solid rgba(78, 166, 255, 0.15);
+        border-radius: 14px;
+        padding: 0 14px;
+        color: #dff4ff;
+        background:
+          linear-gradient(180deg, rgba(5, 18, 35, 0.86), rgba(3, 12, 25, 0.92)),
+          #061225;
+        outline-color: var(--blue);
+      }
+
       .secondary-button,
       .save-button {
         display: inline-flex;
@@ -2526,6 +2603,10 @@
           grid-template-columns: 1fr;
         }
 
+        .announcement-grid {
+          grid-template-columns: 1fr;
+        }
+
         .right-rail {
           position: static;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3365,6 +3446,34 @@
           </aside>
         </section>
 
+        <section class="panel announcement-panel" id="announcements">
+          <header class="panel-head">
+            <div>
+              <h2 data-i18n="announcements.title">Announcements</h2>
+              <p data-i18n="announcements.hint">Publish manual notices shown in the app announcement dialog. Update announcements are generated from release notes automatically.</p>
+            </div>
+            <button type="button" class="secondary-button" id="newAnnouncement" data-i18n="announcements.new">New Notice</button>
+          </header>
+          <div class="announcement-grid">
+            <div class="announcement-list" id="announcementList"></div>
+            <div class="announcement-editor">
+              <input class="announcement-title-input" id="announcementTitle" type="text" maxlength="120" placeholder="Announcement title" data-i18n-placeholder="announcements.titlePlaceholder" />
+              <textarea id="announcementBody" maxlength="8000" placeholder="Write the notice body..." data-i18n-placeholder="announcements.bodyPlaceholder"></textarea>
+              <div class="announcement-flags">
+                <label><input id="announcementPublished" type="checkbox" checked /> <span data-i18n="announcements.published">Published</span></label>
+                <label><input id="announcementPinned" type="checkbox" /> <span data-i18n="announcements.pinned">Pinned</span></label>
+              </div>
+              <div class="editor-footer">
+                <span id="announcementMeta">0 / 8000 characters</span>
+                <div class="announcement-actions">
+                  <button type="button" class="secondary-button" id="deleteAnnouncement" data-i18n="announcements.delete">Delete</button>
+                  <button type="button" class="save-button" id="saveAnnouncement" data-i18n="announcements.save">Save Notice</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <p class="footer-note">
           <span data-i18n="footer.note">This admin page only changes the Pages UI. Release mutations still go through the Access-protected same-origin facade.</span>
         </p>
@@ -3467,11 +3576,14 @@
         session: null,
         channels: [],
         releases: [],
+        announcements: [],
+        announcementsError: null,
         firmwareChannels: [],
         firmwareReleases: [],
         storage: null,
         storageError: null,
         selectedReleaseId: null,
+        selectedAnnouncementId: null,
         selectedFirmwareId: null,
         detailsOpen: false,
         query: "",
@@ -3567,6 +3679,19 @@
           "notes.previewEmpty": "No release notes to preview.",
           "notes.charCount": "{count} characters / 8000",
           "notes.save": "Save Notes",
+          "announcements.title": "Announcements",
+          "announcements.hint": "Publish manual notices shown in the app announcement dialog. Update announcements are generated from release notes automatically.",
+          "announcements.new": "New Notice",
+          "announcements.titlePlaceholder": "Announcement title",
+          "announcements.bodyPlaceholder": "Write the notice body...",
+          "announcements.published": "Published",
+          "announcements.pinned": "Pinned",
+          "announcements.save": "Save Notice",
+          "announcements.delete": "Delete",
+          "announcements.empty": "No manual announcements yet.",
+          "announcements.manual": "Manual notice",
+          "announcements.draft": "Draft",
+          "announcements.charCount": "{count} characters / 8000",
           "assets.title": "Assets Checklist",
           "assets.hint": "APK, manifest, R2, fallback, and patch readiness.",
           "assets.buildAndAssets": "Build and Assets",
@@ -3660,6 +3785,9 @@
           "status.published": "Published {tag} to {channel}. New revision {revision}.",
           "status.savingNotes": "Saving release notes...",
           "status.notesSaved": "Release notes saved.",
+          "status.savingAnnouncement": "Saving announcement...",
+          "status.announcementSaved": "Announcement saved.",
+          "status.deletingAnnouncement": "Deleting announcement...",
           "status.disabling": "Disabling {tag}...",
           "status.disabled": "{tag} disabled.",
           "status.deleting": "Deleting {tag} from R2 and D1...",
@@ -3685,6 +3813,13 @@
           "result.notesFailureTitle": "Notes save failed",
           "result.notesSuccess": "Release notes for {tag} were saved.",
           "result.notesFailure": "Release notes for {tag} were not saved.",
+          "result.announcementSuccessTitle": "Announcement saved",
+          "result.announcementFailureTitle": "Announcement save failed",
+          "result.announcementSuccess": "{title} is ready for the app announcement dialog.",
+          "result.announcementFailure": "{title} was not saved.",
+          "result.announcementDeletedTitle": "Announcement deleted",
+          "result.announcementDeleted": "{title} was deleted.",
+          "result.announcementDeleteFailure": "{title} was not deleted.",
           "result.disableSuccessTitle": "Disable completed",
           "result.disableFailureTitle": "Disable failed",
           "result.disableSuccess": "{tag} is now disabled.",
@@ -3839,6 +3974,19 @@
           "notes.previewEmpty": "没有可预览的发布说明。",
           "notes.charCount": "{count} / 8000 字符",
           "notes.save": "保存说明",
+          "announcements.title": "公告",
+          "announcements.hint": "发布会显示在 App 公告弹窗中的手动通知。更新公告会自动使用当前发布说明生成。",
+          "announcements.new": "新建公告",
+          "announcements.titlePlaceholder": "公告标题",
+          "announcements.bodyPlaceholder": "填写公告正文...",
+          "announcements.published": "已发布",
+          "announcements.pinned": "置顶",
+          "announcements.save": "保存公告",
+          "announcements.delete": "删除",
+          "announcements.empty": "还没有手动公告。",
+          "announcements.manual": "手动公告",
+          "announcements.draft": "草稿",
+          "announcements.charCount": "{count} / 8000 字符",
           "assets.title": "资源检查",
           "assets.hint": "检查 APK、manifest、R2、回退和补丁状态。",
           "assets.buildAndAssets": "构建与资源",
@@ -3932,6 +4080,9 @@
           "status.published": "{tag} 已发布到 {channel}。新修订号 {revision}。",
           "status.savingNotes": "正在保存发布说明...",
           "status.notesSaved": "发布说明已保存。",
+          "status.savingAnnouncement": "正在保存公告...",
+          "status.announcementSaved": "公告已保存。",
+          "status.deletingAnnouncement": "正在删除公告...",
           "status.disabling": "正在禁用 {tag}...",
           "status.disabled": "{tag} 已禁用。",
           "status.deleting": "正在从 R2 和 D1 删除 {tag}...",
@@ -3957,6 +4108,13 @@
           "result.notesFailureTitle": "说明保存失败",
           "result.notesSuccess": "{tag} 的发布说明已保存。",
           "result.notesFailure": "{tag} 的发布说明未保存。",
+          "result.announcementSuccessTitle": "公告已保存",
+          "result.announcementFailureTitle": "公告保存失败",
+          "result.announcementSuccess": "{title} 已可在 App 公告弹窗中展示。",
+          "result.announcementFailure": "{title} 未保存。",
+          "result.announcementDeletedTitle": "公告已删除",
+          "result.announcementDeleted": "{title} 已删除。",
+          "result.announcementDeleteFailure": "{title} 未删除。",
           "result.disableSuccessTitle": "禁用完成",
           "result.disableFailureTitle": "禁用失败",
           "result.disableSuccess": "{tag} 已禁用。",
@@ -4115,6 +4273,15 @@
         notesPreviewPane: document.querySelector("#notesPreviewPane"),
         saveNotes: document.querySelector("#saveNotes"),
         notesMeta: document.querySelector("#notesMeta"),
+        announcementList: document.querySelector("#announcementList"),
+        announcementTitle: document.querySelector("#announcementTitle"),
+        announcementBody: document.querySelector("#announcementBody"),
+        announcementPublished: document.querySelector("#announcementPublished"),
+        announcementPinned: document.querySelector("#announcementPinned"),
+        announcementMeta: document.querySelector("#announcementMeta"),
+        newAnnouncement: document.querySelector("#newAnnouncement"),
+        saveAnnouncement: document.querySelector("#saveAnnouncement"),
+        deleteAnnouncement: document.querySelector("#deleteAnnouncement"),
         assetChecks: document.querySelector("#assetChecks"),
         gateChecks: document.querySelector("#gateChecks"),
         releaseGates: document.querySelector("#releaseGates"),
@@ -4288,6 +4455,16 @@
           if (!els.notesPreviewPane.hidden) renderNotesPreview();
         });
         els.previewNotes.addEventListener("click", () => toggleNotesPreview());
+        els.newAnnouncement.addEventListener("click", () => selectAnnouncement(null));
+        els.announcementList.addEventListener("click", (event) => {
+          const target = event.target instanceof Element ? event.target : null;
+          const button = target?.closest("button[data-announcement-id]");
+          if (button) selectAnnouncement(button.dataset.announcementId);
+        });
+        els.announcementTitle.addEventListener("input", updateAnnouncementMeta);
+        els.announcementBody.addEventListener("input", updateAnnouncementMeta);
+        els.saveAnnouncement.addEventListener("click", saveAnnouncement);
+        els.deleteAnnouncement.addEventListener("click", deleteAnnouncement);
         document.addEventListener("keydown", (event) => {
           const typing =
             event.target instanceof HTMLInputElement ||
@@ -4576,10 +4753,11 @@
         setBusy(true, "status.loadingReleaseData");
         try {
           state.session = await api("/api/admin/session");
-          const [channels, releases, storage, firmwareReleases, firmwareChannels] = await Promise.all([
+          const [channels, releases, storage, announcements, firmwareReleases, firmwareChannels] = await Promise.all([
             api("/api/admin/channels?appId=trace&platform=android"),
             api("/api/admin/releases?appId=trace&platform=android"),
             api("/api/admin/storage?appId=trace&platform=android").catch((error) => ({ error })),
+            api("/api/admin/announcements?appId=trace").catch((error) => ({ error })),
             api("/api/admin/firmware/releases?appId=trace"),
             api("/api/admin/firmware/channels?appId=trace")
           ]);
@@ -4587,6 +4765,8 @@
           state.releases = releases.releases ?? [];
           state.storage = storage.error ? null : storage.storage ?? null;
           state.storageError = storage.error ?? null;
+          state.announcements = announcements.error ? [] : announcements.announcements ?? [];
+          state.announcementsError = announcements.error ?? null;
           state.firmwareReleases = firmwareReleases.firmwareReleases ?? [];
           state.firmwareChannels = firmwareChannels.firmwareChannels ?? [];
           if (!state.selectedReleaseId || !state.releases.some((release) => release.id === state.selectedReleaseId)) {
@@ -4807,6 +4987,99 @@
         }
       }
 
+      async function saveAnnouncement() {
+        const title = String(els.announcementTitle.value ?? "").trim();
+        const body = String(els.announcementBody.value ?? "").trim();
+        if (!title || !body) {
+          setStatus("INVALID_PARAMETER: title and body are required", "error", { translate: false });
+          return;
+        }
+
+        const announcementId = state.selectedAnnouncementId;
+        setBusy(true, "status.savingAnnouncement");
+        try {
+          const result = await mutate(
+            announcementId
+              ? `/api/admin/announcements/${encodeURIComponent(announcementId)}`
+              : "/api/admin/announcements",
+            {
+              appId: "trace",
+              title,
+              body,
+              pinned: els.announcementPinned.checked,
+              published: els.announcementPublished.checked
+            }
+          );
+          state.selectedAnnouncementId = result.announcementId ?? announcementId;
+          await loadAll();
+          await openResultDialog({
+            tone: "success",
+            icon: "i-note",
+            title: t("result.announcementSuccessTitle"),
+            message: t("result.announcementSuccess", { title }),
+            detail: t("status.announcementSaved"),
+            confirmClass: "primary"
+          });
+        } catch (error) {
+          setStatus(error.message, "error");
+          await openResultDialog({
+            tone: "danger",
+            icon: "i-note",
+            title: t("result.announcementFailureTitle"),
+            message: t("result.announcementFailure", { title: title || t("announcements.title") }),
+            detail: error.message,
+            confirmClass: "danger"
+          });
+        } finally {
+          setBusy(false);
+          renderAnnouncements();
+        }
+      }
+
+      async function deleteAnnouncement() {
+        const announcement = selectedAnnouncement();
+        if (!announcement) return;
+        const title = announcement.title ?? t("announcements.title");
+        const confirmed = await openConfirmDialog({
+          tone: "danger",
+          icon: "i-trash",
+          title: t("announcements.delete"),
+          message: t("result.announcementDeleted", { title }),
+          detail: announcement.body ?? "",
+          confirmLabel: t("announcements.delete"),
+          confirmClass: "danger"
+        });
+        if (!confirmed) return;
+
+        setBusy(true, "status.deletingAnnouncement");
+        try {
+          await mutate(`/api/admin/announcements/${encodeURIComponent(announcement.id)}/delete`, {});
+          state.selectedAnnouncementId = null;
+          await loadAll();
+          await openResultDialog({
+            tone: "success",
+            icon: "i-trash",
+            title: t("result.announcementDeletedTitle"),
+            message: t("result.announcementDeleted", { title }),
+            detail: "",
+            confirmClass: "primary"
+          });
+        } catch (error) {
+          setStatus(error.message, "error");
+          await openResultDialog({
+            tone: "danger",
+            icon: "i-trash",
+            title: t("result.announcementFailureTitle"),
+            message: t("result.announcementDeleteFailure", { title }),
+            detail: error.message,
+            confirmClass: "danger"
+          });
+        } finally {
+          setBusy(false);
+          renderAnnouncements();
+        }
+      }
+
       async function disableRelease(releaseId) {
         const release = state.releases.find((item) => item.id === releaseId);
         if (!release) return;
@@ -4961,6 +5234,7 @@
         renderTimeline(visible, selected);
         renderSelectionState(detailRelease, visible.length);
         renderDetails(detailRelease);
+        renderAnnouncements();
         renderStorage();
         renderChannels(detailRelease);
         renderFirmware();
@@ -5228,6 +5502,85 @@
         els.notesPreviewPane.innerHTML = trimmed
           ? renderMarkdownPreview(notes)
           : escapeHtml(t("notes.previewEmpty"));
+      }
+
+      function renderAnnouncements() {
+        if (state.announcementsError) {
+          els.announcementList.innerHTML = `<div class="error">${escapeHtml(state.announcementsError.message)}</div>`;
+          setAnnouncementEditorEnabled(false);
+          return;
+        }
+
+        if (
+          state.selectedAnnouncementId &&
+          !state.announcements.some((announcement) => announcement.id === state.selectedAnnouncementId)
+        ) {
+          state.selectedAnnouncementId = null;
+        }
+
+        els.announcementList.innerHTML = state.announcements.length
+          ? state.announcements.map((announcement) => announcementCard(announcement)).join("")
+          : `<div class="empty">${escapeHtml(t("announcements.empty"))}</div>`;
+
+        renderAnnouncementEditor();
+      }
+
+      function announcementCard(announcement) {
+        const active = announcement.id === state.selectedAnnouncementId;
+        const published = Number(announcement.published ?? 0) === 1;
+        const pinned = Number(announcement.pinned ?? 0) === 1;
+        return `
+          <button type="button" class="announcement-card ${active ? "active" : ""}" data-announcement-id="${escapeHtml(announcement.id)}">
+            <div class="firmware-card-top">
+              <div>
+                <h3>${escapeHtml(announcement.title)}</h3>
+                <p>${escapeHtml(formatBuildTime(announcement.updated_at ?? announcement.created_at))}</p>
+              </div>
+              <span class="tag ${published ? "stable" : "disabled"}">${escapeHtml(published ? t("announcements.published") : t("announcements.draft"))}</span>
+            </div>
+            <p>${escapeHtml(excerpt(announcement.body, 96))}</p>
+            <div class="version-tags">
+              <span class="tag">${escapeHtml(t("announcements.manual"))}</span>
+              ${pinned ? `<span class="tag beta">${escapeHtml(t("announcements.pinned"))}</span>` : ""}
+            </div>
+          </button>
+        `;
+      }
+
+      function renderAnnouncementEditor() {
+        const announcement = selectedAnnouncement();
+        els.announcementTitle.value = announcement?.title ?? "";
+        els.announcementBody.value = announcement?.body ?? "";
+        els.announcementPublished.checked = announcement ? Number(announcement.published ?? 0) === 1 : true;
+        els.announcementPinned.checked = announcement ? Number(announcement.pinned ?? 0) === 1 : false;
+        setAnnouncementEditorEnabled(true);
+        updateAnnouncementMeta();
+      }
+
+      function setAnnouncementEditorEnabled(enabled) {
+        const writable = enabled && !state.busy && canRole("publisher");
+        els.announcementTitle.disabled = !writable;
+        els.announcementBody.disabled = !writable;
+        els.announcementPublished.disabled = !writable;
+        els.announcementPinned.disabled = !writable;
+        els.saveAnnouncement.disabled = !writable;
+        els.deleteAnnouncement.disabled = !writable || !state.selectedAnnouncementId;
+        els.newAnnouncement.disabled = !enabled || state.busy || !canRole("publisher");
+      }
+
+      function selectAnnouncement(announcementId) {
+        state.selectedAnnouncementId = announcementId ?? null;
+        renderAnnouncements();
+      }
+
+      function selectedAnnouncement() {
+        return state.announcements.find((announcement) => announcement.id === state.selectedAnnouncementId) ?? null;
+      }
+
+      function updateAnnouncementMeta() {
+        els.announcementMeta.textContent = t("announcements.charCount", {
+          count: String(els.announcementBody.value ?? "").length
+        });
       }
 
       function renderMarkdownPreview(markdown) {
@@ -5740,6 +6093,7 @@
         els.refreshButton.disabled = isBusy;
         if (message) setStatus(message, "info", { values });
         renderActionLocks(activeReleaseForAction());
+        setAnnouncementEditorEnabled(!state.announcementsError);
       }
 
       function setStatus(message, tone = "info", options = {}) {
@@ -5963,6 +6317,12 @@
         const text = String(value ?? "Admin").replace(/@.*/, "");
         const parts = text.split(/[.\s_-]+/).filter(Boolean);
         return `${parts[0]?.[0] ?? "A"}${parts[1]?.[0] ?? ""}`.toUpperCase();
+      }
+
+      function excerpt(value, maxLength) {
+        const text = String(value ?? "").replace(/\s+/g, " ").trim();
+        if (text.length <= maxLength) return text;
+        return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
       }
 
       function escapeHtml(value) {

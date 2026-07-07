@@ -1,3 +1,4 @@
+import { handleAnnouncements } from "../../worker/src/announcements";
 import { handleDownload } from "../../worker/src/downloads";
 import { ApiError } from "../../worker/src/errors";
 import { handleFirmwareDownload, handleFirmwareLatest } from "../../worker/src/firmware";
@@ -38,6 +39,10 @@ async function routePublicRequest(
 
   if (method === "GET" && url.pathname === "/api/public/latest") {
     return handleLatest(context.request, context.env, requestId);
+  }
+
+  if (method === "GET" && url.pathname === "/api/public/announcements") {
+    return handleAnnouncements(context.request, context.env, requestId);
   }
 
   if (method === "GET" && url.pathname === "/api/public/firmware/latest") {

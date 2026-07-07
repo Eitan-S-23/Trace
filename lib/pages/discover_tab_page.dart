@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:get/get.dart';
+
+import '../services/announcement_service.dart';
 import 'trace_ui.dart';
 
 class DiscoverTabPage extends StatelessWidget {
@@ -115,18 +117,10 @@ class DiscoverTabPage extends StatelessWidget {
   Widget _buildMoreRows() {
     final rows = [
       _MoreRowData(
-        title: '更新公告',
-        subtitle: '了解最新版本的新功能更新与优化',
+        title: '公告',
+        subtitle: '查看后台通知与最新版本发布说明',
         icon: Icons.campaign_outlined,
-        onTap: () => _showContentDialog(
-          '更新公告',
-          Icons.campaign_outlined,
-          const [
-            '检查更新入口位于“我的”页面。',
-            '更新服务负责应用版本维护与增量升级。',
-            '新版本发布后，检查更新时会自动提示。',
-          ],
-        ),
+        onTap: _showAnnouncementsDialog,
       ),
       _MoreRowData(
         title: '常见问题',
@@ -172,6 +166,25 @@ class DiscoverTabPage extends StatelessWidget {
     _showContentDialog(data.title, data.icon, data.steps);
   }
 
+  static void _showAnnouncementsDialog() {
+    Get.dialog<void>(
+      TraceDialog(
+        title: '公告',
+        icon: Icons.campaign_outlined,
+        color: TraceColors.cyan,
+        content: const _AnnouncementsDialogContent(),
+        actions: [
+          TraceDialogAction(
+            label: '确定',
+            isPrimary: true,
+            onPressed: TraceDialog.close,
+          ),
+        ],
+      ),
+      barrierColor: Colors.black.withOpacity(0.62),
+    );
+  }
+
   static void _showContentDialog(
     String title,
     IconData icon,
@@ -202,6 +215,225 @@ class DiscoverTabPage extends StatelessWidget {
       ),
       barrierColor: Colors.black.withOpacity(0.62),
     );
+  }
+}
+
+class _AnnouncementsDialogContent extends StatefulWidget {
+  const _AnnouncementsDialogContent();
+
+  @override
+  State<_AnnouncementsDialogContent> createState() =>
+      _AnnouncementsDialogContentState();
+}
+
+class _AnnouncementsDialogContentState
+    extends State<_AnnouncementsDialogContent> {
+  late final Future<List<TraceAnnouncement>> _announcementsFuture =
+      AnnouncementService.fetchAnnouncements();
+  final PageController _controller = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<TraceAnnouncement>>(
+      future: _announcementsFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            height: 220,
+            child: Center(
+              child: CircularProgressIndicator(color: TraceColors.cyan),
+            ),
+          );
+        }
+
+        final announcements = snapshot.data!;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: 292,
+              child: PageView.builder(
+                controller: _controller,
+                physics: const BouncingScrollPhysics(),
+                itemCount: announcements.length,
+                onPageChanged: (index) {
+                  setState(() {
+                    _index = index;
+                  });
+                },
+                itemBuilder: (context, index) {
+                  return _AnnouncementPage(data: announcements[index]);
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < announcements.length; i++) ...[
+                  if (i != 0) const SizedBox(width: 6),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: i == _index ? 18 : 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: i == _index
+                          ? TraceColors.cyan
+                          : TraceColors.muted.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AnnouncementPage extends StatelessWidget {
+  const _AnnouncementPage({required this.data});
+
+  final TraceAnnouncement data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF071B25).withOpacity(0.78),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: TraceColors.cyan.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: TraceColors.cyan.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: TraceColors.cyan.withOpacity(0.3)),
+                ),
+                child: Text(
+                  data.type.label,
+                  style: const TextStyle(
+                    color: TraceColors.cyan,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              if (data.releaseTag != null)
+                Text(
+                  data.releaseTag!,
+                  style: TextStyle(
+                    color: TraceColors.muted.withOpacity(0.85),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          Text(
+            data.title,
+            style: const TextStyle(
+              color: TraceColors.text,
+              fontSize: 18,
+              height: 1.2,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: _AnnouncementBody(text: data.body),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnnouncementBody extends StatelessWidget {
+  const _AnnouncementBody({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = text
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < lines.length; i++) ...[
+          _AnnouncementLine(line: lines[i]),
+          if (i != lines.length - 1) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _AnnouncementLine extends StatelessWidget {
+  const _AnnouncementLine({required this.line});
+
+  final String line;
+
+  @override
+  Widget build(BuildContext context) {
+    final heading = line.replaceFirst(RegExp(r'^#{1,3}\s+'), '');
+    if (heading != line) {
+      return Text(
+        heading,
+        style: const TextStyle(
+          color: TraceColors.text,
+          fontSize: 15,
+          fontWeight: FontWeight.w900,
+        ),
+      );
+    }
+
+    final bullet = line.replaceFirst(RegExp(r'^[-*]\s+'), '');
+    if (bullet != line) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 5,
+            height: 5,
+            margin: const EdgeInsets.only(top: 8, right: 8),
+            decoration: const BoxDecoration(
+              color: TraceColors.cyan,
+              shape: BoxShape.circle,
+            ),
+          ),
+          Expanded(child: Text(bullet)),
+        ],
+      );
+    }
+
+    return Text(line);
   }
 }
 

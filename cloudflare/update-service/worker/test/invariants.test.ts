@@ -584,6 +584,51 @@ describe("Phase 1 update-service invariants", () => {
     expect(after.assets).toEqual(before.assets);
   });
 
+  it("serves manual announcements with the current release notes announcement", async () => {
+    const appId = appIdFor("announcements");
+    const release = await seedRelease(appId, 710, "v7.1.0", {
+      releaseNotes: "## 发布说明\n- 自动同步到更新公告"
+    });
+    await seedChannel(appId, release.releaseId, 0);
+    await env.DB.prepare(
+      `
+        INSERT INTO announcements (id, app_id, title, body, pinned, published, published_at)
+        VALUES (?, ?, ?, ?, 1, 1, datetime('now'))
+      `
+    )
+      .bind(
+        `ann_${appId}`,
+        appId,
+        "手动公告",
+        "需要手动发布的公告通知。"
+      )
+      .run();
+
+    const response = await SELF.fetch(
+      `http://example.com/api/public/announcements?appId=${appId}&platform=android&channel=stable`
+    );
+    const body = await response.json<{
+      ok: boolean;
+      announcements: Array<Record<string, unknown>>;
+    }>();
+
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.announcements).toHaveLength(2);
+    expect(body.announcements[0]).toMatchObject({
+      type: "manual",
+      title: "手动公告",
+      pinned: true
+    });
+    expect(body.announcements[1]).toMatchObject({
+      type: "release",
+      title: "Trace 7.1.0 更新公告",
+      body: "## 发布说明\n- 自动同步到更新公告",
+      versionCode: 710,
+      releaseTag: "v7.1.0"
+    });
+  });
+
   it("registers published MCU firmware and streams it from R2", async () => {
     const appId = appIdFor("firmware");
     const deviceModel = "igpsport-bsc300";

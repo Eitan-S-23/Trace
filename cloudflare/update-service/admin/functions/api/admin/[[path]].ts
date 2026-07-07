@@ -88,6 +88,18 @@ interface FirmwareChannelRow {
   maintenance_message: string | null;
 }
 
+interface AnnouncementRow {
+  id: string;
+  app_id: string;
+  title: string;
+  body: string;
+  pinned: number;
+  published: number;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 interface StorageTypeSummary {
   type: string;
   objectCount: number;
@@ -187,6 +199,33 @@ async function routeAdminRequest(
   if (method === "GET" && route.length === 1 && route[0] === "storage") {
     requireRole(actor, "viewer");
     return storageSummary(context.env, url);
+  }
+
+  if (method === "GET" && route.length === 1 && route[0] === "announcements") {
+    requireRole(actor, "viewer");
+    return listAnnouncements(context.env, url);
+  }
+
+  if (method === "POST" && route.length === 1 && route[0] === "announcements") {
+    requireRole(actor, "publisher");
+    const body = await requestJson(context.request);
+    return saveAnnouncement(context.env, actor, null, body);
+  }
+
+  if (method === "POST" && route.length === 2 && route[0] === "announcements") {
+    requireRole(actor, "publisher");
+    const body = await requestJson(context.request);
+    return saveAnnouncement(context.env, actor, route[1], body);
+  }
+
+  if (
+    method === "POST" &&
+    route.length === 3 &&
+    route[0] === "announcements" &&
+    route[2] === "delete"
+  ) {
+    requireRole(actor, "publisher");
+    return deleteAnnouncement(context.env, actor, route[1]);
   }
 
   if (method === "GET" && route.length === 2 && route[0] === "firmware" && route[1] === "releases") {
@@ -449,6 +488,147 @@ async function storageSummary(env: AdminEnv, url: URL): Promise<Response> {
       }
     }
   });
+}
+
+async function listAnnouncements(env: AdminEnv, url: URL): Promise<Response> {
+  const appId = queryString(url, "appId") ?? env.APP_ID;
+  const result = await env.DB.prepare(
+    `
+      SELECT id, app_id, title, body, pinned, published, published_at, created_at, updated_at
+      FROM announcements
+      WHERE app_id = ?
+      ORDER BY pinned DESC, COALESCE(published_at, updated_at, created_at) DESC, created_at DESC
+      LIMIT 50
+    `
+  )
+    .bind(appId)
+    .all<AnnouncementRow>();
+  return json({ ok: true, announcements: result.results });
+}
+
+async function saveAnnouncement(
+  env: AdminEnv,
+  actor: Actor,
+  announcementId: string | null,
+  body: Record<string, unknown>
+): Promise<Response> {
+  const appId = requireString(body.appId ?? env.APP_ID, "appId");
+  const title = boundedString(body.title, "title", 120);
+  const content = boundedString(body.body, "body", 8000);
+  const pinned = boolFlag(body.pinned);
+  const published = boolFlag(body.published);
+  const existing = announcementId
+    ? await env.DB.prepare("SELECT * FROM announcements WHERE id = ? AND app_id = ? LIMIT 1")
+        .bind(announcementId, appId)
+        .first<AnnouncementRow>()
+    : null;
+
+  if (announcementId && !existing) {
+    throw new AdminError("NOT_FOUND", "Announcement not found", 404);
+  }
+
+  const id = announcementId ?? `ann_${crypto.randomUUID().replaceAll("-", "")}`;
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO apps (id, name) VALUES (?, ?)").bind(appId, appId),
+    existing
+      ? env.DB.prepare(
+          `
+            UPDATE announcements
+            SET
+              title = ?,
+              body = ?,
+              pinned = ?,
+              published = ?,
+              published_at = CASE
+                WHEN ? = 1 AND published_at IS NULL THEN datetime('now')
+                ELSE published_at
+              END,
+              updated_at = datetime('now')
+            WHERE id = ?
+          `
+        ).bind(title, content, pinned, published, published, id)
+      : env.DB.prepare(
+          `
+            INSERT INTO announcements (
+              id,
+              app_id,
+              title,
+              body,
+              pinned,
+              published,
+              published_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END)
+          `
+        ).bind(id, appId, title, content, pinned, published, published),
+    env.DB.prepare(
+      `
+        INSERT INTO audit_logs (
+          id,
+          app_id,
+          actor,
+          actor_type,
+          action,
+          target_type,
+          target_id,
+          request_id,
+          before_json,
+          after_json
+        )
+        VALUES (?, ?, ?, 'access', ?, 'announcement', ?, ?, ?, ?)
+      `
+    ).bind(
+      crypto.randomUUID(),
+      appId,
+      actor.email,
+      existing ? "edit_announcement" : "create_announcement",
+      id,
+      actor.requestId,
+      existing ? canonicalJson(announcementSnapshot(existing)) : null,
+      canonicalJson({ title, body: content, pinned: pinned === 1, published: published === 1 })
+    )
+  ]);
+
+  return json({ ok: true, announcementId: id });
+}
+
+async function deleteAnnouncement(env: AdminEnv, actor: Actor, announcementId: string): Promise<Response> {
+  const announcement = await env.DB.prepare("SELECT * FROM announcements WHERE id = ? LIMIT 1")
+    .bind(announcementId)
+    .first<AnnouncementRow>();
+  if (!announcement) {
+    throw new AdminError("NOT_FOUND", "Announcement not found", 404);
+  }
+
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM announcements WHERE id = ?").bind(announcementId),
+    env.DB.prepare(
+      `
+        INSERT INTO audit_logs (
+          id,
+          app_id,
+          actor,
+          actor_type,
+          action,
+          target_type,
+          target_id,
+          request_id,
+          before_json,
+          after_json
+        )
+        VALUES (?, ?, ?, 'access', 'delete_announcement', 'announcement', ?, ?, ?, '{"deleted":true}')
+      `
+    ).bind(
+      crypto.randomUUID(),
+      announcement.app_id,
+      actor.email,
+      announcementId,
+      actor.requestId,
+      canonicalJson(announcementSnapshot(announcement))
+    )
+  ]);
+
+  return json({ ok: true });
 }
 
 async function listFirmwareReleases(env: AdminEnv, url: URL): Promise<Response> {
@@ -1202,6 +1382,18 @@ function requireString(value: unknown, field: string): string {
   return value.trim();
 }
 
+function boundedString(value: unknown, field: string, maxLength: number): string {
+  const text = requireString(value, field);
+  if (text.length > maxLength) {
+    throw new AdminError("INVALID_PARAMETER", `${field} is too long`, 400);
+  }
+  return text;
+}
+
+function boolFlag(value: unknown): 0 | 1 {
+  return value === true || value === 1 || value === "1" ? 1 : 0;
+}
+
 function requireInt(value: unknown, field: string): number {
   const parsed =
     typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
@@ -1336,6 +1528,18 @@ function firmwareChannelSnapshot(
     disable_latest: channel.disable_latest,
     disable_downloads: channel.disable_downloads,
     maintenance_message: channel.maintenance_message
+  };
+}
+
+function announcementSnapshot(announcement: AnnouncementRow): Record<string, unknown> {
+  return {
+    id: announcement.id,
+    app_id: announcement.app_id,
+    title: announcement.title,
+    body: announcement.body,
+    pinned: announcement.pinned === 1,
+    published: announcement.published === 1,
+    published_at: announcement.published_at
   };
 }
 

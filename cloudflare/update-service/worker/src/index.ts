@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { handleAnnouncements } from "./announcements";
 import { handleRegisterRelease } from "./ci";
 import { ApiError } from "./errors";
 import { errorJson, json, requestIdFrom, withRequestId } from "./http";
@@ -35,6 +36,10 @@ app.get("/healthz", (c) =>
 
 app.get("/api/public/latest", async (c) =>
   handleLatest(c.req.raw, c.env, c.get("requestId"))
+);
+
+app.get("/api/public/announcements", async (c) =>
+  handleAnnouncements(c.req.raw, c.env, c.get("requestId"))
 );
 
 app.get("/api/public/firmware/latest", async (c) =>

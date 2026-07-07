@@ -36,6 +36,13 @@ class ShareLinks {
       cloudflareUpdateManifestUrl.isNotEmpty
           ? cloudflareUpdateManifestUrl
           : legacyGithubLatestManifestUrl;
+  static String get announcementsUrl {
+    if (cloudflareUpdateManifestUrl.isEmpty) return '';
+    final manifestUri = Uri.tryParse(cloudflareUpdateManifestUrl);
+    if (manifestUri == null) return '';
+    return manifestUri.replace(path: '/api/public/announcements').toString();
+  }
+
   static String get firmwareLatestUrl {
     if (cloudflareFirmwareLatestUrl.isNotEmpty) {
       return cloudflareFirmwareLatestUrl;
@@ -44,6 +51,22 @@ class ShareLinks {
     final manifestUri = Uri.tryParse(cloudflareUpdateManifestUrl);
     if (manifestUri == null) return '';
     return manifestUri.replace(path: '/api/public/firmware/latest').toString();
+  }
+
+  static bool get hasAnnouncementsEndpoint => announcementsUrl.isNotEmpty;
+
+  static Uri announcementsUri({String? channel, int limit = 10}) {
+    final endpoint = announcementsUrl;
+    if (endpoint.isEmpty) {
+      throw StateError('Cloudflare announcements URL is not configured');
+    }
+    final uri = Uri.parse(endpoint);
+    final query = Map<String, String>.from(uri.queryParameters);
+    query['appId'] = appId;
+    query['platform'] = 'android';
+    query['channel'] = channel ?? updateChannel;
+    query['limit'] = limit.toString();
+    return uri.replace(queryParameters: query);
   }
 
   static bool get hasFirmwareUpdateEndpoint => firmwareLatestUrl.isNotEmpty;
