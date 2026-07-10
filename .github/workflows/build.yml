@@ -80,10 +80,10 @@ jobs:
               app_build_required=true
             else
               changed_paths="$(git diff --name-only "${base_sha}" "${CURRENT_SHA}")"
-              if grep -q '^docs/' <<< "${changed_paths}"; then
+              if grep -q '^app/bluetooth_flutter_Trace/docs/' <<< "${changed_paths}"; then
                 docs_changed=true
               fi
-              if grep -Eq '^(pubspec\.yaml|pubspec\.lock|analysis_options\.yaml|lib/|android/|windows/|assets/|third_party/)' <<< "${changed_paths}"; then
+              if grep -Eq '^app/bluetooth_flutter_Trace/(pubspec[.]yaml|pubspec[.]lock|analysis_options[.]yaml|lib/|android/|windows/|assets/|third_party/)' <<< "${changed_paths}"; then
                 app_build_required=true
               fi
             fi
@@ -95,6 +95,9 @@ jobs:
   android:
     name: Build Android APK
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/bluetooth_flutter_Trace
     needs:
       - changes
     if: needs.changes.outputs.app_build_required == 'true'
@@ -127,7 +130,7 @@ jobs:
         run: flutter pub get
 
       - name: Restore Android Gradle wrapper
-        working-directory: android
+        working-directory: app/bluetooth_flutter_Trace/android
         shell: bash
         run: |
           printf 'flutter.sdk=%s\n' "$FLUTTER_ROOT" > local.properties
@@ -254,12 +257,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: release/ble-monitor-android.apk
+          path: app/bluetooth_flutter_Trace/release/ble-monitor-android.apk
           if-no-files-found: error
 
   windows:
     name: Build Windows EXE
     runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: app/bluetooth_flutter_Trace
     needs:
       - changes
     if: needs.changes.outputs.app_build_required == 'true'
@@ -299,8 +305,8 @@ jobs:
         with:
           name: windows-exe
           path: |
-            release/ble-monitor-windows.zip
-            release/ble-monitor-windows.exe
+            app/bluetooth_flutter_Trace/release/ble-monitor-windows.zip
+            app/bluetooth_flutter_Trace/release/ble-monitor-windows.exe
           if-no-files-found: error
 
   pages:
@@ -325,7 +331,7 @@ jobs:
       - name: Upload static page
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs
+          path: app/bluetooth_flutter_Trace/docs
 
       - name: Deploy GitHub Pages
         id: deployment
@@ -334,6 +340,9 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/bluetooth_flutter_Trace
     needs:
       - changes
       - android
@@ -360,13 +369,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: android-apk
-          path: release-assets
+          path: app/bluetooth_flutter_Trace/release-assets
 
       - name: Download Windows build artifact
         uses: actions/download-artifact@v4
         with:
           name: windows-exe
-          path: release-assets
+          path: app/bluetooth_flutter_Trace/release-assets
 
       - name: Resolve release tag
         id: release_tag
@@ -520,7 +529,7 @@ jobs:
               continue
             fi
 
-            python .github/scripts/create_vcdiff_patch.py \
+            python "${GITHUB_WORKSPACE}/.github/scripts/create_vcdiff_patch.py" \
               "${previous_apk}" \
               "${apk_path}" \
               "${vcdiff_patch_path}" \
@@ -666,7 +675,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cloudflare-release-metadata
-          path: release-assets/cloudflare-release-metadata.json
+          path: app/bluetooth_flutter_Trace/release-assets/cloudflare-release-metadata.json
           retention-days: 7
 
       - name: Check Cloudflare registration configuration
@@ -694,7 +703,7 @@ jobs:
 
       - name: Deploy Cloudflare update service
         if: steps.release_guard.outputs.skip_release != 'true' && steps.cloudflare_config.outputs.enabled == 'true' && vars.TRACE_UPDATE_SERVICE_AUTO_DEPLOY == 'true'
-        working-directory: cloudflare/update-service/worker
+        working-directory: app/bluetooth_flutter_Trace/cloudflare/update-service/worker
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

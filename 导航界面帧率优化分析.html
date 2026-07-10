@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>X-Track 导航界面帧率优化分析 · 技术文档</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --border: #e8e8e8;
+      --text: #1a1a1a;
+      --muted: #888;
+      --accent: #2d6be4;
+      --accent-light: #eef3fd;
+      --tag-bg: #f0f0f0;
+      --sidebar-w: 260px;
+      --header-h: 52px;
+      --radius: 6px;
+      --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    /* ── Header ── */
+    #header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      z-index: 100;
+    }
+
+    #menu-toggle {
+      width: 36px; height: 36px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 4px;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    #menu-toggle:hover { background: var(--tag-bg); }
+    #menu-toggle span {
+      display: block;
+      width: 16px; height: 1.5px;
+      background: var(--text);
+      border-radius: 2px;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    body.menu-open #menu-toggle span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+    body.menu-open #menu-toggle span:nth-child(2) { opacity: 0; }
+    body.menu-open #menu-toggle span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+
+    #brand {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -.2px;
+      color: var(--text);
+    }
+    #brand sup {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+
+    .header-meta {
+      margin-left: auto;
+      display: flex; gap: 8px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      position: fixed;
+      top: var(--header-h); left: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      transform: translateX(0);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 90;
+      padding: 16px 0 32px;
+    }
+    body:not(.menu-open) #sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); }
+
+    .sidebar-section { margin-bottom: 8px; }
+    .sidebar-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 20px 4px;
+    }
+    .sidebar-link {
+      display: block;
+      padding: 6px 20px;
+      color: #444;
+      text-decoration: none;
+      font-size: 13px;
+      border-left: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .sidebar-link:hover {
+      color: var(--accent);
+      background: var(--accent-light);
+      border-left-color: var(--accent);
+    }
+    .sidebar-link.active {
+      color: var(--accent);
+      background: var(--accent-light);
+      border-left-color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ── Main ── */
+    #main {
+      margin-top: var(--header-h);
+      margin-left: var(--sidebar-w);
+      transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      min-height: calc(100vh - var(--header-h));
+    }
+    body:not(.menu-open) #main { margin-left: 0; }
+
+    .content {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 32px 80px;
+    }
+
+    /* ── Sections ── */
+    section { margin-bottom: 64px; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -.5px;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 24px 0 10px;
+    }
+
+    p { color: #444; margin-bottom: 12px; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Hero ── */
+    .hero-desc {
+      font-size: 16px;
+      color: #555;
+      max-width: 600px;
+      line-height: 1.8;
+      margin-bottom: 28px;
+    }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; }
+    .tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: var(--tag-bg);
+      color: #555;
+    }
+
+    /* ── Cards ── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .card-icon {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; margin: 16px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: #f5f5f5;
+      border: 1px solid var(--border);
+      font-weight: 600;
+      color: #555;
+    }
+    td {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      color: #444;
+      vertical-align: top;
+    }
+    tr:hover td { background: #fafafa; }
+    .td-code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: #f8f8f8;
+      color: #c0392b;
+    }
+
+    /* ── Code ── */
+    pre {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border-radius: var(--radius);
+      padding: 20px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+      margin: 16px 0;
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 28px;
+      height: 28px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+      color: #cdd6f4;
+      padding: 0;
+    }
+    pre:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { background: rgba(255,255,255,0.18); }
+    .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+    code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: #f3f3f3;
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: #c0392b;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+    /* ── Arch diagram ── */
+    .arch {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    .arch-layer {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .arch-layer:last-child { border-bottom: none; }
+    .arch-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      min-width: 110px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .arch-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .arch-chip {
+      font-size: 11.5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--tag-bg);
+      color: #444;
+    }
+    .arch-layer.l1 { background: #eef3fd; }
+    .arch-layer.l1 .arch-chip { background: #d0e1fd; color: #1a4db7; }
+    .arch-layer.l2 { background: #f0faf5; }
+    .arch-layer.l2 .arch-chip { background: #c2edd8; color: #1a6648; }
+    .arch-layer.l3 { background: #fdf8ee; }
+    .arch-layer.l3 .arch-chip { background: #fae6b0; color: #7a5200; }
+    .arch-layer.l4 { background: #fdf3f0; }
+    .arch-layer.l4 .arch-chip { background: #f9cfc8; color: #8b1c0e; }
+    .arch-layer.l5 { background: #f8f0fe; }
+    .arch-layer.l5 .arch-chip { background: #e1c7fc; color: #5b1fa3; }
+
+    /* ── Stats ── */
+    .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      min-width: 120px;
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -.5px;
+    }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Flow ── */
+    .flow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px dashed #eee;
+    }
+    .flow-step:last-child { border-bottom: none; }
+    .flow-num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .flow-text { font-size: 13px; color: #444; }
+    .flow-text strong { color: var(--text); }
+
+    /* ── Notice ── */
+    .notice {
+      border-left: 3px solid var(--accent);
+      background: var(--accent-light);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 13px;
+      color: #335;
+    }
+    .notice.warn {
+      border-left-color: #e67e22;
+      background: #fef9f0;
+      color: #7a4500;
+    }
+    .notice.ok {
+      border-left-color: #27ae60;
+      background: #f0faf5;
+      color: #1a5c38;
+    }
+    .notice.err {
+      border-left-color: #e74c3c;
+      background: #fef0f0;
+      color: #7a1a1a;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 32px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Pipeline ── */
+    .pipeline { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 16px 0; }
+    .pipeline-step { display: flex; gap: 14px; padding: 14px 18px; border-bottom: 1px solid #eee; }
+    .pipeline-step:last-child { border-bottom: none; }
+    .pipeline-step:nth-child(odd) { background: var(--surface); }
+    .pipeline-step:nth-child(even) { background: #f8f8f8; }
+    .pipeline-num {
+      width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+      color: #fff; font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .pipeline-content { flex: 1; min-width: 0; }
+    .pipeline-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+    .pipeline-desc { font-size: 13px; color: #555; margin-bottom: 6px; }
+
+    /* ── Sidebar sublink ── */
+    .sidebar-sublink {
+      display: block; padding: 3px 20px 3px 30px;
+      color: #888; text-decoration: none; font-size: 12px;
+      border-left: 2px solid transparent; transition: all 0.15s;
+    }
+    .sidebar-sublink:hover { color: var(--accent); background: var(--accent-light); border-left-color: var(--accent); }
+    .sidebar-sublink.active { color: var(--accent); background: var(--accent-light); border-left-color: var(--accent); }
+
+    /* ── Collapsible sidebar item ── */
+    .sidebar-expand-row { display: flex; align-items: stretch; }
+    .sidebar-expand-row .sidebar-link { flex: 1; padding-right: 2px; }
+    .sidebar-chevron {
+      width: 28px; flex-shrink: 0; margin-right: 6px;
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 18px; font-weight: 300;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 3px; padding: 0; line-height: 1;
+      transition: transform 0.22s ease, color 0.15s, background 0.15s;
+    }
+    .sidebar-chevron:hover { color: var(--accent); background: var(--accent-light); }
+    .sidebar-expandable.open .sidebar-chevron { transform: rotate(90deg); }
+    .sidebar-submenu {
+      overflow: hidden; max-height: 0;
+      transition: max-height 0.28s ease-in-out;
+    }
+    .sidebar-expandable.open .sidebar-submenu { max-height: 400px; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .content { padding: 28px 18px 60px; }
+      h1 { font-size: 24px; }
+      .stats { gap: 10px; }
+      .card-grid { grid-template-columns: 1fr 1fr; }
+      .arch-layer { flex-direction: column; align-items: flex-start; gap: 8px; }
+    }
+  </style>
+</head>
+<body class="menu-open">
+
+<!-- Header -->
+<header id="header">
+  <button id="menu-toggle" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+  <div id="brand">X-Track 导航界面帧率优化 <sup>AT32F435RGT7 · LVGL v8 · ST7789</sup></div>
+  <div class="header-meta">
+    <span class="badge">性能分析</span>
+    <span class="badge">实测数据</span>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">概览</div>
+    <a class="sidebar-link active" href="#overview">问题概览</a>
+    <a class="sidebar-link" href="#stats">关键数据</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">分析</div>
+    <a class="sidebar-link" href="#symptom">现象与误判</a>
+    <a class="sidebar-link" href="#rootcause">根因分析</a>
+    <a class="sidebar-link" href="#pipeline">整屏渲染管线</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">实测与实验</div>
+    <a class="sidebar-link" href="#rtt">RTT 实测数据</a>
+    <a class="sidebar-link" href="#experiments">优化实验结果</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">已实施改动</div>
+    <a class="sidebar-link" href="#sdio">SDIO 提速与诊断</a>
+    <a class="sidebar-link" href="#recenter">周期性 recenter</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">边界与方向</div>
+    <a class="sidebar-link" href="#ceiling">帧率天花板 / 屏幕尺寸</a>
+    <a class="sidebar-link" href="#cpurender">CPU 渲染提速（不换芯片）</a>
+    <a class="sidebar-link" href="#options">后续可选方向</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">参考</div>
+    <a class="sidebar-link" href="#files">改动文件清单</a>
+    <a class="sidebar-link" href="#conclusion">结论</a>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<main id="main">
+<div class="content">
+
+  <!-- ── Overview ── -->
+  <section id="overview">
+    <div class="section-label">Performance Analysis</div>
+    <h1>导航界面（LiveMap）帧率优化分析</h1>
+    <p class="hero-desc">
+      本文档记录 X-Track 导航界面帧率偏低问题的完整排查过程：从"设备信息界面 60 FPS、
+      导航界面仅 ~15 FPS"的现象出发，经源码走查与 RTT 实测数据，定位真正瓶颈，
+      验证若干优化手段的实际收益，并给出已实施改动与后续方向。
+    </p>
+    <div class="hero-tags">
+      <span class="tag">AT32F435RGT7 · 288MHz</span>
+      <span class="tag">LVGL v8</span>
+      <span class="tag">ST7789 240×320</span>
+      <span class="tag">SPI + DMA 显示</span>
+      <span class="tag">SDIO 4-bit 地图瓦片</span>
+      <span class="tag">每帧整屏重绘</span>
+      <span class="tag">周期性 recenter</span>
+    </div>
+    <div class="notice">
+      平台: AT32F435RGT7（系统时钟 288MHz，SRAM 链接区 384KB） &nbsp;·&nbsp;
+      显示: ST7789 240×320，SPI1 @ ~72MHz + DMA &nbsp;·&nbsp;
+      地图: SDIO 4-bit 读取 256×256 RGB565 瓦片
+    </div>
+    <div class="notice warn">
+      <strong>核心结论（先说）：</strong>导航界面慢的本质是
+      <strong>"为几像素的移动付整屏重绘的全价"</strong>——地图容器随 GPS 每帧移动 →
+      整屏失效 → 整屏渲染 + 整屏 SPI 传输 + 瓦片像素每帧从 SD 重读。
+      SD 提速、关闭屏幕透明等"局部优化"都绕不开这个前提，因此只涨一两帧；
+      唯一的结构性突破是<strong>让大多数帧不再整屏重绘</strong>（周期性 recenter）。
+    </div>
+  </section>
+
+  <!-- ── Stats ── -->
+  <section id="stats">
+    <h2>关键数据</h2>
+    <div class="stats">
+      <div class="stat"><div class="stat-num">60</div><div class="stat-label">设备信息界面 FPS</div></div>
+      <div class="stat"><div class="stat-num">~15</div><div class="stat-label">导航界面初始 FPS</div></div>
+      <div class="stat"><div class="stat-num">76800</div><div class="stat-label">整屏像素 (240×320)</div></div>
+      <div class="stat"><div class="stat-num">1.7</div><div class="stat-label">SD 读取 MB/s</div></div>
+      <div class="stat"><div class="stat-num">~17ms</div><div class="stat-label">整屏 SPI 传输地板</div></div>
+    </div>
+    <div class="notice ok">
+      同一块屏、同一条 SPI，设备信息界面能跑 60 FPS——这证明<strong>显示硬件没问题</strong>，
+      问题出在"导航界面每帧要重绘的面积"远大于"设备信息界面只重绘几个文字标签"。
+    </div>
+  </section>
+
+  <!-- ── Symptom ── -->
+  <section id="symptom">
+    <h2>现象与早期误判</h2>
+    <p>
+      两个界面跑同一套 LVGL 渲染引擎、同一块屏幕、同一条 SPI+DMA 通路，帧率却相差 4 倍：
+    </p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>界面</th><th>每帧重绘内容</th><th>像素数据来源</th><th>帧率</th></tr>
+        <tr><td>设备信息 SystemInfos</td><td>仅变化的小文字标签（小脏区）</td><td>RAM 字体位图</td><td>60 FPS</td></tr>
+        <tr><td>导航 LiveMap</td><td>整屏地图 + 轨迹 + 箭头</td><td>SD 卡瓦片像素</td><td>~15 FPS</td></tr>
+      </table>
+    </div>
+    <div class="notice err">
+      <strong>被否定的旧结论：</strong>既有的 <code>性能优化总结.md</code> 把瓶颈归因于
+      <code>lv_obj_set_pos()</code> / <code>lv_img_set_angle()</code> 的无意义调用，
+      并据此加了位置/角度缓存。但实测帧率仍是 ~15 FPS，说明该方向<strong>没命中真正瓶颈</strong>。
+    </div>
+  </section>
+
+  <!-- ── Root cause ── -->
+  <section id="rootcause">
+    <h2>根因分析</h2>
+
+    <h3>① 每帧整屏重绘</h3>
+    <p>
+      地图容器 <code>ui.map.cont</code> 覆盖整个可视区（<code>CONFIG_LIVE_MAP_VIEW = LV_HOR_RES × LV_VER_RES</code>）。
+      每次 GPS 位置变化，<code>MapTileContUpdate()</code> 都会移动整个容器，让箭头锁定屏幕中心、地图在底下平滑滚动。
+      容器覆盖全屏，一移动 → LVGL 把旧位置+新位置标记为脏 → <strong>几乎整屏 240×320 失效重绘</strong>。
+      运动状态下位置持续变化，于是<strong>每一帧都是整屏重绘</strong>。
+    </p>
+
+    <h3>② 瓦片像素每帧从 SD 卡逐行读取</h3>
+    <p>
+      LVGL 内置文件解码器对"文件 + 真彩色"瓦片<strong>本就是逐行流式读取的设计</strong>：
+      <code>lv_img_decoder_built_in_open()</code> 只开着文件就返回，<code>img_data</code> 保持 NULL，
+      绘制时由 <code>read_line</code> 回调按行从 SD 取像素（见 <code>lv_img_decoder.c:444-447</code>）。
+      工程在此之上加了"小行缓存"补丁：硬件上 <code>XTRACK_IMG_LINE_CACHE</code> 仅 6 条 × 8 行 × 256 宽 × 2 字节
+      = <strong>24KB</strong>（一个独立的 static 数组，<strong>不在 LVGL 堆里</strong>）。
+      整屏渲染需要触碰约 60 个"瓦片 8 行带"，缓存撑不住一帧 → 缓存抖动 → 每帧约 100~240KB 从 SD 重读。
+    </p>
+    <div class="notice err">
+      <strong>误区澄清：</strong>并非"LVGL 堆（72KB）放不下 128KB 瓦片才被迫流式"。真相是解码器<strong>无论堆多大都逐行流式</strong>，
+      压根不会整图载入。因此<strong>单纯增大 <code>LV_MEM_SIZE</code> 对帧率零影响</strong>，只会白吃掉本就紧张的 ~100KB 空余 RAM。
+      详见"帧率天花板"一节。
+    </div>
+
+    <h3>③ 三块成本都正比于"像素数量"</h3>
+    <div class="notice">
+      渲染时间 ∝ 像素数 &nbsp;·&nbsp; SD 读取 ∝ 像素数（覆盖多少瓦片行） &nbsp;·&nbsp; SPI 传输 ∝ 像素数<br>
+      所以"减面积"能同时砍掉三块成本，而单独优化某一环（SD 时钟、屏幕透明）只动其中一个因子 → 收益有限。
+    </div>
+
+    <h3>整屏一帧的成本构成（~50ms @ 240×320）</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>环节</th><th>估算耗时</th><th>说明</th></tr>
+        <tr><td>LVGL 整屏 CPU 合成</td><td>~20–30 ms</td><td>逐像素图层混合 + 抗锯齿粗线 + 箭头旋转，无 GPU</td></tr>
+        <tr><td>SD 瓦片逐行读取</td><td>~10–15 ms</td><td>行缓存抖动，每帧重读已在 SD 上的瓦片像素</td></tr>
+        <tr><td>整屏 SPI 传输</td><td>~17 ms</td><td>240×320×2 = 153600 字节 ÷ 72MHz，硬地板</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── Pipeline ── -->
+  <section id="pipeline">
+    <h2>整屏渲染管线（一帧的数据流）</h2>
+    <p>"渲染（CPU 算像素写进 RAM 缓冲区）"与"刷屏（DMA 把缓冲区搬到屏幕）"是两件事，整屏一帧两者都付全价：</p>
+    <div class="arch">
+      <div class="arch-layer l1">
+        <div class="arch-name">GPS / 坐标</div>
+        <div class="arch-items">
+          <span class="arch-chip">GPS 位置</span>
+          <span class="arch-chip">Web 墨卡托投影</span>
+          <span class="arch-chip">瓦片坐标</span>
+        </div>
+      </div>
+      <div class="arch-layer l2">
+        <div class="arch-name">瓦片像素</div>
+        <div class="arch-items">
+          <span class="arch-chip">行缓存 24KB</span>
+          <span class="arch-chip">SD 逐行读取</span>
+          <span class="arch-chip">SDIO 48MHz 4-bit</span>
+        </div>
+      </div>
+      <div class="arch-layer l3">
+        <div class="arch-name">LVGL 合成</div>
+        <div class="arch-items">
+          <span class="arch-chip">脏区域</span>
+          <span class="arch-chip">图层混合</span>
+          <span class="arch-chip">抗锯齿轨迹线</span>
+          <span class="arch-chip">箭头旋转</span>
+        </div>
+      </div>
+      <div class="arch-layer l4">
+        <div class="arch-name">显示传输</div>
+        <div class="arch-items">
+          <span class="arch-chip">双半屏缓冲</span>
+          <span class="arch-chip">SPI1 ~72MHz</span>
+          <span class="arch-chip">DMA 字节传输</span>
+        </div>
+      </div>
+      <div class="arch-layer l5">
+        <div class="arch-name">面板</div>
+        <div class="arch-items">
+          <span class="arch-chip">ST7789</span>
+          <span class="arch-chip">240×320</span>
+          <span class="arch-chip">RGB565</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>单帧时序（运动状态）</h3>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-text"><strong>CheckPosition()</strong> — 取 GPS、转地图坐标，位置变化即触发地图更新</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-text"><strong>移动地图容器</strong> — 容器覆盖全屏，移动后整屏被标记为脏</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-text"><strong>LVGL 整屏合成</strong> — 逐像素读瓦片（触发 SD 行读取）、画轨迹线、旋转箭头、混合</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-text"><strong>SPI + DMA 刷屏</strong> — 153600 字节经 SPI 送往 ST7789，约 17ms</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── RTT data ── -->
+  <section id="rtt">
+    <h2>RTT 实测数据</h2>
+    <p>
+      工程在 <code>LiveMap.cpp</code> 内置了每秒 RTT 统计：<code>update</code>（≈帧率）、
+      <code>lineHit / lineMiss</code>（瓦片行缓存命中/未命中）、<code>lineReadKB</code>（每秒从 SD 读取量）。
+      SDIO 提速到 48MHz 后实测：
+    </p>
+<pre><code>LiveMap stat: update=22 reload=0 lineHit=2889 lineMiss=435 lineReadKB=1740
+LiveMap stat: update=24 reload=0 lineHit=2896 lineMiss=428 lineReadKB=1712
+LiveMap stat: update=26 reload=0 lineHit=2866 lineMiss=424 lineReadKB=1696
+LiveMap stat: update=26 reload=0 lineHit=2930 lineMiss=437 lineReadKB=1748</code></pre>
+
+    <h3>三条关键解读</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>观测</th><th>含义</th></tr>
+        <tr><td><code>update ≈ 22–26</code></td><td>主循环被整屏渲染拖慢，实际帧率就是这个数（定时器本应 ~62/s）</td></tr>
+        <tr><td>命中率 ≈ 87%</td><td>恰等于 7/8——即"一次读 8 行、首行未命中后 7 行命中"。<strong>跨帧复用几乎为零</strong>，每帧开头所有带都得重读</td></tr>
+        <tr><td><code>reload=0</code> 却 1.7MB/s</td><td>瓦片集合没变（未跨瓦片边界），但仍在狂读——证明在为"几像素的容器移动"付整屏重读的全价</td></tr>
+      </table>
+    </div>
+    <div class="notice warn">
+      把 <code>lv_fs_read</code> 临时换成 <code>lv_memset</code>（不读 SD）可作为判决实验：若帧率大涨则 SD 占大头。
+      但本案数据显示 SD 仅约占帧时间 1/4，<strong>大头是整屏 CPU 渲染</strong>。
+    </div>
+  </section>
+
+  <!-- ── Experiments ── -->
+  <section id="experiments">
+    <h2>优化实验与实际收益</h2>
+    <p>逐项验证常见手段，用"FPS + RTT"对照前后数据，结果如下：</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>优化项</th><th>改动</th><th>实测帧率变化</th><th>结论</th></tr>
+        <tr><td>SDIO 时钟</td><td class="td-code">24 → 48 MHz</td><td>+~5（17 → ~22-26）</td><td>总线本就远未跑满，收益有限</td></tr>
+        <tr><td>屏幕透明</td><td class="td-code">LV_COLOR_SCREEN_TRANSP 1→0</td><td>+1~2</td><td>仅加速逐像素混合，非瓶颈</td></tr>
+        <tr><td>面板阴影</td><td class="td-code">shadow_width 10→0</td><td>≈ 0</td><td>反证瓶颈在"整屏级"操作，不在局部</td></tr>
+        <tr><td><strong>周期性 recenter</strong></td><td class="td-code">地图静止 + 箭头移动</td><td><strong>大幅（目标 50-60）</strong></td><td><strong>唯一突破"每帧整屏"的结构性方案</strong></td></tr>
+      </table>
+    </div>
+    <div class="notice">
+      规律：前三项都没改变"每帧整屏"这个前提，只动了"每像素成本"或单一环节，故收益小；
+      recenter 直接砍"像素数量"这个三块共用的因子，才是真正的杠杆。
+    </div>
+  </section>
+
+  <!-- ── SDIO ── -->
+  <section id="sdio">
+    <h2>已实施改动 ①：SDIO 提速与硬件诊断</h2>
+
+    <h3>时钟 24MHz → 48MHz（4-bit 并行）</h3>
+<pre><code>// at32_sdio.c  sd_init() —— 提升 SDIO 时钟
+clkdiv = system_core_clock / 48000000;   // 原为 / 24000000
+if (clkdiv &gt;= 2) clkdiv -= 2;
+sdio_clock_set(clkdiv);   // sdio_ck = ahbclk / (clkdiv+2) = 288 / 6 = 48 MHz</code></pre>
+    <p>48MHz × 4-bit = 24MB/s 理论上限，而实际只需 1.7MB/s，<strong>总线远未跑满</strong>，所以提速收益有限。</p>
+
+    <h3>硬件诊断打印（确认实际位宽/时钟）</h3>
+<pre><code>// HAL_SD_CARD.cpp  SD_Init() 成功分支
+uint32_t clkdiv = ((uint32_t)SDIOx-&gt;clkctrl_bit.clkdiv_h &lt;&lt; 8)
+                  | (uint32_t)SDIOx-&gt;clkctrl_bit.clkdiv_l;
+uint32_t sdioMHz = (system_core_clock / (clkdiv + 2)) / 1000000;
+CONFIG_DEBUG_SERIAL.printf(
+    "SDIO HW: busws=%u (0=1bit,1=4bit,2=8bit), clkdiv=%u, sdio_ck=%u MHz\r\n",
+    (unsigned)SDIOx-&gt;clkctrl_bit.busws, (unsigned)clkdiv, (unsigned)sdioMHz);</code></pre>
+    <p>开机串口/RTT 输出示例（<code>busws=1</code> 即确认 4-bit 并行、48MHz 生效）：</p>
+<pre><code>SDIO HW: busws=1 (0=1bit,1=4bit,2=8bit), clkdiv=4, sdio_ck=48 MHz, scr_buswidth=0x5</code></pre>
+  </section>
+
+  <!-- ── Recenter ── -->
+  <section id="recenter">
+    <h2>已实施改动 ②：周期性 recenter（宏开关，默认关闭）</h2>
+    <p>
+      思路：两次 recenter 之间地图容器<strong>完全静止</strong>，箭头每帧在静止地图上平滑移动（只重绘箭头小区域，
+      像设备信息界面一样廉价）；当箭头偏离屏幕中心超过阈值（或瓦片重载/首帧）才整屏 recenter 一次。
+    </p>
+    <div class="notice warn">
+      <strong>已做成宏开关，最终固件默认 OFF（原始实时渲染）。</strong>
+      因为 recenter 虽能把帧率拉到 50–60，但地图会周期性"跳动"，观感不被接受。
+      开关在 <code>Config.h</code>，改一个宏即可在"高帧率"与"平滑滚动"之间切换，无需改其它代码。
+    </div>
+
+    <h3>开关与阈值（Config.h）</h3>
+<pre><code>// 1 = 周期性 recenter（高帧率，地图周期跳动）
+// 0 = 原始实时渲染（平滑滚动，每帧整屏重绘，帧率低）—— 当前出厂默认
+#define CONFIG_LIVE_MAP_RECENTER_ENABLE   0
+
+// 仅 ENABLE=1 时生效：越大帧率越高、箭头偏离中心越远（须 &lt; 120）
+#define CONFIG_LIVE_MAP_RECENTER_MARGIN   48</code></pre>
+
+    <h3>核心逻辑（LiveMap.cpp · MapTileContUpdate）</h3>
+<pre><code>lv_coord_t centeredX = baseX - offset.x;   // 让箭头回到屏幕中心所需的容器位置
+lv_coord_t centeredY = baseY - offset.y;
+
+bool recenter = forceRecenter || !priv.hasContPos;
+if (!recenter) {
+    lv_coord_t driftX = priv.appliedContX - centeredX;   // 箭头偏离中心的距离
+    lv_coord_t driftY = priv.appliedContY - centeredY;
+    if (driftX &lt; 0) driftX = -driftX;
+    if (driftY &lt; 0) driftY = -driftY;
+    if (driftX &gt; CONFIG_LIVE_MAP_RECENTER_MARGIN ||
+        driftY &gt; CONFIG_LIVE_MAP_RECENTER_MARGIN)
+        recenter = true;
+}
+if (recenter) {
+    priv.appliedContX = centeredX;
+    priv.appliedContY = centeredY;
+    priv.hasContPos = true;
+}
+View.SetMapContPos(priv.appliedContX, priv.appliedContY);  // 位置不变则零重绘</code></pre>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-text"><strong>平时</strong> — 容器静止，<code>SetMapContPos</code> 传入不变值 → 缓存命中 → 零整屏重绘</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-text"><strong>每帧</strong> — 箭头在静止地图上平滑移动，只重绘箭头小区域 → 廉价，冲 60 FPS</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-text"><strong>偏离 &gt; 48px / 瓦片重载</strong> — 整屏 recenter 一次，箭头回中心</div>
+      </div>
+    </div>
+    <div class="notice warn">
+      <strong>代价（取舍）：</strong>地图会周期性"跳一下"而非连续滚动（主流 GPS 表的做法）。
+      若不喜欢该观感，可调大阈值减少跳动频率，或考虑"中心死区平滑跟随"折中方案（见后续方向）。
+    </div>
+  </section>
+
+  <!-- ── Ceiling ── -->
+  <section id="ceiling">
+    <h2>帧率天花板与屏幕尺寸</h2>
+
+    <h3>为什么"刷屏速度"提不动了</h3>
+    <p>
+      显示走 SPI1，时钟链：AHB 288MHz → APB2 ÷2 = 144MHz → SPI 最小分频 ÷2 = <strong>SCK ≈ 72MHz</strong>，
+      已压在 ST7789 面板写入额定上限（~62–80MHz）。再快要么分频链给不出，要么超规格花屏。整屏传输地板基本定死：
+    </p>
+<pre><code>240×320×2 = 153600 字节 × 8 bit ÷ 72MHz ≈ 17.1 ms   // 整屏 SPI 传输（已接近极限）</code></pre>
+
+    <h3>若硬件换成 240×240 屏（用平滑滚动旧程序）</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th></th><th>240×320（当前）</th><th>240×240</th></tr>
+        <tr><td>整屏像素</td><td>76800</td><td>57600（−25%）</td></tr>
+        <tr><td>SPI 传输地板</td><td>~17.1 ms</td><td>~12.8 ms</td></tr>
+        <tr><td>整屏渲染 / SD 读取</td><td>基准</td><td>同比 −25%</td></tr>
+        <tr><td><strong>平滑滚动帧率</strong></td><td><strong>~25 FPS</strong></td><td><strong>~32–36 FPS</strong></td></tr>
+      </table>
+    </div>
+    <div class="notice">
+      换屏 25% 少像素 ≈ +33% 帧率，但<strong>仍到不了 60</strong>：本质没改变"每帧整屏"。
+      且物理面板是 240×320，软件需改 <code>CONFIG_SCREEN_VER_RES</code>，并修正 ST7789 240×240 变体的
+      <code>rowstart/colstart</code> 显示偏移；缓冲变小可省 ~38KB RAM（可回补给瓦片行缓存）。
+    </div>
+    <div class="notice ok">
+      对比两种"减面积"的力度：换屏 −25%，而 recenter 把常态帧从 76800 像素降到约 1600 像素（箭头小区域），
+      <strong>降约 98%</strong>——recenter 远比换屏划算。
+    </div>
+
+    <h3>增大 LVGL 堆 / 瓦片缓存为什么不是出路</h3>
+    <p>
+      常见的直觉是"瓦片放不进 72KB 堆才慢，把堆调大就好"。但已验证（<code>lv_img_decoder.c:444-447</code>）：
+      LVGL 文件解码器对真彩色图<strong>本就逐行流式，无论堆多大都不整图载入</strong>。所以：
+    </p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>手段</th><th>占用 RAM</th><th>预期收益</th></tr>
+        <tr><td>增大 <code>LV_MEM_SIZE</code></td><td>LVGL 堆</td><td><strong>0</strong>——不碰瓦片流式，纯浪费 RAM</td></tr>
+        <tr><td>增大行缓存 <code>XTRACK_IMG_LINE_CACHE_CNT</code></td><td>独立 static 数组</td><td>跨帧复用 → SD 读取下降，约 +3~5 帧</td></tr>
+        <tr><td>自定义"整图解码器"（直接给 img_data）</td><td>专用池，4×128KB=512KB</td><td>去 SD + 部分渲染开销，约到 ~35 帧</td></tr>
+      </table>
+    </div>
+    <div class="notice warn">
+      关键：实测 <code>lineReadKB ≈ 1.7MB/s</code>、约 26 次未命中/帧，<strong>SD 读取仅占帧时间约 1/4</strong>。
+      大头是整屏 CPU 渲染（~20–30ms）+ SPI 传输（~17ms），而 RAM 一点都碰不到这两块。因此即便把 SD 读取彻底消灭，
+      <strong>平滑（OFF）模式也只能从 ~25 升到 ~30–35 FPS，到不了 60</strong>——这是无 GPU + 72MHz SPI 下平滑全屏滚动的物理天花板。
+    </div>
+  </section>
+
+  <!-- ── CPU render ── -->
+  <section id="cpurender">
+    <h2>CPU 渲染提速（不换芯片）</h2>
+    <p>
+      既然平滑模式的地板是 CPU 逐像素软件合成（无 2D 加速器），不换芯片就只能从两个方向榨：
+      <strong>降每像素/每对象的计算量</strong> 和 <strong>让 CPU 跑得更快</strong>。先说一个已确认的事实：
+      编译优化已是 <code>-O3</code>（Optim Level 3），这块基本榨干，不是杠杆。
+    </p>
+    <div class="notice warn">
+      <strong>已发现一个未生效的优化：</strong><code>LV_ATTRIBUTE_FAST_MEM</code> 指向 <code>RAMCODE</code> 段，
+      但分散加载文件 <code>X-Track.sct</code> 没给 <code>RAMCODE</code> 设独立 RAM 执行区——
+      所以 LVGL 标记为"快速内存"的热点绘制函数<strong>实际仍从内部 Flash 执行</strong>，该优化形同虚设。
+    </div>
+    <div class="table-wrap">
+      <table>
+        <tr><th>手段</th><th>做法</th><th>预期收益</th><th>代价 / 风险</th></tr>
+        <tr><td>热点绘制函数入 RAM 执行</td><td>在 <code>.sct</code> 给 <code>RAMCODE</code> 段开 RAM 执行区（Flash 载入、RAM 运行），blend/fill 内循环跑在零等待 RAM</td><td>内循环提速</td><td>改分散加载 + 启动拷贝，占几 KB RAM；收益取决于 Flash 缓存现状</td></tr>
+        <tr><td>预渲染多方向箭头</td><td>用 24–72 张定角度箭头图替代 <code>lv_img_set_angle</code> 实时旋转（逐像素反变换 + 双线性采样）</td><td>去掉旋转开销</td><td>占 Flash 存图；角度量化</td></tr>
+        <tr><td>轨迹线降本</td><td>宽 5→2~3、<code>line_rounded=false</code>、必要时关该线抗锯齿</td><td>去掉粗抗锯齿线的覆盖率计算</td><td>线条略糙</td></tr>
+        <tr><td>箭头关抗锯齿</td><td><code>lv_img_set_antialias(img, false)</code></td><td>旋转采样开销减半</td><td>边缘略糙</td></tr>
+        <tr><td>叠加面板不透明</td><td>sportInfo / zoom 的 <code>bg_opa → LV_OPA_COVER</code></td><td>跳过对每帧重绘地图的 alpha 混合</td><td>视觉变实</td></tr>
+        <tr><td>ARM-2D 软件加速</td><td><code>LV_USE_GPU_ARM2D=1</code> + 集成库</td><td>优化的 2D blend 例程</td><td>M4 无 Helium，收益有限</td></tr>
+      </table>
+    </div>
+    <div class="notice">
+      这些都属于"降每像素/对象成本"。叠加起来平滑（OFF）模式大约从 <strong>~25 提升到 ~35–40 FPS</strong>，
+      对滚动顺滑度是明显改善，且多数无 UX 代价；但<strong>仍到不了 60</strong>——
+      60 只能靠降面积（recenter / 小屏）。
+    </div>
+  </section>
+
+  <!-- ── Options ── -->
+  <section id="options">
+    <h2>后续可选方向</h2>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">🎯</div>
+        <div class="card-title">周期性 recenter（宏开关·默认关）</div>
+        <div class="card-desc">开则 50–60 FPS，代价是地图周期跳动；因观感问题最终默认关闭。可随时切回。</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🖥️</div>
+        <div class="card-title">硬件换 240×240 屏</div>
+        <div class="card-desc">平滑滚动 ~35 FPS。需改分辨率配置 + 修 ST7789 偏移。不动 UX 但提升有限。</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🎛️</div>
+        <div class="card-title">中心死区平滑跟随</div>
+        <div class="card-desc">箭头在中心小框内移动时地图不动，出框才平滑跟随而非硬跳。比 recenter 柔和。待实现。</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">⚙️</div>
+        <div class="card-title">16 位 DMA 传输</div>
+        <div class="card-desc">DMA 半字 + SPI 16 位帧，逼近 SPI 理论传输上限。仅对 recenter 帧有意义，优先级低。</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🗂️</div>
+        <div class="card-title">增大瓦片行缓存</div>
+        <div class="card-desc">让整帧瓦片行常驻，静止时 SD 读取趋近 0。受 RAM 约束，配合换屏省出的 RAM 更可行。</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🧵</div>
+        <div class="card-title">轨迹线 / 箭头降本</div>
+        <div class="card-desc">轨迹线变细去圆角、预渲染多方向箭头代替实时旋转。降每像素成本，幅度有限。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Files ── -->
+  <section id="files">
+    <h2>改动文件清单</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>文件</th><th>改动</th><th>目的</th></tr>
+        <tr><td class="td-code">MDK-ARM_F435/Platform/Core/at32_sdio.c</td><td>SDIO 时钟 24→48MHz</td><td>提升 SD 读取带宽（实测收益有限）</td></tr>
+        <tr><td class="td-code">USER/HAL/HAL_SD_CARD.cpp</td><td>新增 SDIO 硬件诊断打印</td><td>确认实际为 4-bit / 48MHz</td></tr>
+        <tr><td class="td-code">USER/App/Config/Config.h</td><td>新增 CONFIG_LIVE_MAP_RECENTER_ENABLE（开关，默认 0）+ _MARGIN</td><td>一个宏在"高帧率 recenter"与"平滑实时渲染"间切换</td></tr>
+        <tr><td class="td-code">USER/App/Pages/LiveMap/LiveMap.h</td><td>priv 增 appliedContX/Y、hasContPos；签名加 forceRecenter</td><td>recenter 状态</td></tr>
+        <tr><td class="td-code">USER/App/Pages/LiveMap/LiveMap.cpp</td><td>MapTileContUpdate 用 #if 分两条路径；onViewDidAppear 复位</td><td>recenter（ON）/ 原始实时渲染（OFF）</td></tr>
+        <tr><td class="td-code">lv_conf.h</td><td>LV_COLOR_SCREEN_TRANSP 1→0</td><td>加速逐像素混合（+1~2 帧）</td></tr>
+      </table>
+    </div>
+    <div class="notice ok">
+      构建：Keil MDK ARM Compiler 5，<code>UV4 -b proj.uvprojx -t X-Track</code>。
+      ENABLE=1 与 ENABLE=0 两种配置均 <strong>0 Error / 0 Warning</strong> 链接通过（代码量分别 226836 / 226764，证明两条分支独立可用）；
+      <strong>最终出厂固件为 OFF（原始实时渲染）</strong>。
+    </div>
+  </section>
+
+  <!-- ── Conclusion ── -->
+  <section id="conclusion">
+    <h2>结论</h2>
+    <div class="notice">
+      <strong>导航界面慢，不是显示硬件或 <code>lv_obj_set_pos</code> 的问题，而是"每帧整屏重绘"这件事本身。</strong>
+      整屏一帧的渲染、SD 读取、SPI 传输三块成本都正比于像素数量；SD 提速、关闭屏幕透明等局部优化绕不开
+      "每帧发一整屏"的前提，因此只涨一两帧。
+    </div>
+    <div class="notice ok">
+      唯一能上 50–60 的结构性突破是<strong>让大多数帧不再整屏重绘</strong>（周期性 recenter，把常态帧面积降约 98%）。
+      但它的代价是地图周期性跳动，观感不被接受，因此做成宏开关、<strong>最终默认关闭</strong>，保留平滑滚动。
+    </div>
+    <div class="notice err">
+      <strong>已排除的方向：</strong>增大 <code>LV_MEM_SIZE</code> 无效——解码器对真彩色图本就逐行流式，不整图载入；
+      且实测 SD 读取仅占帧时间约 1/4。靠 RAM/缓存最多把平滑模式从 ~25 推到 ~30–35 FPS，<strong>到不了 60</strong>。
+    </div>
+    <div class="notice warn">
+      <strong>验证方式：</strong>烧录后看 RTT 的 <code>update</code>（≈帧率）与 <code>lineReadKB</code>。
+      平移帧若冲到 50–60、<code>lineReadKB</code> 大幅下降，即实锤瓶颈是"每帧整屏"且已被绕过。
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  X-Track 导航界面帧率优化分析 &nbsp;·&nbsp; AT32F435RGT7 · LVGL v8 · ST7789 240×320 &nbsp;·&nbsp; 基于源码走查与 RTT 实测
+</footer>
+</main>
+
+<script>
+  // ── Menu Toggle ──
+  const toggle = document.getElementById('menu-toggle');
+  toggle.addEventListener('click', () => {
+    document.body.classList.toggle('menu-open');
+  });
+
+  // ── Active link on scroll ──
+  const sections = document.querySelectorAll('section[id], h3[id]');
+  const links = document.querySelectorAll('.sidebar-link, .sidebar-sublink');
+
+  function updateActive() {
+    let current = '';
+    sections.forEach(sec => {
+      const top = sec.getBoundingClientRect().top;
+      if (top <= 80) current = sec.id;
+    });
+    links.forEach(a => {
+      const isActive = a.getAttribute('href') === '#' + current;
+      a.classList.toggle('active', isActive);
+      if (isActive) a.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
+
+  document.getElementById('main').addEventListener('scroll', updateActive);
+  window.addEventListener('scroll', updateActive);
+
+  // ── Copy button ──
+  document.querySelectorAll('pre').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.title = '复制代码';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.addEventListener('click', () => {
+      const code = pre.querySelector('code') ? pre.querySelector('code').innerText : pre.innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // ── Smooth scroll ──
+  links.forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (window.innerWidth < 700) document.body.classList.remove('menu-open');
+    });
+  });
+
+  // ── Collapsible sidebar toggle ──
+  function toggleExpand(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('open');
+  }
+</script>
+</body>
+</html>

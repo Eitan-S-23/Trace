@@ -1,62 +1,117 @@
-# Plan Review Log: 码表 UI 一比一复刻重做
-Act 1（grill）完成 — 计划已与用户锁定。MAX_ROUNDS=5。
+# Plan Review Log: Dialplate HUD Watchface System v1
+Act 1 (grill) complete - plan locked with the user. MAX_ROUNDS=5.
 
-## Round 1 — Codex（model gpt-5.5，read-only，medium effort，session 019ea7dd）
+## Round 1 - Codex CLI
 
-VERDICT: REVISE。10 条发现（原文要点）：
-1. 路线详情想用 `RideController.recentRides` 画真实 GPS 轨迹，但 `RideSession` 不含轨迹点，`RideController.points` 只暴露当前实时骑行。修：为选中骑行加 DB 取点路径，或声明路线详情仅风格化/示例。
-2. 新增公开 `DeviceDetailPage` 会与已存在、被 `PowerMeterPage` 引用的 `lib/pages/device_detail_page.dart` 同名冲突。修：改名 `RideDeviceDetailPage` 等。
-3. 开始/暂停规格不全：未记录时 `pauseResume()` 是空操作，且没有 停止/保存/结束 入口。修：中间键 `isRecording ? pauseResume() : start()`，并提供可达的保存/停止动作。
-4. 「固定头部 + Expanded 选中页」若 `_DashboardPage` 仍是固定高 `Column` + 大卡片、无滚动兜底，仍会溢出。修：每个 tab 用 `LayoutBuilder` 驱动，高度不足时内容包 `SingleChildScrollView`。
-5. `_TopChrome` 要显示真实设备状态/型号，但 `RideController` 无 BLE/连接字段，现在靠 tab 索引伪造连接。修：要么接入既有 BLE 控制器，要么标注为静态占位 UI。
-6. 在超大私有单文件里塞详情页增加编译风险、类型/命名错误难定位。修：把新详情页放进唯一命名的独立文件并显式 import。
-7. 轨迹归一化只提到空/单点，未处理同纬/同经、非法坐标、NaN、跨 180° 子午线。修：映射前清洗点、对零经纬跨度加保护。
-8. 复用图表画笔有除零风险：`_BarChartPainter` 除以 `values.length`、`labels.length-1`、`maxValue`；空周期会崩/画 NaN。修：所有画笔对空列表/单标签/非正最大值提前返回或画空态。
-9. 周/月/年/全部聚合超出 `RideController` 现有 API，很可能需要被划为 out-of-scope 的 `DatabaseService` 访问。修：把统计约束在已加载的 `recentRides` 字段，或先（只读）扩展控制器/API。
-10. `PLAN.md` 是乱码，实施者误读中文串/部件名有 CI 成本。修：实施前用合法 UTF-8/ASCII 重写计划。
+Attempted to run the required read-only `codex exec` adversarial review.
 
-### Claude's response（最终仲裁人）
-已用代码核实后处置：
+CLI version check:
 
-- **采纳并改计划**：#1 路线详情地图改为风格化（路线本就是示例数据），不新增 DB 取点；仪表盘英雄卡在记录中用 `controller.points` 画实时轨迹。#2+#6 两个详情页一律做成 speedometer_page.dart 内**文件作用域私有部件**（`_RideRouteDetailView`/`_RideDeviceDetailView`），私有类不会与公开 `DeviceDetailPage` 冲突——既解决同名又避免拆文件带来的共享私有部件/import 风险（#6 的"必须拆文件"部分按此理由部分保留）。#3 中间键 `isRecording?pauseResume():start()`，记录中长按中间键弹确认并 `saveCurrentRide()` 结束保存。#4 每个 tab 内容统一包 `SingleChildScrollView`（在 `Expanded` 内），正常机型一屏放下、矮屏可滚、绝不溢出崩溃。#5 顶部设备状态降级为**静态占位**（不谎称真实，不接 BLE，避免扩面）。#7 轨迹点清洗（剔除 NaN/Inf、零经纬跨度兜底为示例环线）。#8 审计所有画笔加空/零保护（`values.length<2`、`maxValue<=0`、`labels.length<=1` 提前返回/空态）。#9 统计页定位为**示例数据驱动的设计复刻**，`recentRides` 有数据时仅反映当前周期总览，不新增 DB 查询；功率/心率/强度分布纯示例（设备无此数据）。
-- **拒绝（附理由）**：#10。已验证 `PLAN.md` 为合法 UTF-8 无 BOM（首字节 `23 20 50`=`# P`）。乱码是 Codex 在 Windows 区域设置下读取工具误解码 UTF-8 所致（本机 bash 显示中文同样乱码）；Dart/Flutter 源码按 UTF-8 编译，现有已提交的 `speedometer_page.dart` 满是中文串且能构建，故无需改动。
+```text
+codex-cli 0.136.0
+```
 
-## Round 2 — Codex（恢复同一会话 019ea7dd，read-only，medium effort）
+The first PowerShell `codex` shim was blocked by Windows execution policy, so `codex.cmd` was used instead. A read-only review thread was started:
 
-VERDICT: REVISE。5 条：
-1. PLAN.md 仍乱码（#10 未解），实施者可能误读。修：用合法 UTF-8/ASCII 重写。
-2. 骨架 `Column([_TopChrome, Expanded(_SelectedPage), _RideTabBar])` + 「每页 Column([fixed, Expanded(SingleChildScrollView)])」对无固定子头的页/经 `Get.to` 进入的页不成立（无界 Expanded 无效）。修：逐页明确有界根——主 tab 由父级 Expanded 提供边界；push 详情页用 `Scaffold>SafeArea>Column>Expanded(scroll)`。
-3. 路线页滚动区写成 `ListView`，又规定每页 `Expanded(SingleChildScrollView)`；`ListView` 套 `SingleChildScrollView` 会无界/滚动差。修：每页只一个滚动体，列表用 `ListView.builder` 直接放进 Expanded。
-4. 长按中间键保存太隐蔽，桌面/Windows 不可达。修：记录中加显式可见的 停止/保存。
-5. 详情页私有塞进超大 `speedometer_page.dart` 降 import 风险但升最脆弱文件的编译/回归风险。修：拆私有 part 文件并提取共享部件，或首版最小化、推迟详情页复杂度。
+```text
+THREAD_ID=019ec6bd-3a40-7ae2-a912-56ead7a4f19c
+```
 
-### Claude's response
-- **采纳并改计划（v3）**：#2 写入精确「布局契约」——根 = `Scaffold>SafeArea>Column([_TopChrome,Expanded(_SelectedPage),_RideTabBar])`；有固定子头的 tab = `Column([固定,Expanded(单一滚动体)])`，无固定子头（仪表盘）直接单一滚动体；push 详情页自带 `Scaffold>SafeArea>Column>Expanded(SingleChildScrollView)`+固定底栏（已核实既有 `DeviceDetailPage` 以 Scaffold 为根）。#3 每页恰好一个滚动体、绝不嵌套：列表 `ListView.builder` 直接进 Expanded，非列表用 SingleChildScrollView。#4 记录中显示**可见**停止/保存控件（非仅长按），移动+桌面均可点。#5（spirit）分阶段 push：S1 骨架+四 tab 绿 → S2 详情页 → S3 打磨。
-- **拒绝（附理由）**：#1 已生成英文镜像 `PLAN.en.md` 供 Codex 阅读（中文 `PLAN.md` 经验证合法 UTF-8，仅 Codex Windows 读取器误解码）。#5 的「现在就拆 Dart part 文件」部分——在无本地构建下引入 `part/library` 指令属结构性新机制、本身有 CI 失败风险，且 part 只是转移而非降低风险；改以「文件内私有部件 + 分阶段 push」达成同样的增量把关目的。
+The review output file could not be written to `D:\tmp`, and subsequent attempts to retrieve the review from the same read-only thread failed with authentication errors:
 
-## Round 3 — Codex（恢复同一会话，读 `PLAN.en.md`，read-only，medium effort）
+```text
+unexpected status 401 Unauthorized: Missing bearer or basic authentication in header
+stream disconnected before completion: error sending request for url (https://api.openai.com/v1/responses)
+turn.failed
+```
 
-编码问题（#1）已消除。VERDICT: REVISE，仅 3 条（持续收敛 10→5→3）：
-1. 仪表盘说内容在 `SingleChildScrollView` 内又用 `LayoutBuilder` 按可用高度分配——滚动体内高度约束无界/无限。修：`LayoutBuilder` 放在有界 tab 根算视口高度，再据有限约束构建滚动内容。
-2. 多处 tab 固定区写「顶部栏」，但 `_TopChrome` 已在根固定——会重复头部、浪费有界高度。修：tab 固定区仅为子头，绝不再放顶部栏/标题栏。
-3. 设备扫描开关写成真实核心交互，但未说明是否接既有 BLE 控制器；误 `Get.put(BleController())` 会全局改变扫描生命周期。修：明确复用既有 BLE 模式，或本次重做将扫描降级为占位。
+No valid `VERDICT: APPROVED` or `VERDICT: REVISE` was produced.
 
-### Claude's response（全部采纳）
-- #1：`LayoutBuilder` 置于 tab 有界根（滚动体之上）取有限 maxHeight，内部用 `SingleChildScrollView(ConstrainedBox(minHeight:c.maxHeight,...))`；不在滚动体内测高。
-- #2：tab 固定区一律仅子头；唯一 `_TopChrome` 在根。
-- #3：设备页用本地视觉状态 + 示例设备，**不**调用真实 `BleController`、不 `Get.put(BleController())`，连接=占位；真实扫描仍归既有 设备/功率计 页（避免全局生命周期副作用）。
-- 三处均已写入 `PLAN.md` v3 与 `PLAN.en.md`。
+### Codex response
 
-## Round 4 — Codex（恢复同一会话，read-only，medium effort）
+Formal Act 2 review is blocked by local `codex` CLI authentication/output issues. The plan is not marked approved.
 
-VERDICT: REVISE，仅 1 条（措辞漂移）：
-1. 统计 step 7、路线 step 9 仍写「Fixed: top bar」，与「仅根持有 `_TopChrome`」契约矛盾；Codex 自评为 wording drift，若照字面会重复头部。修：改为「fixed subheader」。
+---
 
-### Claude's response（采纳）
-- 已将统计 step 7、路线 step 9 的「固定：顶部栏」改为「固定子头（无第二顶部栏）」，`PLAN.md` 与 `PLAN.en.md` 同步。纯文档一致性，无实现影响。
+## Round 2 — Claude 代行对抗式评审（用户要求不调用 Codex，由 Claude 扮演评审者）
 
-## Round 5 — Codex（恢复同一会话，read-only，medium effort）
+被评审计划：`DIALPLATE_GRILL_NOTES.md`（第一幕已锁定 Q1–Q12）。
+工具说明：本会话无 `sequential-thinking`/`desktop-commander` 等 MCP，改用标准 Read/Grep/Glob 完成等价代码核验，结论均附 `file:line` 证据。本节同时作为 CLAUDE.md 要求的验证留痕。
 
-**VERDICT: APPROVED** ✅
+### A. 已核实为“真”的前提
+- 硬件 240×320 portrait — `USER/HAL/HAL_Config.h:51-52`。
+- `GPS_Info_t.course` 存在且来自真实 GPS — `USER/App/Common/HAL/HAL_Def.h:28`、`USER/HAL/HAL_GPS.cpp:101`。
+- DialplateModel 已有发布订阅 + `account->Pull("GPS")` — `DialplateModel.cpp:11,28`。
+- 当前 Dialplate 为硬编码 LVGL v8 布局，约 208 行 — `DialplateView.cpp`。
+- BLE 确为 `+…\r\n`、256B 包缓冲、当前只 echo/print 不分发 — `Bluetooth.h:19`、`Bluetooth.cpp:46-58`。
+- lv_port_fs 只暴露 open/read/write/seek/tell/dir，无 mkdir/remove/rename/truncate — `lv_port_fs_sdfat.cpp:27-37`。
+- Flash 充裕：ER_IROM1 已用 ~291KB / 1MB（余 ~733KB）— `X-Track.map:26201`。
+- LVGL v8、LV_COLOR_DEPTH=16、LV_USE_CANVAS=1、LV_MEM_SIZE=72KB — `lv_conf.h:29,61,516`。
 
-收敛轨迹：10 → 5 → 3 → 1 → APPROVED（5 轮）。计划已通过跨模型对抗式评审，等待用户最终签字后进入实现（分阶段 push：S1 骨架→S2 详情页→S3 打磨）。
+### B. 缺陷清单（每条附一句话修复）
+
+- **[阻断-1] RAM 预算可能不成立，且计划零预算分解。** RW_IRAM1 已用 0x4c180=304KB / 上限 0x60000=384KB，仅剩 ~80KB（`X-Track.map:29100`）；LVGL 私有堆仅 72KB（`lv_conf.h:61`）；240×320 RGB565 全屏帧=150KB 已超余量两倍。计划在此之上叠加声明式 widget 树/manifest 缓冲/BLE chunk 组装/CRC/canvas，无任何预算表。
+  修复：加硬性内存预算表，约束 routePreview 用 lv_line/lv_img 而非大 canvas、安装走单个 ≤512B 行缓冲。
+
+- **[阻断-2] “校验后原子提交”在 FAT/SdFat 上不成立，且缺提交能力。** FAT 目录 rename 非原子、掉电即损；lv_fs 无 remove/rename（`lv_port_fs_sdfat.cpp:27-37`）；HAL 仅用过 exists/mkdir（`HAL_SD_CARD.cpp:36-39`），无递归删目录，`+WF_DELETE` 无法实现。
+  修复：改为“写完文件 + 单独 `.ready` 标记，激活只认带 `.ready` 的目录”；新增直接走 `SdFatSdioEX SD` 的小 SD 层补 mkdir/remove/递归删除。
+
+- **[阻断-3] Q12 依赖不存在的页面。** AppFactory 仅注册 Template/LiveMap/Dialplate/SystemInfos/Startup，无 MainMenu（`AppFactory.cpp:40-44`），但 Q12 要 MENU 打开 MainMenu。
+  修复：将“新建 MainMenu”显式纳入范围，或 v1 先指向 SystemInfos、MainMenu 列后续。
+
+- **[阻断-4] BLE 层不具备承载分块协议的基础，被低估。** 写包无长度上限、`pRxPacket` 为 uint8_t 会回绕覆写（`Bluetooth.cpp:41-42`）；收满包只空壳 OTA()+原样 echo（`Bluetooth.cpp:53-54`），无命令分发；无 CRC 工具；每帧无条件发 `X-Trace`（`HAL_Bluetooth.cpp:63`）污染上行；`BT_printf` 仅 100B 栈缓冲、WF_LIST 会截断（`HAL_Bluetooth.cpp:44`）。
+  修复：把 BLE 收发层重写（带上限的环形接收 + 表驱动分发 + 去掉每帧 X-Trace/echo + CRC 工具 + 响应分片）作为前置任务单独立项，勿假设“在现有 parser 上扩展”。
+
+- **[重要-5] 声明式渲染器 v1 范围与“复刻 2.png”冲突，等于在 MCU 上造通用 UI 引擎。** Q8 要默认 HUD 也走 manifest，Q10 要复刻含 polyline/旋转箭头/多模块的 2.png；二者叠加工作量与 RAM 远超“重绘一页”。
+  修复：默认 HUD 用 C++ 硬编码 LVGL（最快出视觉）；manifest 系统 v1 只支持简单 widget（image+label/metric），复杂控件仅在内置默认表盘硬编码，不强求默认表盘走 manifest。
+
+- **[重要-6] “复刻 2.png”动态数据大半是占位，需明确预期。** 无心率传感器、无导航引擎、无现成坡度源；真实数据仅 speed/avgSpeed/trip/time/calorie/altitude/satellites/course。Q11 已承认占位但未量化。
+  修复：列“真实绑定 vs 占位”清单，明确 v1 是“静态外观复刻 + 部分真实动态数据”。
+
+- **[次要-7] 模拟器 480→240 横向布局回归未评估。** LiveMap tile 宽度计数可能按宽屏调过（`LiveMapView.cpp:102`）。
+  修复：改尺寸后跑模拟器逐页目检并记录回归。
+
+- **[次要-8] lv_fs 写模式不创建文件。** `LV_FS_MODE_WR` 用 O_WRONLY 不带 O_CREAT（`lv_port_fs_sdfat.cpp:106-119`）。
+  修复：表盘写入走自建 SD 层显式 O_CREAT|O_TRUNC。
+
+### C. 可观测性缺口
+- 无安装失败诊断约定。修复：定义 `+WF_ERR:<stage>,<code>` 回包并经 RTT 打印。
+- 无“激活表盘/回退原因”可见性。修复：启动时 RTT 打印 active id 与回退原因。
+
+### VERDICT: REVISE
+4 个阻断级（RAM 预算、伪原子提交、依赖不存在的 MainMenu、BLE 层不具备基础）+ 2 个重要级（声明式引擎范围、占位预期）。写代码前需先修订。
+
+---
+
+## Round 3 — Claude 对抗式评审（第二轮深挖，用户要求“再对抗一轮”）
+
+定位：计划尚未修订，故本轮不是复查修订，而是“完整性批判”——攻击第一轮未触及的并发/实时性、解码路径、安装状态机、几何保真等维度，并诚实修正上一轮的误判。
+
+### 新增缺陷（第一轮未触及）
+
+- **[阻断-9] 协作式单线程 + 10s 看门狗 vs 同步安装 = 必然复位。** `HAL.cpp:9,118` 用非抢占的 MillisTaskManager；`BT_Update` 每 200ms（`HAL.cpp:107`）、喂狗 `WDG_ReloadCounter` 每 1000ms（`HAL.cpp:101`）、LVGL 渲染全在同一循环串行。看门狗超时 10s（`HAL_Config.h:209`）。BLE 同步装包 / 整包 CRC / SD 大量写一旦单步 >10s 必触发看门狗复位；几十 KB 包经 115200 串口 + SD 写极易超时。计划无任何实时性/分片让步约定。
+  修复：安装做成“每次 BT_Update 只推进一小步”的非阻塞状态机，CRC 增量计算，单次 SD 写控制在百 ms 级，明确禁止任何 >1s 同步阻塞。
+
+- **[阻断/重要-10] 全屏 PNG 背景每帧重解码。** `lv_img_png.cpp:158,188,247,262`：每次 `DRAW_MAIN_BEGIN` 都重新 open + zlib inflate 整张 PNG。小图标可接受，但下载表盘用全屏 PNG 背景 = 每帧从 SD 读 + 解压整图，帧率崩溃并与喂狗争用 CPU。这与“声明式表盘用 SD PNG 资产”直接冲突。
+  修复：全屏背景禁用每帧解码的 lv_img_png；改纯 LVGL 绘制背景，或限制 PNG 只用于小图标；若必须全屏图，需重设计为一次性解码缓存（但 150KB 全屏帧放不下，需降采样/分块）。
+
+- **[重要-11] zlib inflate 32KB 滑窗 RAM 未计入预算。** PNGdec 自带 inflate（`inflate.c`/`inftrees.c`）。
+  修复：内存预算表为 PNG 解码预留 ~32KB 窗口 + 行缓冲（`lv_img_png.cpp:260`）。
+
+- **[已缓解-12] manifest 解析器其实已存在。** 项目已集成 ArduinoJson v6（`USER/App/Utils/ArduinoJson`），manifest.json 解析不需自研。但 JsonDocument 容量要纳入预算。
+  修复：固定 StaticJsonDocument 上限（如 4KB），manifest 超限即判非法。
+
+- **[重要-13] GPS course 抖动会让箭头乱转。** 静止/低速时 GPS course 噪声大（`HAL_GPS.cpp:101` 直接取 deg）。
+  修复：低速阈值下冻结箭头朝向 + course 角度低通滤波。
+
+- **[重要-14] 信息密度/字体可读性 + 霓虹辉光保真度。** 2.png 在 240×320 物理小屏要塞约 13 个信息块，字体会很小；LVGL v8 无廉价 box-shadow/glow。
+  修复：辉光用预渲染素材或近似；排版做可读性取舍并记录；补所需字体（Flash 余量充裕，可接受）。
+
+- **[重要-15] 安装会话状态机边界未定义。** Q9 排除 resume，但未定义：WF_CHUNK 无 BEGIN、重复 BEGIN、WF_END 缺文件、断连后会话悬挂、启动时清理上次 `.install` 残留。
+  修复：定义非法转移处理 + 启动清理 `/Watchfaces/.install/` + 会话 N 秒无 chunk 自动中止。
+
+### 对 Round 2 的诚实修正
+- **撤回 [次要-7] 的几何冲突担忧**：实际查看 `generated-images/2.png` 后确认其本身即竖屏布局（宽高比 ≈3:4，与 240×320 基本一致），Q1“保留比例缩放”与 Q10“保留全部模块”不构成几何冲突。真正的风险改判为 [重要-14] 的信息密度/可读性。模拟器尺寸回归（原 7 的后半）仍需验证。
+
+### VERDICT: REVISE
+本轮新增 2 个阻断级（看门狗复位、全屏 PNG 每帧解码）与多个重要级；并缓解 1 条（解析器已存在）、修正 1 条（几何冲突撤回）。结论稳定指向：先重构 BLE/安装实时性与 PNG 策略、收窄声明式引擎范围，再实施。继续多轮对抗的边际收益已下降。

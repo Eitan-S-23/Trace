@@ -6,18 +6,18 @@ on:
       - main
       - master
     paths:
-      - "cloudflare/update-service/**"
+      - "app/bluetooth_flutter_Trace/cloudflare/update-service/**"
       - ".github/workflows/cloudflare-update-service.yml"
-      - "CF-UPDATE-BACKEND-PLAN.md"
+      - "app/bluetooth_flutter_Trace/CF-UPDATE-BACKEND-PLAN.md"
       - "CF-UPDATE-BACKEND-REVIEW-LOG.md"
   pull_request:
     branches:
       - main
       - master
     paths:
-      - "cloudflare/update-service/**"
+      - "app/bluetooth_flutter_Trace/cloudflare/update-service/**"
       - ".github/workflows/cloudflare-update-service.yml"
-      - "CF-UPDATE-BACKEND-PLAN.md"
+      - "app/bluetooth_flutter_Trace/CF-UPDATE-BACKEND-PLAN.md"
       - "CF-UPDATE-BACKEND-REVIEW-LOG.md"
   workflow_dispatch:
 
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: cloudflare/update-service/public
+        working-directory: app/bluetooth_flutter_Trace/cloudflare/update-service/public
 
     steps:
       - name: Checkout repository
@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: cloudflare/update-service/public/package-lock.json
+          cache-dependency-path: app/bluetooth_flutter_Trace/cloudflare/update-service/public/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: cloudflare/update-service/admin
+        working-directory: app/bluetooth_flutter_Trace/cloudflare/update-service/admin
 
     steps:
       - name: Checkout repository
@@ -65,7 +65,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: cloudflare/update-service/admin/package-lock.json
+          cache-dependency-path: app/bluetooth_flutter_Trace/cloudflare/update-service/admin/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -78,7 +78,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: cloudflare/update-service/worker
+        working-directory: app/bluetooth_flutter_Trace/cloudflare/update-service/worker
 
     steps:
       - name: Checkout repository
@@ -89,7 +89,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: cloudflare/update-service/worker/package-lock.json
+          cache-dependency-path: app/bluetooth_flutter_Trace/cloudflare/update-service/worker/package-lock.json
 
       - name: Install dependencies
         run: npm ci

@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AC7916AB 眼部按摩仪 · 技术文档</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --border: #e8e8e8;
+      --text: #1a1a1a;
+      --muted: #888;
+      --accent: #2d6be4;
+      --accent-light: #eef3fd;
+      --tag-bg: #f0f0f0;
+      --sidebar-w: 260px;
+      --header-h: 52px;
+      --radius: 6px;
+      --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    /* ── Header ── */
+    #header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      z-index: 100;
+    }
+
+    #menu-toggle {
+      width: 36px; height: 36px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 4px;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    #menu-toggle:hover { background: var(--tag-bg); }
+    #menu-toggle span {
+      display: block;
+      width: 16px; height: 1.5px;
+      background: var(--text);
+      border-radius: 2px;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    body.menu-open #menu-toggle span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+    body.menu-open #menu-toggle span:nth-child(2) { opacity: 0; }
+    body.menu-open #menu-toggle span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+
+    #brand {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -.2px;
+      color: var(--text);
+    }
+    #brand sup {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+
+    .header-meta {
+      margin-left: auto;
+      display: flex; gap: 8px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      position: fixed;
+      top: var(--header-h); left: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      transform: translateX(0);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 90;
+      padding: 16px 0 32px;
+    }
+    body:not(.menu-open) #sidebar { transform: translateX(calc(-1 * var(--sidebar-w))); }
+
+    .sidebar-section { margin-bottom: 8px; }
+    .sidebar-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 20px 4px;
+    }
+    .sidebar-link {
+      display: block;
+      padding: 6px 20px;
+      color: #444;
+      text-decoration: none;
+      font-size: 13px;
+      border-left: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .sidebar-link:hover {
+      color: var(--accent);
+      background: var(--accent-light);
+      border-left-color: var(--accent);
+    }
+    .sidebar-link.active {
+      color: var(--accent);
+      background: var(--accent-light);
+      border-left-color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* ── Main ── */
+    #main {
+      margin-top: var(--header-h);
+      margin-left: var(--sidebar-w);
+      transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      min-height: calc(100vh - var(--header-h));
+    }
+    body:not(.menu-open) #main { margin-left: 0; }
+
+    .content {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 32px 80px;
+    }
+
+    /* ── Sections ── */
+    section { margin-bottom: 64px; }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -.5px;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 24px 0 10px;
+    }
+
+    p { color: #444; margin-bottom: 12px; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Hero ── */
+    .hero-desc {
+      font-size: 16px;
+      color: #555;
+      max-width: 600px;
+      line-height: 1.8;
+      margin-bottom: 28px;
+    }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px; }
+    .tag {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: var(--tag-bg);
+      color: #555;
+    }
+
+    /* ── Cards ── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .card-icon {
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; margin: 16px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: #f5f5f5;
+      border: 1px solid var(--border);
+      font-weight: 600;
+      color: #555;
+    }
+    td {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      color: #444;
+      vertical-align: top;
+    }
+    tr:hover td { background: #fafafa; }
+    .td-code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: #f8f8f8;
+      color: #c0392b;
+    }
+
+    /* ── Code ── */
+    pre {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border-radius: var(--radius);
+      padding: 20px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.7;
+      margin: 16px 0;
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 28px;
+      height: 28px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+      color: #cdd6f4;
+      padding: 0;
+    }
+    pre:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { background: rgba(255,255,255,0.18); }
+    .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+    code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: #f3f3f3;
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: #c0392b;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+
+    /* ── Arch diagram ── */
+    .arch {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 16px 0;
+    }
+    .arch-layer {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .arch-layer:last-child { border-bottom: none; }
+    .arch-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      min-width: 110px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .arch-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .arch-chip {
+      font-size: 11.5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--tag-bg);
+      color: #444;
+    }
+    .arch-layer.l1 { background: #eef3fd; }
+    .arch-layer.l1 .arch-chip { background: #d0e1fd; color: #1a4db7; }
+    .arch-layer.l2 { background: #f0faf5; }
+    .arch-layer.l2 .arch-chip { background: #c2edd8; color: #1a6648; }
+    .arch-layer.l3 { background: #fdf8ee; }
+    .arch-layer.l3 .arch-chip { background: #fae6b0; color: #7a5200; }
+    .arch-layer.l4 { background: #fdf3f0; }
+    .arch-layer.l4 .arch-chip { background: #f9cfc8; color: #8b1c0e; }
+    .arch-layer.l5 { background: #f8f0fe; }
+    .arch-layer.l5 .arch-chip { background: #e1c7fc; color: #5b1fa3; }
+
+    /* ── Stats ── */
+    .stats { display: flex; gap: 16px; flex-wrap: wrap; margin: 20px 0; }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      min-width: 120px;
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -.5px;
+    }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Flow ── */
+    .flow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px dashed #eee;
+    }
+    .flow-step:last-child { border-bottom: none; }
+    .flow-num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .flow-text { font-size: 13px; color: #444; }
+    .flow-text strong { color: var(--text); }
+
+    /* ── Notice ── */
+    .notice {
+      border-left: 3px solid var(--accent);
+      background: var(--accent-light);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 13px;
+      color: #335;
+    }
+    .notice.warn {
+      border-left-color: #e67e22;
+      background: #fef9f0;
+      color: #7a4500;
+    }
+    .notice.ok {
+      border-left-color: #27ae60;
+      background: #f0faf5;
+      color: #1a5c38;
+    }
+    .notice.err {
+      border-left-color: #e74c3c;
+      background: #fef0f0;
+      color: #7a1a1a;
+    }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 32px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Pipeline ── */
+    .pipeline { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 16px 0; }
+    .pipeline-step { display: flex; gap: 14px; padding: 14px 18px; border-bottom: 1px solid #eee; }
+    .pipeline-step:last-child { border-bottom: none; }
+    .pipeline-step:nth-child(odd) { background: var(--surface); }
+    .pipeline-step:nth-child(even) { background: #f8f8f8; }
+    .pipeline-num {
+      width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+      color: #fff; font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .pipeline-content { flex: 1; min-width: 0; }
+    .pipeline-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+    .pipeline-desc { font-size: 13px; color: #555; margin-bottom: 6px; }
+
+    /* ── Sidebar sublink ── */
+    .sidebar-sublink {
+      display: block; padding: 3px 20px 3px 30px;
+      color: #888; text-decoration: none; font-size: 12px;
+      border-left: 2px solid transparent; transition: all 0.15s;
+    }
+    .sidebar-sublink:hover { color: var(--accent); background: var(--accent-light); border-left-color: var(--accent); }
+    .sidebar-sublink.active { color: var(--accent); background: var(--accent-light); border-left-color: var(--accent); }
+
+    /* ── Collapsible sidebar item ── */
+    .sidebar-expand-row { display: flex; align-items: stretch; }
+    .sidebar-expand-row .sidebar-link { flex: 1; padding-right: 2px; }
+    .sidebar-chevron {
+      width: 28px; flex-shrink: 0; margin-right: 6px;
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 18px; font-weight: 300;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 3px; padding: 0; line-height: 1;
+      transition: transform 0.22s ease, color 0.15s, background 0.15s;
+    }
+    .sidebar-chevron:hover { color: var(--accent); background: var(--accent-light); }
+    .sidebar-expandable.open .sidebar-chevron { transform: rotate(90deg); }
+    .sidebar-submenu {
+      overflow: hidden; max-height: 0;
+      transition: max-height 0.28s ease-in-out;
+    }
+    .sidebar-expandable.open .sidebar-submenu { max-height: 400px; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 700px) {
+      .content { padding: 28px 18px 60px; }
+      h1 { font-size: 24px; }
+      .stats { gap: 10px; }
+      .card-grid { grid-template-columns: 1fr 1fr; }
+      .arch-layer { flex-direction: column; align-items: flex-start; gap: 8px; }
+    }
+  </style>
+</head>
+<body class="menu-open">
+
+<!-- Header -->
+<header id="header">
+  <button id="menu-toggle" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+  <div id="brand">AC7916AB 眼部按摩仪 <sup>杰理 AC79NN · SDK V1.2.0</sup></div>
+  <div class="header-meta">
+    <span class="badge">v1.2.0</span>
+    <span class="badge">IoT</span>
+  </div>
+</header>
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">概览</div>
+    <a class="sidebar-link active" href="#overview">项目概览</a>
+    <a class="sidebar-link" href="#stats">项目统计</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">系统架构</div>
+    <a class="sidebar-link" href="#architecture">分层设计</a>
+    <a class="sidebar-link" href="#tasks">RTOS 任务配置</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">工作模式</div>
+    <a class="sidebar-link" href="#modes">模式定义与切换</a>
+    <a class="sidebar-link" href="#comfort">舒适模式时序</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">硬件驱动</div>
+    <a class="sidebar-link" href="#hardware">驱动层概览</a>
+    <a class="sidebar-link" href="#gpio">GPIO 配置</a>
+    <a class="sidebar-link" href="#pwm">PWM 振动控制</a>
+    <a class="sidebar-link" href="#airpump">气泵系统</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">蓝牙与音频</div>
+    <a class="sidebar-link" href="#bluetooth">蓝牙模块</a>
+    <a class="sidebar-link" href="#audio">音频处理</a>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">参考</div>
+    <a class="sidebar-link" href="#files">文件结构</a>
+    <a class="sidebar-link" href="#config">编译配置</a>
+  </div>
+</nav>
+
+<!-- Main Content -->
+<main id="main">
+<div class="content">
+
+  <!-- ── Overview ── -->
+  <section id="overview">
+    <div class="section-label">Project Overview</div>
+    <h1>AC7916AB 眼部按摩仪</h1>
+    <p class="hero-desc">
+      demo_edr 是一款基于杰理 AC79NN 芯片的智能眼部按摩仪演示项目，采用分层架构设计，
+      集成蓝牙音乐、多模式按摩、LED 指示、复杂硬件驱动等功能。
+      项目代码约 3600 行，展示了 IoT 设备完整的软硬件一体化设计方案。
+    </p>
+    <div class="hero-tags">
+      <span class="tag">AC79NN 双核处理器</span>
+      <span class="tag">LLVM 编译</span>
+      <span class="tag">蓝牙 5.2 A2DP</span>
+      <span class="tag">4 种按摩模式</span>
+      <span class="tag">PWM 振动控制</span>
+      <span class="tag">气泵系统</span>
+      <span class="tag">温热按摩</span>
+      <span class="tag">SPP 数传</span>
+    </div>
+    <div class="notice">
+      芯片: 杰理 AC79NN &nbsp;·&nbsp; SDK: AC79NN_SDK_V1.2.0 &nbsp;·&nbsp;
+      编译: LLVM &nbsp;·&nbsp; Flash: 4 MB · SDRAM: 2 MB
+    </div>
+  </section>
+
+  <!-- ── Stats ── -->
+  <section id="stats">
+    <h2>项目统计</h2>
+    <div class="stats">
+      <div class="stat"><div class="stat-num">3600</div><div class="stat-label">代码行数</div></div>
+      <div class="stat"><div class="stat-num">11</div><div class="stat-label">核心模块</div></div>
+      <div class="stat"><div class="stat-num">14</div><div class="stat-label">RTOS 任务</div></div>
+      <div class="stat"><div class="stat-num">4</div><div class="stat-label">按摩模式</div></div>
+      <div class="stat"><div class="stat-num">8</div><div class="stat-label">音频格式</div></div>
+    </div>
+  </section>
+
+  <!-- ── Architecture ── -->
+  <section id="architecture">
+    <h2>系统架构</h2>
+    <p>项目采用经典的 4 层分层架构，实现高内聚低耦合的设计目标：</p>
+    <div class="arch">
+      <div class="arch-layer l1">
+        <div class="arch-name">蓝牙通信层</div>
+        <div class="arch-items">
+          <span class="arch-chip">A2DP 音乐</span>
+          <span class="arch-chip">HFP 电话</span>
+          <span class="arch-chip">SPP 数传</span>
+          <span class="arch-chip">bt_music.c</span>
+          <span class="arch-chip">bt_decode.c</span>
+        </div>
+      </div>
+      <div class="arch-layer l2">
+        <div class="arch-name">音频处理层</div>
+        <div class="arch-items">
+          <span class="arch-chip">SBC 解码</span>
+          <span class="arch-chip">AAC 解码</span>
+          <span class="arch-chip">APTX 解码</span>
+          <span class="arch-chip">混音引擎</span>
+          <span class="arch-chip">bt_decode.c</span>
+        </div>
+      </div>
+      <div class="arch-layer l3">
+        <div class="arch-name">应用逻辑层</div>
+        <div class="arch-items">
+          <span class="arch-chip">模式管理</span>
+          <span class="arch-chip">按键处理</span>
+          <span class="arch-chip">LED 指示</span>
+          <span class="arch-chip">App_mode.c</span>
+        </div>
+      </div>
+      <div class="arch-layer l4">
+        <div class="arch-name">硬件驱动层</div>
+        <div class="arch-items">
+          <span class="arch-chip">GPIO</span>
+          <span class="arch-chip">PWM</span>
+          <span class="arch-chip">气泵控制</span>
+          <span class="arch-chip">Inf_key.c</span>
+          <span class="arch-chip">Inf_led.c</span>
+          <span class="arch-chip">Inf_extern.c</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>系统启动流程</h3>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-text"><strong>app_main()</strong> — 程序入口，初始化蓝牙和模式系统</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-text"><strong>bt_ble_module_init()</strong> — 初始化蓝牙模块（经典蓝牙 + SPP）</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-text"><strong>App_mode_init()</strong> — 初始化按键（PA1 上拉输入）和振动 PWM</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-text"><strong>usr_timer_add(App_key_mode, 10)</strong> — 注册 10 ms 按键扫描定时器</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-text"><strong>os_task_create(mp3_play_task)</strong> — 创建 MP3 提示音播放任务（优先级 10）</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">6</div>
+        <div class="flow-text"><strong>os_task_create(mode_play_task)</strong> — 创建模式执行任务（优先级 9，5 ms 周期）</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tasks ── -->
+  <section id="tasks">
+    <h2>RTOS 任务配置</h2>
+    <p>系统采用实时操作系统管理 14 个并行任务，优先级 0 最高，30 最低。</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>任务名</th><th>优先级</th><th>栈大小</th><th>功能</th></tr>
+        <tr><td class="td-code">btctrler</td><td>19（高）</td><td>512 B</td><td>蓝牙控制器，最高优先级确保连接稳定</td></tr>
+        <tr><td class="td-code">btstack</td><td>18（高）</td><td>768 B</td><td>蓝牙协议栈</td></tr>
+        <tr><td class="td-code">audio_encoder</td><td>12</td><td>384 B</td><td>通用音频编码</td></tr>
+        <tr><td class="td-code">cvsd_encoder</td><td>13</td><td>512 B</td><td>CVSD 编码（通话）</td></tr>
+        <tr><td class="td-code">aec_encoder</td><td>13</td><td>1 KB</td><td>回声消除编码</td></tr>
+        <tr><td class="td-code">msbc_encoder</td><td>13</td><td>256 B</td><td>mSBC 编码（宽带语音）</td></tr>
+        <tr><td class="td-code">sbc_encoder</td><td>13</td><td>512 B</td><td>SBC 编码（音乐）</td></tr>
+        <tr><td class="td-code">btencry</td><td>14</td><td>512 B</td><td>蓝牙加密处理</td></tr>
+        <tr><td class="td-code">systimer</td><td>14</td><td>256 B</td><td>系统计时器</td></tr>
+        <tr><td class="td-code">app_core</td><td>15</td><td>1 KB</td><td>应用核心逻辑</td></tr>
+        <tr><td class="td-code">audio_server</td><td>16</td><td>512 B</td><td>音频服务器</td></tr>
+        <tr><td class="td-code">sys_timer</td><td>9</td><td>512 B</td><td>软件定时管理</td></tr>
+        <tr><td class="td-code">audio_mix</td><td>28</td><td>512 B</td><td>音频混音引擎</td></tr>
+        <tr><td class="td-code">sys_event</td><td>29（低）</td><td>512 B</td><td>系统事件分发</td></tr>
+      </table>
+    </div>
+    <div class="notice">
+      蓝牙任务（18-19）优先级最高，确保连接稳定；音频编码（12-13）次高，保证实时性；系统事件（29）优先级最低。
+    </div>
+  </section>
+
+  <!-- ── Modes ── -->
+  <section id="modes">
+    <h2>工作模式</h2>
+    <p>系统支持 5 种工作状态，通过单按键（PA1）短按快速循环切换：</p>
+    <div class="table-wrap">
+      <table>
+        <tr><th>模式</th><th>LED 指示</th><th>功能组合</th><th>适用场景</th></tr>
+        <tr><td><code>MODE_SHUT_DOWN</code></td><td>全灭</td><td>全部关闭</td><td>待机状态</td></tr>
+        <tr><td><code>MODE_COMFORT</code></td><td>LED1（PA2）</td><td>气泵 + 缓慢充放气</td><td>舒适护理</td></tr>
+        <tr><td><code>MODE_HOT</code></td><td>LED2（PA3）</td><td>气泵 + 加热（50%）</td><td>温热按摩</td></tr>
+        <tr><td><code>MODE_VIBRATION</code></td><td>LED3（PA4）</td><td>气泵 + 振动（50% PWM）</td><td>强效刺激</td></tr>
+        <tr><td><code>MODE_PASSION</code></td><td>LED4（PA5）</td><td>气泵 + 加热 + 振动交替</td><td>全功能组合</td></tr>
+      </table>
+    </div>
+
+    <h3>LED 控制</h3>
+    <p>LED 为低电平点亮（推挽输出），引脚 PA2–PA5 分别对应 4 个工作模式：</p>
+<pre><code>// Inf_led.c - 低电平点亮，高电平熄灭
+void Inf_led_turn_on(uint32_t led) {
+    gpio_direction_output(led, 0);  // 输出 0V，LED 点亮
+}
+
+void Inf_led_turn_off(uint32_t led) {
+    gpio_direction_output(led, 1);  // 输出 3.3V，LED 熄灭
+}</code></pre>
+  </section>
+
+  <!-- ── Comfort Timing ── -->
+  <section id="comfort">
+    <h2>舒适模式工作时序</h2>
+    <p>模式执行周期为 1.8 秒（180 × 10 ms），分为四个阶段，实现自动充放气按摩效果：</p>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-text"><strong>缓慢放气（0–60 计数，0.6 秒）</strong> — 每 20 ms 周期性开关放气阀，防止残留气体伤害眼睛</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-text"><strong>快速放气（60–90 计数，0.3 秒）</strong> — 持续打开放气阀，彻底清空气囊</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-text"><strong>快速充气（90–120 计数，0.3 秒）</strong> — 关闭放气阀，打开充气阀，气囊快速膨胀</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-text"><strong>缓慢充气（120–180 计数，0.6 秒）</strong> — 周期性充气，微调压力到最舒适状态，循环重置</div>
+      </div>
+    </div>
+<pre><code>// App_mode.c: App_comfort_play() 核心逻辑（5ms 周期调用）
+void App_comfort_play(void) {
+    mode_task_count++;
+
+    if (mode_task_count &lt; 60) {          // 阶段1: 缓慢放气
+        if (((mode_task_count - 30) % 20) &lt; 10) {
+            Inf_stop_input(); Inf_stop_output();
+        } else {
+            Inf_start_output();
+        }
+    } else if (mode_task_count &lt; 90) {   // 阶段2: 快速放气
+        Inf_start_output();
+    } else if (mode_task_count &lt; 120) {  // 阶段3: 快速充气
+        Inf_stop_output(); Inf_start_input();
+    } else if (mode_task_count &lt; 180) {  // 阶段4: 缓慢充气
+        if (((mode_task_count - 30) % 20) &lt; 10) {
+            Inf_stop_input();
+        } else {
+            Inf_start_input();
+        }
+    } else {
+        mode_task_count = 0;             // 复位，开始下一周期
+        Inf_stop_output(); Inf_stop_input();
+    }
+}</code></pre>
+  </section>
+
+  <!-- ── Hardware ── -->
+  <section id="hardware">
+    <h2>硬件驱动层概览</h2>
+    <div class="notice ok">
+      项目通过 <code>Inf/</code>（Interface）目录实现硬件抽象，统一的接口定义使代码易于维护和移植，应用层无需关心硬件细节。
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">🔘</div>
+        <div class="card-title">按键驱动</div>
+        <div class="card-desc">
+          Inf_key.c/h<br>
+          Pin: PA1（上拉输入）<br>
+          10 ms 采样周期<br>
+          50–2000 ms 短按，&gt;2000 ms 长按
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-icon">💡</div>
+        <div class="card-title">LED 驱动</div>
+        <div class="card-desc">
+          Inf_led.c/h<br>
+          Pins: PA2–PA5（4 路独立）<br>
+          推挽输出，低电平点亮<br>
+          对应 4 种按摩模式
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔧</div>
+        <div class="card-title">扩展功能驱动</div>
+        <div class="card-desc">
+          Inf_extern.c/h<br>
+          Pins: PC0–PC6<br>
+          加热 + 振动 PWM + 气泵<br>
+          混合 GPIO/PWM 控制
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── GPIO ── -->
+  <section id="gpio">
+    <h2>GPIO 配置详解</h2>
+
+    <h3>按键引脚（输入）</h3>
+<pre><code>// Inf_key.h
+#define KEY1_PIN IO_PORTA_01       // PA1，上拉输入
+
+#define KEY_SHORT_CNTS  5          // 50ms  (5  × 10ms) 短按判定
+#define KEY_LONG_CNTS   200        // 2000ms (200 × 10ms) 长按判定
+
+// Inf_key.c
+void Inf_key_init(void) {
+    gpio_direction_input(KEY1_PIN);   // PA1 配置为输入
+    gpio_set_pull_up(KEY1_PIN, 1);    // 启用内部上拉
+}</code></pre>
+
+    <h3>LED 引脚（输出）</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>LED</th><th>GPIO</th><th>点亮电平</th><th>对应模式</th></tr>
+        <tr><td>LED1</td><td class="td-code">PA2</td><td>LOW (0 V)</td><td>MODE_COMFORT 舒适</td></tr>
+        <tr><td>LED2</td><td class="td-code">PA3</td><td>LOW (0 V)</td><td>MODE_HOT 加热</td></tr>
+        <tr><td>LED3</td><td class="td-code">PA4</td><td>LOW (0 V)</td><td>MODE_VIBRATION 振动</td></tr>
+        <tr><td>LED4</td><td class="td-code">PA5</td><td>LOW (0 V)</td><td>MODE_PASSION 激情</td></tr>
+      </table>
+    </div>
+
+    <h3>加热控制引脚（输出）</h3>
+<pre><code>// Inf_extern.h
+#define HOT_PIN_1 IO_PORTC_02    // 加热丝 1（PC2）
+#define HOT_PIN_2 IO_PORTC_03    // 加热丝 2（PC3）
+
+void Inf_extern_hot_turn_on(void) {
+    gpio_direction_output(HOT_PIN_1, 1);  // HIGH = 加热启动
+    gpio_direction_output(HOT_PIN_2, 1);
+}</code></pre>
+  </section>
+
+  <!-- ── PWM ── -->
+  <section id="pwm">
+    <h2>PWM 振动控制</h2>
+    <p>两路独立 PWM 驱动马达振动，通过占空比控制振动强度，初始占空比 25%。</p>
+
+    <h3>PWM 配置参数</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>参数</th><th>值</th><th>说明</th></tr>
+        <tr><td>频率</td><td>1000 Hz</td><td>周期 1 ms，适合马达驱动</td></tr>
+        <tr><td>占空比</td><td>25%</td><td>初始值，可动态调整（0–100%）</td></tr>
+        <tr><td>导通时间</td><td>0.25 ms</td><td>1 ms × 25%</td></tr>
+        <tr><td>PWM1 引脚</td><td class="td-code">PC0 (PWMCH4_H)</td><td>振动马达通道 1</td></tr>
+        <tr><td>PWM2 引脚</td><td class="td-code">PC1 (TIMER2_OPCH2)</td><td>振动马达通道 2</td></tr>
+      </table>
+    </div>
+
+<pre><code>// board.c - PWM1 配置
+PWM_PLATFORM_DATA_BEGIN(pwm_data1)
+    .port     = IO_PORTC_00,    // PC0 引脚
+    .pwm_ch   = PWMCH4_H,       // PWM 通道 4 高端
+    .freq     = 1000,           // 频率 1000 Hz
+    .duty     = 25,             // 占空比 25%
+    .point_bit = 0,
+PWM_PLATFORM_DATA_END()
+
+// Inf_extern.c - 振动控制
+void Inf_Shock_Start(void) {
+    dev_ioctl(pwm1_device, PWM_RUN, (u32)&amp;pwm1);
+    dev_ioctl(pwm2_device, PWM_RUN, (u32)&amp;pwm2);
+}
+
+void Inf_Shock_Stop(void) {
+    dev_ioctl(pwm1_device, PWM_STOP, (u32)&amp;pwm1);
+    dev_ioctl(pwm2_device, PWM_STOP, (u32)&amp;pwm2);
+}</code></pre>
+  </section>
+
+  <!-- ── Airpump ── -->
+  <section id="airpump">
+    <h2>气泵系统</h2>
+    <p>气泵系统由三路 GPIO 控制：气泵电机（PC4）、充气阀（PC5）、放气阀（PC6），HIGH 电平触发。</p>
+
+    <div class="table-wrap">
+      <table>
+        <tr><th>功能</th><th>GPIO</th><th>启动电平</th><th>驱动对象</th></tr>
+        <tr><td>气泵电机</td><td class="td-code">PC4 (PUMP_PIN)</td><td>HIGH</td><td>气泵</td></tr>
+        <tr><td>充气阀</td><td class="td-code">PC5 (INPUT_PIN)</td><td>HIGH</td><td>充气电磁阀</td></tr>
+        <tr><td>放气阀</td><td class="td-code">PC6 (OUTPUT_PIN)</td><td>HIGH</td><td>放气电磁阀</td></tr>
+      </table>
+    </div>
+
+<pre><code>// Inf_extern.h - 气泵引脚定义
+#define PUMP_PIN   IO_PORTC_04   // 气泵电机
+#define INPUT_PIN  IO_PORTC_05   // 充气阀门
+#define OUTPUT_PIN IO_PORTC_06   // 放气阀门
+
+// 控制函数
+void Inf_start_PUMP(void)   { gpio_direction_output(PUMP_PIN,   1); }
+void Inf_stop_PUMP(void)    { gpio_direction_output(PUMP_PIN,   0); }
+void Inf_start_input(void)  { gpio_direction_output(INPUT_PIN,  1); }
+void Inf_stop_input(void)   { gpio_direction_output(INPUT_PIN,  0); }
+void Inf_start_output(void) { gpio_direction_output(OUTPUT_PIN, 1); }
+void Inf_stop_output(void)  { gpio_direction_output(OUTPUT_PIN, 0); }</code></pre>
+
+    <div class="notice ok">
+      设计亮点：先清空残留气体防止二次伤害，快速膨胀产生按摩效果，缓慢充气精细调节压力，达到最佳体验。
+    </div>
+  </section>
+
+  <!-- ── Bluetooth ── -->
+  <section id="bluetooth">
+    <h2>蓝牙模块</h2>
+
+    <h3>功能配置</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>功能</th><th>状态</th><th>说明</th></tr>
+        <tr><td>经典蓝牙 BT Classic</td><td>✓ 启用</td><td>A2DP 音乐 + HFP 电话 + SPP 数传</td></tr>
+        <tr><td>蓝牙低能耗 BLE</td><td>✗ 禁用</td><td>节省代码空间</td></tr>
+        <tr><td>蓝牙发射 Emitter</td><td>✗ 禁用</td><td>可选功能，作为声源发射器</td></tr>
+        <tr><td>SNIFF 低功耗</td><td>✓ 启用</td><td>降低待机耗电</td></tr>
+        <tr><td>SPP 透传</td><td>✓ 启用</td><td>蓝牙 APP 与设备通信，远程控制</td></tr>
+      </table>
+    </div>
+
+<pre><code>// app_config.h - 蓝牙编译配置
+#define CONFIG_POWER_ON_ENABLE_BT      1    // 开机自动启用 BT
+#define TCFG_USER_BT_CLASSIC_ENABLE    1    // 经典蓝牙
+#define TCFG_USER_BLE_ENABLE           0    // BLE（禁用）
+#define TCFG_BT_SNIFF_ENABLE           1    // 低功耗 SNIFF 模式
+#define SPP_TRANS_DATA_EN              1    // SPP 数据透传
+
+#define CONFIG_BT_RX_BUFF_SIZE  (17*1024+400)  // RX 缓冲: 17.4 KB
+#define CONFIG_BT_TX_BUFF_SIZE  (10*1024+512)  // TX 缓冲: 10.5 KB</code></pre>
+
+    <h3>A2DP 音乐播放流程</h3>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-text"><strong>蓝牙接收</strong> — 手机通过 A2DP 协议发送音频流</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-text"><strong>RTP 解析</strong> — 提取音频包，解析 RTP 头部（序列号、时间戳）</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-text"><strong>音频解码</strong> — 支持 SBC / AAC / APTX 多格式实时解码</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-text"><strong>混音处理</strong> — 与本地提示音混音，应用音量控制（5–100，步长 5）</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-text"><strong>DAC 输出</strong> — 输出到扬声器播放</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Audio ── -->
+  <section id="audio">
+    <h2>音频处理</h2>
+
+    <h3>支持的音频格式</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>格式</th><th>编码</th><th>比特率</th><th>用途</th></tr>
+        <tr><td><strong>SBC</strong></td><td>Sub Band Codec</td><td>128–320 kbps</td><td>A2DP 基础格式</td></tr>
+        <tr><td><strong>AAC</strong></td><td>Advanced Audio Codec</td><td>64–256 kbps</td><td>高效压缩</td></tr>
+        <tr><td><strong>APTX</strong></td><td>Qualcomm APTX</td><td>144–324 kbps</td><td>高保真传输</td></tr>
+        <tr><td><strong>MP3</strong></td><td>MPEG-1 Layer 3</td><td>128–320 kbps</td><td>本地提示音</td></tr>
+        <tr><td><strong>M4A</strong></td><td>AAC in MP4</td><td>64–256 kbps</td><td>本地存储</td></tr>
+        <tr><td><strong>CVSD</strong></td><td>连续可变斜率增量调制</td><td>64 kbps</td><td>电话通话</td></tr>
+        <tr><td><strong>mSBC</strong></td><td>Modified SBC</td><td>58 kbps</td><td>宽带电话</td></tr>
+        <tr><td><strong>PCM</strong></td><td>脉冲编码调制</td><td>128–1536 kbps</td><td>原始音频</td></tr>
+      </table>
+    </div>
+
+    <h3>模式提示音文件</h3>
+<pre><code>// 提示音路径配置（SD 卡根目录）
+#define CONFIG_VOICE_PROMPT_FILE_PATH "mnt/sdfile/res/audlogo/"
+
+Mode1.mp3     // 舒适模式提示
+Mode2.mp3     // 加热模式提示
+Mode3.mp3     // 振动模式提示
+Mode4.mp3     // 激情模式提示
+shutdown.mp3  // 关机提示音</code></pre>
+
+    <h3>MP3 本地播放实现</h3>
+<pre><code>// mp3_play.c - 本地音频播放（70行）
+int app_play_tone_file(const char *path) {
+    FILE *file = fopen(path, "r");
+
+    void *dec_server = server_open("audio_server", "dec");
+
+    union audio_req req = {0};
+    req.dec.cmd            = AUDIO_DEC_OPEN;
+    req.dec.volume         = 50;           // 音量 0-100
+    req.dec.output_buf_len = 4 * 1024;     // 输出缓冲 4 KB
+    req.dec.sample_source  = "dac";        // 输出到 DAC
+
+    server_request(dec_server, AUDIO_REQ_DEC, &amp;req);
+}</code></pre>
+  </section>
+
+  <!-- ── Files ── -->
+  <section id="files">
+    <h2>文件结构与说明</h2>
+    <div class="table-wrap">
+      <table>
+        <tr><th>文件</th><th>行数</th><th>功能描述</th></tr>
+        <tr><td class="td-code">app_main.c</td><td>178</td><td>程序入口，任务创建，蓝牙事件分发</td></tr>
+        <tr><td class="td-code">App/App_mode.c</td><td>335</td><td>模式管理核心，气泵/LED/音乐控制（含赋值错误 Bug）</td></tr>
+        <tr><td class="td-code">Inf/Inf_key.c</td><td>56</td><td>按键扫描与去抖（PA1，10 ms）</td></tr>
+        <tr><td class="td-code">Inf/Inf_led.c</td><td>24</td><td>4 路 LED 控制（PA2–PA5，低电平点亮）</td></tr>
+        <tr><td class="td-code">Inf/Inf_extern.c</td><td>139</td><td>加热、振动 PWM、气泵三合一控制</td></tr>
+        <tr><td class="td-code">bt_music.c</td><td>1210</td><td>A2DP 音乐播放、音量控制、自动连接</td></tr>
+        <tr><td class="td-code">bt_decode.c</td><td>994</td><td>音频解码器（SBC/AAC/APTX/CVSD/mSBC）</td></tr>
+        <tr><td class="td-code">spp_trans_data.c</td><td>267</td><td>SPP 透传数据通道</td></tr>
+        <tr><td class="td-code">mp3_play.c</td><td>70</td><td>本地 MP3 提示音播放</td></tr>
+        <tr><td class="td-code">board/wl82/board.c</td><td>150+</td><td>硬件平台配置（UART/PWM/ADC 按键）</td></tr>
+        <tr><td class="td-code">include/app_config.h</td><td>106</td><td>全局编译配置（蓝牙、音频、功耗等）</td></tr>
+      </table>
+    </div>
+
+    <div class="notice err">
+      <strong>已知 Bug：</strong> App_mode.c 第 81 行 <code>else if (mode_type = MODE_PASSION)</code> 应为 <code>==</code>，
+      当前赋值操作导致条件永远为真，逻辑错误，需修复。
+    </div>
+  </section>
+
+  <!-- ── Config ── -->
+  <section id="config">
+    <h2>编译配置详解</h2>
+
+    <h3>内存与基础配置</h3>
+<pre><code>// app_config.h
+#define __FLASH_SIZE__    (4 * 1024 * 1024)    // 4 MB Flash
+#define __SDRAM_SIZE__    (2 * 1024 * 1024)    // 2 MB SDRAM
+
+#define TCFG_ADKEY_ENABLE             1        // AD 按键阵列
+#define CONFIG_DEBUG_ENABLE                    // 调试信息输出
+#define RTOS_STACK_CHECK_ENABLE               // 栈溢出检查</code></pre>
+
+    <h3>音频编解码配置</h3>
+<pre><code>// 编码器
+#define CONFIG_PCM_ENC_ENABLE     // PCM 编码
+#define CONFIG_AEC_ENC_ENABLE     // 回声消除编码
+#define CONFIG_SBC_ENC_ENABLE     // SBC 编码
+#define CONFIG_MSBC_ENC_ENABLE    // mSBC 编码
+#define CONFIG_CVSD_ENC_ENABLE    // CVSD 编码
+
+// 解码器
+#define CONFIG_AAC_DEC_ENABLE     // AAC 解码
+#define CONFIG_SBC_DEC_ENABLE     // SBC 解码
+#define CONFIG_MP3_DEC_ENABLE     // MP3 解码
+#define CONFIG_NEW_M4A_DEC_ENABLE // M4A 解码
+#define CONFIG_AUDIO_MIX_ENABLE   // 混音（蓝牙同步播放需要）</code></pre>
+
+    <h3>低功耗配置</h3>
+<pre><code>// 低功耗模式配置
+#define CONFIG_LOW_POWER_ENABLE
+#define TCFG_LOWPOWER_LOWPOWER_SEL (RF_SLEEP_EN | SYS_SLEEP_EN | \
+                                    RF_FORCE_SYS_SLEEP_EN | SYS_SLEEP_BY_IDLE)
+
+// 电压档位
+#define TCFG_LOWPOWER_VDDIOM_LEVEL  VDDIOM_VOL_32V    // 强 VDDIO 3.2 V
+#define TCFG_LOWPOWER_VDDIOW_LEVEL  VDDIOW_VOL_21V    // 弱 VDDIO 2.1 V
+#define VDC14_VOL_SEL_LEVEL         VDC14_VOL_SEL_140V  // RF 1.4 V
+#define SYSVDD_VOL_SEL_LEVEL        SYSVDD_VOL_SEL_126V // 内核 1.26 V</code></pre>
+
+    <h3>ADC 音频通道配置</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>通道</th><th>编号</th><th>用途</th></tr>
+        <tr><td>ADC 0</td><td>通道 0</td><td>回采通道（AEC 回声消除）</td></tr>
+        <tr><td>ADC 1</td><td>通道 1</td><td>左 MIC / 通话 MIC</td></tr>
+        <tr><td>ADC 2</td><td>通道 2</td><td>备用</td></tr>
+        <tr><td>ADC 3</td><td>通道 3</td><td>右 MIC</td></tr>
+      </table>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  AC7916AB 眼部按摩仪 &nbsp;·&nbsp; 基于杰理 AC79NN_SDK_V1.2.0 &nbsp;·&nbsp; demo_edr 应用 &nbsp;·&nbsp; ~3600 行代码
+</footer>
+</main>
+
+<script>
+  // ── Menu Toggle ──
+  const toggle = document.getElementById('menu-toggle');
+  toggle.addEventListener('click', () => {
+    document.body.classList.toggle('menu-open');
+  });
+
+  // ── Active link on scroll ──
+  const sections = document.querySelectorAll('section[id], h3[id]');
+  const links = document.querySelectorAll('.sidebar-link, .sidebar-sublink');
+
+  function updateActive() {
+    let current = '';
+    sections.forEach(sec => {
+      const top = sec.getBoundingClientRect().top;
+      if (top <= 80) current = sec.id;
+    });
+    links.forEach(a => {
+      const isActive = a.getAttribute('href') === '#' + current;
+      a.classList.toggle('active', isActive);
+      if (isActive) a.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
+
+  document.getElementById('main').addEventListener('scroll', updateActive);
+  window.addEventListener('scroll', updateActive);
+
+  // ── Copy button ──
+  document.querySelectorAll('pre').forEach(pre => {
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.title = '复制代码';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.addEventListener('click', () => {
+      const code = pre.querySelector('code') ? pre.querySelector('code').innerText : pre.innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // ── Smooth scroll ──
+  links.forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (window.innerWidth < 700) document.body.classList.remove('menu-open');
+    });
+  });
+
+  // ── Collapsible sidebar toggle ──
+  function toggleExpand(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('open');
+  }
+</script>
+</body>
+</html>

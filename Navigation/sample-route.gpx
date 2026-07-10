@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="X-Track simulator">
+  <trk>
+    <name>sample-route</name>
+    <trkseg>
+      <trkpt lat="31.230390" lon="121.473700"></trkpt>
+      <trkpt lat="31.230690" lon="121.474050"></trkpt>
+      <trkpt lat="31.231020" lon="121.474410"></trkpt>
+      <trkpt lat="31.231360" lon="121.474780"></trkpt>
+      <trkpt lat="31.231720" lon="121.475150"></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

@@ -1,60 +1,89 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
+# OS, editor, and generic temporary files
 .DS_Store
-.atom/
-.buildlog/
-.history
-.svn/
+Thumbs.db
+Desktop.ini
+*.bak
+*.pyc
+*.tmp
+*.swp
+*~
+__pycache__/
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
+# Logs and local runtime state
+*.log
+*.log.*
+/log.txt
+/SystemSave.json
+/.SystemSaveBackup.json
+Simulator/LVGL.Simulator/SystemSave.json
+Simulator/LVGL.Simulator/.SystemSaveBackup.json
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# Keil MDK build products and user-local settings
+MDK-ARM_*/Objects/
+MDK-ARM_*/Listings/
+MDK-ARM_*/Track.bin
+MDK-ARM_*/JLinkLog.txt
+MDK-ARM_*/JLinkSettings.ini
+MDK-ARM_*/EventRecorderStub.scvd
+*.uvguix
+*.uvguix.*
+*.uvoptx
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
-/build/
+# Visual Studio and simulator build products
+.vs/
+Simulator/Output/
+Simulator/**/Output/
+*.aps
+*.idb
+*.ilk
+*.ipch
+*.obj
+*.opendb
+*.pch
+*.pdb
+*.tlog
+*.VC.db
+*.VC.VC.opendb
+*.vcxproj.user
 
-# Web related
-lib/generated_plugin_registrant.dart
+# Flutter, Dart, Node.js, and Cloudflare local products
+app/**/.dart_tool/
+app/**/.flutter-plugins
+app/**/.flutter-plugins-dependencies
+app/**/.packages
+app/**/.pub-cache/
+app/**/build/
+app/**/node_modules/
+app/**/.wrangler/
+app/**/.bootstrap/
+app/**/*secrets*.local.json
 
-# Node/Cloudflare related
-node_modules/
-**/node_modules/
-cloudflare/update-service/.bootstrap/
-cloudflare/update-service/.github-actions-secrets*.local.json
+# Local Codex/Claude worktrees, diagnostics, and generated assets
+**/.codex-temp-*/
+**/.codex-worktree-*/
+**/.codex-gitdb-*/
+**/.cc-connect/
+app/bluetooth_flutter_Trace/.codex/
+app/bluetooth_flutter_Trace/.release-*/
+app/**/.edge-shot-*/
+app/**/.codex-manual-*/
+generated-images/
+app/**/generated-images/
+**/.claude/settings.local.json
+.claude/**/*.axf
+.claude/**/*.bin
+.claude/**/*.cmd
+.claude/**/*.jlink
+.claude/**/*.log
+.claude/**/*.png
+.claude/**/*.ppm
+.claude/**/*.txt
+.claude/context-summary-*.md
+.claude/gpt_reply_*.md
+.claude/operations-log.md
+.claude/verification-report.md
+/gpt_reply_*.md
 
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Android release signing secrets
-/android/key.properties
-/android/*.jks
-/android/*.keystore
-/android/*.jks.base64.txt
-/android/*.keystore.base64.txt
-github-secrets.txt
+# Hardware-tool caches and automatic backups
+*.si4project/
+*.eprj_backup

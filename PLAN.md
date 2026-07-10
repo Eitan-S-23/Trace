@@ -1,72 +1,93 @@
-# Plan: 码表（SpeedometerPage）UI 一比一复刻重做（v3，经 Codex 第 1-2 轮评审修订）
-_经 grill 锁定 — by Claude + eitan_
-（英文镜像 `PLAN.en.md` 仅为 Codex 评审用临时辅助，本文件为权威计划。）
+# Plan: Dialplate HUD Watchface System v1
+_Locked via grill by Codex + user_
 
-## Goal（目标）
-重做 `lib/pages/speedometer_page.dart`，按设计图一比一复刻「仪表盘 / 统计 / 路线 / 设备」四页及「路线详情 / 设备详情」两详情页。删除顶部分类标签（现已基本无）。底栏固定 仪表盘 / 统计 / 开始-暂停 / 路线 / 设备。用 `power_meter_page.dart` 的「固定头部 + 有界滚动区」模式取代「整页单一 ListView」，消除整页滚动并修复按钮点不动。地图风格化 CustomPaint（记录中画实时轨迹）；数据真实优先、无数据用与设计图一致示例兜底。仅 GitHub Actions 构建（push main → APK/EXE → 自动 Release）。
-
-## 布局契约（精确回应第2轮 #2/#3）
-- **根**：`Scaffold > SafeArea > Column([ _TopChrome(固定), Expanded(_SelectedPage), _RideTabBar(固定) ])`；`_SelectedPage` 由 `Expanded` 得到有界高度。
-- **每个主 tab 页**（单一 `_TopChrome`/标题栏只在根；tab 固定区仅为**子头**，绝不再放第二个顶部栏——R3#2）返回其一：
-  - 有固定子头（统计：周期+日期；设备：雷达+扫描控制；路线：分段+搜索+计数）→ `Column([ 子头..., Expanded(child: 单一滚动体) ])`。
-  - 无固定子头（仪表盘）→ tab 有界根用 `LayoutBuilder`（从父 `Expanded` 拿到**有限** maxHeight），其内返回 `SingleChildScrollView(child: ConstrainedBox(minHeight:c.maxHeight, child: 内容))`；**绝不**在滚动体**内部**用 `LayoutBuilder` 测高（那里约束无界）——R3#1。
-- **每页恰好一个滚动体、绝不嵌套**：列表页 → `ListView(.builder)` 直接放进 `Expanded`（路线列表、设备可用列表）；非列表页 → `SingleChildScrollView`（仪表盘、统计面板列）。
-- **push 详情页**（`Get.to`）= 自带 `Scaffold > SafeArea > Column([ 固定顶部, Expanded(SingleChildScrollView 内容), 固定底部操作栏 ])`，不依赖外层 Expanded（已确认既有 `DeviceDetailPage` 同样以 Scaffold 为根）。
+## Goal
+Redesign the bike-computer `Dialplate` dashboard for a 240x320 portrait screen so it closely replicates `generated-images/2.png`, while upgrading the page into watchface system v1. The default built-in watchface must preserve the reference design's structure and visual hierarchy: top status/navigation, left status/speed/chart, central cyber-map route, right altitude/grade/AVG/TIME/TRIP/CAL metric stack, and bottom MAP/REC/MENU actions. The system must also prepare for a separate phone/upper-computer app to install, list, activate, and switch multiple downloadable watchfaces over BLE using safe declarative packages stored on SD card.
 
 ## Approach
-### A. 骨架
-1. 用上面的根契约替换整页 ListView；删 `_scrollController`/`PageStorageKey`。
-2. `_TopChrome` = 设备状态 + 居中标题 + sync/more；标题随页变。设备状态为**静态占位**（不再用 tab 索引伪造、不接 BLE）——回应 R1#5。
+1. Preserve the grilled decisions and external app handoff:
+   - Keep `DIALPLATE_GRILL_NOTES.md` as the decision log.
+   - Keep `WATCHFACE_APP_AGENT_SPEC.md` as the phone-app agent contract.
+   - Update both if implementation details change.
+2. Set the simulator target to 240x320 portrait:
+   - Change `LinuxSDL2/Makefile` from `-DLV_HOR_RES=480 -DLV_VER_RES=320` to `-DLV_HOR_RES=240 -DLV_VER_RES=320`.
+   - Avoid touching hardware screen constants because `USER/HAL/HAL_Config.h` already uses 240x320.
+3. Add a compact watchface domain under `USER/App/Utils/Watchface`:
+   - Define package/constants: `/Watchfaces`, `/Watchfaces/.install`, built-in ID, ID/path limits, widget limits.
+   - Define a `WatchfaceData` snapshot with whitelisted data sources: speed, avgSpeed, maxSpeed, tripDistance, elapsedTime, calorie, altitude, gpsSatellites, gpsCourse, battery, recState, BLE/status placeholders, and navigation placeholders.
+   - Define a `WatchfaceManifest` / `WatchfaceWidget` model for v1 built-in/declarative rendering.
+   - Implement a small manager that can return the built-in manifest, scan SD package manifests later, track active ID, and fall back to built-in on SD/malformed package failures.
+4. Implement the built-in HUD watchface as firmware data and LVGL primitives:
+   - Use no SD assets for the default face.
+   - Draw a dark cyber background, subtle map grid/road lines, cyan cut-corner panel frames, neon-green route preview, rotated current-position arrow, top navigation banner, left speed block and mini chart, right metric stack, and bottom MAP/REC/MENU bar.
+   - Keep all major reference modules; only compress tiny details for 240x320: smaller labels, fewer decorative ticks, abbreviated text, simplified mini chart, and tighter spacing.
+5. Refactor `DialplateView` around the watchface renderer:
+   - Replace the current hard-coded gray top panel/four-text layout with a renderer-owned UI tree.
+   - Keep direct handles for action buttons and frequently updated labels/route arrow so updates do not recreate the whole tree every second.
+   - Use existing fonts from `ResourcePool` only.
+   - Use LVGL line/label/container primitives and optional `lv_img` only for built-in compiled icons already in `ResourcePool`.
+6. Extend `DialplateModel` data collection:
+   - Subscribe/pull `SportStatus`, `GPS`, and `Power` where available.
+   - Keep existing `Recorder`, `StatusBar`, `MusicPlayer` integration.
+   - Provide `gpsCourse` to rotate the HUD direction arrow.
+   - Use real data when available; use configurable placeholders for navigation instruction/distance/street, heart rate, grade, waypoint labels, and any missing design-reference data.
+7. Preserve and adjust bottom actions:
+   - `MAP` opens `Pages/LiveMap`.
+   - `REC` preserves current record state behavior: long press starts/stages stop/stops, short press pauses/continues.
+   - `MENU` opens `Pages/MainMenu` instead of `Pages/SystemInfos`.
+8. Add persistent settings for active watchface:
+   - Extend `SysConfig_Info_t` with `watchfaceId[32]` or equivalent compact field.
+   - Register it with `Storage` so `/SystemSave.json` persists it.
+   - Use built-in ID as the default and fallback.
+9. Add a minimal controlled SD helper for watchface installation:
+   - Reuse the global `SdFatSdioEX SD` from `HAL_SD_CARD.cpp` through a declared helper interface rather than broad direct access from UI code.
+   - Support ensure-directory, file open/write/truncate, remove temp install leftovers where practical, and manifest file existence checks.
+   - Keep file operations out of LVGL rendering paths except image/path reading.
+10. Extend BLE command handling in `Libraries/Bluetooth` / `USER/HAL/HAL_Bluetooth.cpp`:
+   - Keep existing `+...\r\n` framing and 256-byte receive buffer constraints.
+   - Add `WF_BEGIN`, `WF_CHUNK`, `WF_END`, `WF_LIST?`, `WF_ACTIVE?`, and `WF_ACTIVATE:<id>`.
+   - Use HEX chunk payloads.
+   - Write install data to `/Watchfaces/.install/<id>/`.
+   - Validate manifest presence, schema, target 240x320, safe ID/path rules, and chunk CRC at minimum.
+   - Return compact responses such as `+WF_OK:<command>\r\n`, `+WF_ERR:<code>,<message>\r\n`, `+WF_LIST:[...]\r\n`, and `+WF_ACTIVE:<id>\r\n`.
+11. Keep v1 boundaries explicit:
+   - No arbitrary scripts or native code upload.
+   - No dynamic third-party font loading.
+   - No compressed archive extraction.
+   - No required resume-after-disconnect.
+   - No phone-side package builder in this repo.
+12. Verify:
+   - Build or at least compile-check via available LinuxSDL2 tooling if the local environment supports it.
+   - If the simulator cannot build in the current environment, run targeted static checks and report the limitation.
+   - Review compile risk around C++ allocation, LVGL object lifetime, SD file operations, and packet size handling.
 
-### B. 仪表盘（仪表盘.png，单屏）
-3. 内容（`SingleChildScrollView` 内，紧凑优先一屏，矮屏可滚、绝不溢出）：英雄卡（风格化地图+总距离大字+时间/均速/爬升/训练负荷）、6 指标卡（2×3+迷你折线）、速度&海拔双线图、功率/心率双环。
-4. 区块高度取自 tab 根 `LayoutBuilder`（置于滚动体**之上**）给出的有限高度，而非滚动体内部（R3#1）。
-5. 修英雄卡 `Stack` 命中：地图垫底、圆钮置顶层、文字用 `Positioned` 限域，避免 Column 盖住圆钮。
-6. 记录中：英雄卡数值就地变实时（`_RideSample`←`RideController`）；地图画 `controller.points` 实时轨迹（无点→示例环线）。
+## Key Decisions & Tradeoffs
+- Target layout is 240x320 portrait for both hardware and simulator. This matches the hardware and the reference image orientation; it may require small simulator Makefile changes.
+- The default dashboard must replicate `generated-images/2.png` structurally. Major modules must not be removed; only fine detail can be simplified for small-screen readability.
+- The central map/route on the default watchface is a lightweight HUD route preview, not embedded `LiveMap` tile rendering. This avoids heavy tile decode/refresh on the dashboard while keeping the full map page behind the MAP action.
+- The route arrow uses real `GPS_Info.course` so it points in the current travel direction.
+- Missing data sources are placeholders, not fake firmware sensors. Navigation text, heart rate, grade, and waypoint labels stay configurable for future phone/navigation integration.
+- Watchface updates use safe declarative packages, not remote scripts/native code. This allows visually different faces while keeping the MCU renderer bounded.
+- Downloaded packages live on SD under `/Watchfaces/<id>/`; firmware keeps a built-in HUD fallback for no-SD/corrupt-package cases.
+- BLE v1 uses text commands and HEX chunks instead of binary framing. It is slower but simpler and compatible with the existing `+...\r\n` parser.
+- BLE install v1 implements the minimum usable loop and omits resume, compression, and package garbage collection to keep scope manageable.
+- MENU should route to `Pages/MainMenu`, not `Pages/SystemInfos`, because the UI label says MENU.
 
-### C. 统计（统计.png + 统计_周_全部.png）
-7. 固定子头（无第二顶部栏）：周/月/年/全部（默认月）+ 日期选择器。滚动区按周期切面板：周/月=总览(6)+里程趋势(柱)+时长趋势(柱)；年=类型分布(环)+月度统计(柱1→12)+强度分布(环)；全部=总览(6)+类型分布(环)+月度里程趋势(柱)。
-8. 统计=**示例数据驱动的设计复刻**（R1#9）：示例值合设计图；`recentRides` 有数据时仅当前周期总览反映；**不新增 DB 查询**；功率/心率/强度分布纯示例。
-
-### D. 路线 + 路线详情（路线.png 左/右）
-9. 固定子头（无第二顶部栏）：分段+搜索+计数。滚动区=`ListView.builder` 示例路线卡（单一滚动体，不再外套 SingleChildScrollView——R2#3）。
-10. 卡片点击 → `Get.to(() => _RideRouteDetailPage(...))`，**文件内私有部件**（私有类不与公开 `DeviceDetailPage` 冲突、复用本文件私有 `_GlassPanel/_RideColors/画笔`）——R1#2/#6。
-11. 路线详情=自带 Scaffold：返回+标题；风格化地图+全屏/分享；标题/日期/公开；距离·爬升；公路·难度；简介(展开)；海拔 area chart；起/终点·最高海拔；底部固定「发送到设备」+「导航」。地图**纯风格化**（路线是示例数据、不接 DB 取点）——R1#1。
-
-### E. 设备 + 设备详情（设备.png 左/右）
-12. 固定子头（无第二顶部栏）：雷达+文案+停止扫描。滚动区=`ListView` 可用设备(连接) + 未找到我的设备。[R3#3] 扫描开关/停止与连接均为**本地视觉状态 + 示例设备**——本次重做**不**调用真实 `BleController`（此处不 `Get.put(BleController())`），以免改动全局 BLE 扫描生命周期；真实扫描仍留在既有 设备/功率计 页。连接=占位。
-13. 设备点击 → `Get.to(() => _RideDeviceDetailPage(...))`——**私有名避开公开 `DeviceDetailPage`**（R1#2）。
-14. 设备详情=自带 Scaffold（返回+标题；设备图+已连接/固件/电量；设置/页面配置/传感器+自动暂停/自动计圈开关；设备信息；解除绑定），内容在 SingleChildScrollView。
-
-### F. 地图与图表（健壮性）
-15. `_RouteMapPainter` 加可选 `List<RidePoint> track`：映射前清洗——剔 NaN/Inf、纬经跨度为 0 兜底示例环线、忽略异常坐标（R1#7）。
-16. **审计所有画笔加空/零保护**（R1#8）：`values.length<2`、`maxValue<=0`、`labels.length<=1`、`total<=0` 时提前返回/画空态，杜绝除零/NaN。
-
-### G. 底栏与交互
-17. `_RideTabBar` 维持五项。中间键 `isRecording ? pauseResume() : start()`；**记录中显示可见的 停止/保存 控件**（中间区显示暂停+显式停止键，或计时旁停止芯片）→ `saveCurrentRide()`，移动端与 Windows 桌面均可点（R2#4，非长按）。
-18. 核心交互真实；外围按钮 `_showUiMessage` 优雅占位。
-
-### H. 验证与发布（以分阶段回应 R2#5）
-19. 无法本地编译；CI `flutter analyze`(continue-on-error) + `flutter build apk`/`build windows` 是真正门槛。严控 Dart 正确性（const/泛型/null 安全/`shouldRepaint`/私有作用域）。
-20. **分阶段 push**，让脆弱大文件增量落地、CI 逐段把关：S1 骨架+四 tab 编译通过；S2 路线/设备私有详情页；S3 还原度打磨。详情页复杂度不前置。
-21. push `main` → Actions → 自动 Release；本机 `gh` 未认证，由用户看/装 Release 验证。
-
-## Key decisions & tradeoffs
-- 固定头部 + 每 tab 单一有界滚动体：解决整页滚动/点不动/溢出崩溃。
-- 详情页=文件内私有部件（非公开类、非 part 文件）：避开 `DeviceDetailPage` 同名、复用私有部件、规避拆文件 import 风险与 `part/library` 结构性新机制在无本地构建下的风险。
-- 风格化地图 + 记录中实时轨迹；路线详情纯风格化。
-- 统计=示例驱动复刻、零 DB 改动。
-- 顶部设备状态=静态占位。
-- 真实优先+示例兜底（主要用于实时仪表盘）。
-
-## Risks
-- 构建风险最高（无本地编译、历史有 build errors）。缓解：保守写法、复用既有 widget、画笔空/零保护、分阶段 push、S1 仅编译骨架。
-- 矮屏适配→ SingleChildScrollView 兜底（头部固定）。
-- 文件增大（>4500 行）：接受，分阶段防回归，后续再议拆分。
-- 轨迹/聚合数据有限→ 风格化地图+示例统计、不加 DB。
+## Risks / Open Questions
+- The current LVGL FS layer lacks mkdir/remove/rename APIs. A watchface SD helper must be added carefully without leaking broad filesystem manipulation into UI code.
+- The existing BLE receive buffer is 256 bytes, so app chunks must stay small. If throughput is poor, a future binary protocol or larger buffer may be needed.
+- The exact package-level CRC definition is not fully finalized. v1 can validate per-chunk CRC and manifest structure first, then align package CRC with the phone app spec before app integration.
+- `Power` and BLE status data availability should be confirmed during implementation; unavailable fields should degrade to placeholders.
+- Downloaded PNG backgrounds may be slow if redrawn frequently. The renderer should avoid unnecessary invalidation and prefer static backgrounds.
+- Adding `watchfaceId` to `SysConfig_Info_t` affects persisted JSON. Defaults and missing-key handling must avoid breaking existing `/SystemSave.json` files.
+- Existing worktree is dirty with user changes. Implementation must not revert unrelated changes.
 
 ## Out of scope
-- 真实地图 SDK；保存路线 DB 取点；统计聚合新 DB 查询。
-- now.jpg 式独立实时表盘页；训练页。
-- 外围按钮后端逻辑。
-- `MainAppPage` 三标签结构；`DatabaseService`/模型结构性改动。
+- Phone/upper-computer app implementation.
+- Arbitrary script execution or native code watchfaces.
+- Dynamic third-party font upload/loading.
+- Full Garmin/Zepp-style app sandbox.
+- BLE resume-after-disconnect.
+- Compressed watchface archives.
+- Advanced animation engine beyond lightweight LVGL transitions or simple route/button glow.
+- Deleting/garbage-collecting old watchface assets unless it is trivial and safe.
